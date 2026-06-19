@@ -49,10 +49,14 @@ const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
 
 const RECIPE_SYSTEM_PROMPT =
   'Du extrahierst aus einem freien Rezepttext strukturierte Daten. ' +
-  'Gib den Gerichtnamen, eine kurze Beschreibung und die Zutatenliste zurück. ' +
+  'Gib den Gerichtnamen, eine kurze Beschreibung, die Zutatenliste, die ' +
+  'Zubereitungsschritte, die voraussichtliche Zeit und – falls im Text ' +
+  'vorhanden – eine Quell-URL zurück. ' +
   'Trenne bei jeder Zutat die Mengenangabe (inkl. Einheit) sauber vom Zutatennamen. ' +
-  'Behalte die Sprache des Originaltextes bei und erfinde keine Zutaten. ' +
-  'Wenn für eine Zutat keine Menge angegeben ist, lass das Mengenfeld leer.';
+  'Die Zubereitung als gut lesbaren Text, gerne mit nummerierten Schritten (je Schritt eine Zeile). ' +
+  'Die Zeit als kurze Angabe, z. B. "ca. 30 Min." oder "45 Minuten". ' +
+  'Behalte die Sprache des Originaltextes bei und erfinde keine Inhalte. ' +
+  'Lass ein Feld leer, wenn die Information nicht vorhanden ist.';
 
 const ITEMS_SYSTEM_PROMPT =
   'Du extrahierst eine Einkaufsliste aus dem Text oder Bild des Nutzers. ' +
@@ -144,6 +148,21 @@ const RECIPE_SCHEMA = {
       description:
         'Kurze Beschreibung (1–2 Sätze) oder leerer String, falls keine vorhanden.',
     },
+    source_url: {
+      type: 'string',
+      description:
+        'Quell-URL des Rezepts, falls im Text vorhanden, sonst leerer String.',
+    },
+    instructions: {
+      type: 'string',
+      description:
+        'Zubereitungsschritte als lesbarer Text (gern nummeriert, je Schritt eine Zeile). Leer, falls nicht vorhanden.',
+    },
+    prep_time: {
+      type: 'string',
+      description:
+        'Voraussichtliche Zeit, z. B. "ca. 30 Min.". Leerer String, falls nicht angegeben.',
+    },
     ingredients: {
       type: 'array',
       description: 'Die Zutatenliste.',
@@ -165,7 +184,14 @@ const RECIPE_SCHEMA = {
       },
     },
   },
-  required: ['name', 'description', 'ingredients'],
+  required: [
+    'name',
+    'description',
+    'source_url',
+    'instructions',
+    'prep_time',
+    'ingredients',
+  ],
   additionalProperties: false,
 };
 
@@ -332,11 +358,19 @@ app.post('/api/recipes/analyze', async (req, res) => {
 });
 
 app.post('/api/recipes', (req, res) => {
-  const { name, description, ingredients } = req.body;
+  const { name, description, source_url, instructions, prep_time, ingredients } =
+    req.body;
   if (!name || !name.trim()) {
     return res.status(400).json({ error: 'Name ist erforderlich.' });
   }
-  const recipe = createRecipe({ name: name.trim(), description, ingredients });
+  const recipe = createRecipe({
+    name: name.trim(),
+    description,
+    source_url,
+    instructions,
+    prep_time,
+    ingredients,
+  });
   res.status(201).json(recipe);
 });
 
