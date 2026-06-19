@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BRING-Interface</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+<header>
+  <span class="logo">🛒</span>
+  <h1>BRING-Interface</h1>
+  <span id="statusBadge" class="status-badge">…</span>
+</header>
+
+<nav>
+  <button class="active" data-tab="shopping">Einkaufsliste</button>
+  <button data-tab="recipes">Rezepte</button>
+</nav>
+
+<main>
+
+  <!-- ─── Shopping-List Tab ──────────────────────────────────────────────── -->
+  <div id="tab-shopping" class="tab-panel active">
+
+    <div class="card">
+      <h2>Einkaufsliste importieren</h2>
+
+      <div class="form-group">
+        <label for="listSelect">Bring-Liste auswählen</label>
+        <select id="listSelect">
+          <option value="">– Liste laden …</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="itemsText">
+          Artikel (eine Zeile pro Artikel, optional Menge voranstellen – z.&nbsp;B. <em>500g Mehl</em>)
+        </label>
+        <textarea
+          id="itemsText"
+          placeholder="Milch&#10;500g Mehl&#10;3 Eier&#10;Butter"
+        ></textarea>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-primary" id="importBtn">
+          <span>🛍️</span> In Bring importieren
+        </button>
+        <button class="btn btn-secondary" id="clearBtn">Leeren</button>
+      </div>
+
+      <div id="importResult"></div>
+    </div>
+
+    <div class="card">
+      <h2>Aktuelle Liste</h2>
+      <div id="currentItems" style="color: var(--text-muted); font-size:0.9rem;">
+        Wähle eine Liste aus, um die aktuellen Artikel anzuzeigen.
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ─── Recipes Tab ────────────────────────────────────────────────────── -->
+  <div id="tab-recipes" class="tab-panel">
+
+    <!-- Add / Edit form -->
+    <div class="card" id="recipeFormCard">
+      <h2 id="recipeFormTitle">Neues Rezept</h2>
+
+      <input type="hidden" id="recipeId" value="" />
+
+      <div class="form-group">
+        <label for="recipeName">Rezeptname *</label>
+        <input type="text" id="recipeName" placeholder="z.&nbsp;B. Spaghetti Bolognese" />
+      </div>
+
+      <div class="form-group">
+        <label for="recipeDesc">Beschreibung (optional)</label>
+        <textarea id="recipeDesc" style="min-height:80px;"
+          placeholder="Kurze Beschreibung des Rezepts …"></textarea>
+      </div>
+
+      <div class="form-group">
+        <label>Zutaten</label>
+        <div id="ingredientRows"></div>
+        <button class="btn btn-secondary btn-sm" id="addIngredientBtn" style="margin-top:0.5rem;">
+          + Zutat hinzufügen
+        </button>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-primary" id="saveRecipeBtn">💾 Speichern</button>
+        <button class="btn btn-secondary" id="cancelEditBtn" style="display:none;">Abbrechen</button>
+      </div>
+
+      <div id="recipeFormResult"></div>
+    </div>
+
+    <!-- Recipe list -->
+    <div id="recipeList" class="recipe-list"></div>
+    <div id="recipeListEmpty" style="color:var(--text-muted);text-align:center;padding:2rem;display:none;">
+      Noch keine Rezepte gespeichert.
+    </div>
+
+  </div>
+
+</main>
+
+<!-- ─── Import-Recipe Modal ──────────────────────────────────────────────── -->
+<div id="importModal" style="
+  display:none; position:fixed; inset:0; background:rgba(0,0,0,.45);
+  z-index:100; align-items:center; justify-content:center;">
+  <div style="
+    background:white; border-radius:var(--radius); padding:1.5rem;
+    max-width:400px; width:90%; box-shadow:var(--shadow-lg);">
+    <h2 style="margin-bottom:1rem;font-size:1.1rem;">
+      Rezept in Bring-Liste importieren
+    </h2>
+    <div class="form-group">
+      <label for="importListSelect">Bring-Liste</label>
+      <select id="importListSelect">
+        <option value="">– Liste wählen –</option>
+      </select>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-primary" id="confirmImportBtn">Importieren</button>
+      <button class="btn btn-secondary" id="cancelImportBtn">Abbrechen</button>
+    </div>
+    <div id="modalResult"></div>
+  </div>
+</div>
+
+<script src="/js/app.js" type="module"></script>
+</body>
+</html>
