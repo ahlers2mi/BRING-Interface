@@ -10,6 +10,7 @@ services:
     environment:
       BRING_MAIL: ${BRING_MAIL}
       BRING_PASSWORD: ${BRING_PASSWORD}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       PORT: 3000
       DB_PATH: /data/recipes.db
     volumes:

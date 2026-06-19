@@ -66,6 +66,29 @@
   <!-- ─── Recipes Tab ────────────────────────────────────────────────────── -->
   <div id="tab-recipes" class="tab-panel">
 
+    <!-- KI-Analyse -->
+    <div class="card">
+      <h2>🤖 Rezept per KI analysieren</h2>
+      <div class="form-group">
+        <label for="recipeRawText">
+          Komplettes Rezept einfügen (Text aus Webseite, Kochbuch o.&nbsp;Ä.) – die KI
+          erkennt Name, Beschreibung und Zutaten automatisch.
+        </label>
+        <textarea
+          id="recipeRawText"
+          style="min-height:160px;"
+          placeholder="z. B.&#10;Spaghetti Bolognese&#10;&#10;Ein Klassiker der italienischen Küche.&#10;&#10;Zutaten:&#10;500 g Hackfleisch&#10;1 Zwiebel&#10;2 Dosen Tomaten&#10;Salz, Pfeffer&#10;Spaghetti"
+        ></textarea>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-primary" id="analyzeBtn">
+          <span>✨</span> Analysieren
+        </button>
+        <button class="btn btn-secondary" id="clearRawBtn">Leeren</button>
+      </div>
+      <div id="analyzeResult"></div>
+    </div>
+
     <!-- Add / Edit form -->
     <div class="card" id="recipeFormCard">
       <h2 id="recipeFormTitle">Neues Rezept</h2>

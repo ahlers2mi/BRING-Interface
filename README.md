@@ -6,6 +6,7 @@ Web Interface für Bring APP
 
 - **Einkaufsliste importieren** – Artikel (mit optionaler Mengenangabe) in ein Textfeld eingeben und direkt in eine Bring-Liste importieren.
 - **Rezeptverwaltung** – Rezepte mit Zutaten speichern und per Klick in eine Bring-Liste importieren.
+- **KI-Rezeptanalyse** – kompletten Rezepttext einfügen; [Claude](https://www.anthropic.com/) extrahiert automatisch Name, Beschreibung und Zutaten (mit Mengen) zum Prüfen und Speichern.
 
 ## Voraussetzungen
 
@@ -84,6 +85,7 @@ docker run -d \
 | `BRING_PASSWORD`| Passwort des Bring-Kontos             |
 | `PORT`          | Port des Webservers (Standard: 3000)  |
 | `DB_PATH`       | Pfad zur SQLite-Datei (Standard: `recipes.db`, im Container `/data/recipes.db`) |
+| `ANTHROPIC_API_KEY` | API-Schlüssel für die KI-Rezeptanalyse ([platform.claude.com](https://platform.claude.com)). Ohne den Schlüssel funktioniert die App weiter, nur die KI-Analyse ist deaktiviert. |
 
 ## Entwicklung
 

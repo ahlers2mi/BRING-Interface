@@ -3,6 +3,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import Bring from 'bring-shopping';
+import Anthropic from '@anthropic-ai/sdk';
 import {
   getAllRecipes,
   getRecipeById,
@@ -37,6 +38,59 @@ async function getBringClient() {
   bringClient = client;
   return client;
 }
+
+// ── Anthropic (KI-Rezeptanalyse) ───────────────────────────────────────────────
+
+let anthropicClient = null;
+
+function getAnthropicClient() {
+  if (anthropicClient) return anthropicClient;
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error(
+      'ANTHROPIC_API_KEY fehlt. Bitte den Anthropic-API-Schlüssel als Umgebungsvariable setzen.'
+    );
+  }
+  anthropicClient = new Anthropic();
+  return anthropicClient;
+}
+
+// JSON-Schema für die strukturierte Rezeptausgabe von Claude
+const RECIPE_SCHEMA = {
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+      description: 'Der Name des Gerichts/Rezepts.',
+    },
+    description: {
+      type: 'string',
+      description:
+        'Kurze Beschreibung (1–2 Sätze) oder leerer String, falls keine vorhanden.',
+    },
+    ingredients: {
+      type: 'array',
+      description: 'Die Zutatenliste.',
+      items: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Name der Zutat ohne Mengenangabe, z. B. "Mehl".',
+          },
+          amount: {
+            type: 'string',
+            description:
+              'Menge inkl. Einheit, z. B. "500 g" oder "2 EL". Leerer String, wenn keine Menge angegeben ist.',
+          },
+        },
+        required: ['name', 'amount'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['name', 'description', 'ingredients'],
+  additionalProperties: false,
+};
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -127,6 +181,39 @@ app.delete('/api/lists/:uuid/items/:name', async (req, res) => {
 
 app.get('/api/recipes', (_req, res) => {
   res.json(getAllRecipes());
+});
+
+// POST /api/recipes/analyze – body: { text } – analysiert Freitext per Claude
+app.post('/api/recipes/analyze', async (req, res) => {
+  const text = (req.body.text || '').trim();
+  if (!text) return res.status(400).json({ error: 'Kein Rezepttext übergeben.' });
+
+  try {
+    const client = getAnthropicClient();
+    const response = await client.messages.create({
+      model: 'claude-opus-4-8',
+      max_tokens: 4096,
+      system:
+        'Du extrahierst aus einem freien Rezepttext strukturierte Daten. ' +
+        'Gib den Gerichtnamen, eine kurze Beschreibung und die Zutatenliste zurück. ' +
+        'Trenne bei jeder Zutat die Mengenangabe (inkl. Einheit) sauber vom Zutatennamen. ' +
+        'Behalte die Sprache des Originaltextes bei und erfinde keine Zutaten. ' +
+        'Wenn für eine Zutat keine Menge angegeben ist, lass das Mengenfeld leer.',
+      output_config: {
+        format: { type: 'json_schema', schema: RECIPE_SCHEMA },
+      },
+      messages: [{ role: 'user', content: text }],
+    });
+
+    const jsonText = response.content
+      .filter((block) => block.type === 'text')
+      .map((block) => block.text)
+      .join('');
+    const recipe = JSON.parse(jsonText);
+    res.json(recipe);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post('/api/recipes', (req, res) => {

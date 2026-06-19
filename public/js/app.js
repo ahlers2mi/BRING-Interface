@@ -220,6 +220,51 @@ document.getElementById('saveRecipeBtn').addEventListener('click', async () => {
   }
 });
 
+// ── KI-Rezeptanalyse ─────────────────────────────────────────────────────────
+
+document.getElementById('clearRawBtn').addEventListener('click', () => {
+  document.getElementById('recipeRawText').value = '';
+  document.getElementById('analyzeResult').innerHTML = '';
+});
+
+document.getElementById('analyzeBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('analyzeBtn');
+  const resultEl = document.getElementById('analyzeResult');
+  const text = document.getElementById('recipeRawText').value.trim();
+
+  if (!text) return flash(resultEl, 'Bitte zuerst einen Rezepttext einfügen.', 'error');
+
+  setLoading(btn, true);
+  try {
+    const recipe = await apiFetch('/api/recipes/analyze', {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    });
+
+    // Ergebnis ins Formular übernehmen – Nutzer prüft und speichert selbst
+    resetRecipeForm();
+    document.getElementById('recipeName').value = recipe.name || '';
+    document.getElementById('recipeDesc').value = recipe.description || '';
+    const rows = document.getElementById('ingredientRows');
+    rows.innerHTML = '';
+    const ingredients = Array.isArray(recipe.ingredients) ? recipe.ingredients : [];
+    for (const ing of ingredients) {
+      rows.appendChild(createIngredientRow(ing.name || '', ing.amount || ''));
+    }
+    if (ingredients.length === 0) rows.appendChild(createIngredientRow());
+
+    flash(
+      resultEl,
+      `✓ ${ingredients.length} Zutaten erkannt. Bitte unten prüfen und speichern.`
+    );
+    document.getElementById('recipeFormCard').scrollIntoView({ behavior: 'smooth' });
+  } catch (err) {
+    flash(resultEl, `Fehler bei der Analyse: ${err.message}`, 'error');
+  } finally {
+    setLoading(btn, false);
+  }
+});
+
 // ── Recipe List ────────────────────────────────────────────────────────────────
 
 async function loadRecipes() {
