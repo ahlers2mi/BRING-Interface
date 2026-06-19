@@ -1,0 +1,18 @@
+services:
+  bring-interface:
+    build: .
+    image: bring-interface
+    container_name: bring-interface
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      BRING_MAIL: ${BRING_MAIL}
+      BRING_PASSWORD: ${BRING_PASSWORD}
+      PORT: 3000
+      DB_PATH: /data/recipes.db
+    volumes:
+      - bring-data:/data
+
+volumes:
+  bring-data:
