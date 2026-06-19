@@ -38,6 +38,105 @@ async function getBringClient() {
   return client;
 }
 
+// ── OpenRouter (KI-Rezeptanalyse) ───────────────────────────────────────────────
+
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+// Modell überschreibbar via OPENROUTER_MODEL. Der Standard unterstützt
+// strukturierte JSON-Ausgaben (json_schema).
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
+
+const ANALYZE_SYSTEM_PROMPT =
+  'Du extrahierst aus einem freien Rezepttext strukturierte Daten. ' +
+  'Gib den Gerichtnamen, eine kurze Beschreibung und die Zutatenliste zurück. ' +
+  'Trenne bei jeder Zutat die Mengenangabe (inkl. Einheit) sauber vom Zutatennamen. ' +
+  'Behalte die Sprache des Originaltextes bei und erfinde keine Zutaten. ' +
+  'Wenn für eine Zutat keine Menge angegeben ist, lass das Mengenfeld leer.';
+
+// Extrahiert das JSON aus der Modellantwort (entfernt evtl. ```-Codeblöcke).
+function parseRecipeJson(content) {
+  let txt = String(content).trim();
+  const fence = txt.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) txt = fence[1].trim();
+  return JSON.parse(txt);
+}
+
+async function analyzeRecipeText(text) {
+  if (!process.env.OPENROUTER_API_KEY) {
+    throw new Error(
+      'OPENROUTER_API_KEY fehlt. Bitte den OpenRouter-API-Schlüssel als Umgebungsvariable setzen.'
+    );
+  }
+
+  const res = await fetch(OPENROUTER_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      'Content-Type': 'application/json',
+      // Optionale OpenRouter-Attribution
+      'X-Title': 'BRING-Interface',
+    },
+    body: JSON.stringify({
+      model: OPENROUTER_MODEL,
+      messages: [
+        { role: 'system', content: ANALYZE_SYSTEM_PROMPT },
+        { role: 'user', content: text },
+      ],
+      response_format: {
+        type: 'json_schema',
+        json_schema: { name: 'recipe', strict: true, schema: RECIPE_SCHEMA },
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`OpenRouter-Fehler (${res.status}): ${detail}`);
+  }
+
+  const data = await res.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error('Keine Antwort von der KI erhalten.');
+  return parseRecipeJson(content);
+}
+
+// JSON-Schema für die strukturierte Rezeptausgabe
+const RECIPE_SCHEMA = {
+  type: 'object',
+  properties: {
+    name: {
+      type: 'string',
+      description: 'Der Name des Gerichts/Rezepts.',
+    },
+    description: {
+      type: 'string',
+      description:
+        'Kurze Beschreibung (1–2 Sätze) oder leerer String, falls keine vorhanden.',
+    },
+    ingredients: {
+      type: 'array',
+      description: 'Die Zutatenliste.',
+      items: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Name der Zutat ohne Mengenangabe, z. B. "Mehl".',
+          },
+          amount: {
+            type: 'string',
+            description:
+              'Menge inkl. Einheit, z. B. "500 g" oder "2 EL". Leerer String, wenn keine Menge angegeben ist.',
+          },
+        },
+        required: ['name', 'amount'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['name', 'description', 'ingredients'],
+  additionalProperties: false,
+};
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function parseItems(text) {
@@ -127,6 +226,19 @@ app.delete('/api/lists/:uuid/items/:name', async (req, res) => {
 
 app.get('/api/recipes', (_req, res) => {
   res.json(getAllRecipes());
+});
+
+// POST /api/recipes/analyze – body: { text } – analysiert Freitext per OpenRouter
+app.post('/api/recipes/analyze', async (req, res) => {
+  const text = (req.body.text || '').trim();
+  if (!text) return res.status(400).json({ error: 'Kein Rezepttext übergeben.' });
+
+  try {
+    const recipe = await analyzeRecipeText(text);
+    res.json(recipe);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.post('/api/recipes', (req, res) => {

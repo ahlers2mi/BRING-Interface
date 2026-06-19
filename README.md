@@ -6,6 +6,7 @@ Web Interface für Bring APP
 
 - **Einkaufsliste importieren** – Artikel (mit optionaler Mengenangabe) in ein Textfeld eingeben und direkt in eine Bring-Liste importieren.
 - **Rezeptverwaltung** – Rezepte mit Zutaten speichern und per Klick in eine Bring-Liste importieren.
+- **KI-Rezeptanalyse** – kompletten Rezepttext einfügen; ein KI-Modell (über [OpenRouter](https://openrouter.ai/)) extrahiert automatisch Name, Beschreibung und Zutaten (mit Mengen) zum Prüfen und Speichern.
 
 ## Voraussetzungen
 
@@ -84,6 +85,8 @@ docker run -d \
 | `BRING_PASSWORD`| Passwort des Bring-Kontos             |
 | `PORT`          | Port des Webservers (Standard: 3000)  |
 | `DB_PATH`       | Pfad zur SQLite-Datei (Standard: `recipes.db`, im Container `/data/recipes.db`) |
+| `OPENROUTER_API_KEY` | API-Schlüssel für die KI-Rezeptanalyse ([openrouter.ai/keys](https://openrouter.ai/keys)). Ohne den Schlüssel funktioniert die App weiter, nur die KI-Analyse ist deaktiviert. |
+| `OPENROUTER_MODEL` | Optional: KI-Modell für die Analyse (Standard: `openai/gpt-4o-mini`). Muss strukturierte JSON-Ausgaben unterstützen. |
 
 ## Entwicklung
 
