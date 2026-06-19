@@ -44,6 +44,22 @@
         ></textarea>
       </div>
 
+      <div class="form-group" style="background:var(--bg-muted,#f6f6f6);padding:0.75rem;border-radius:var(--radius);">
+        <label style="margin-bottom:0.5rem;">🤖 KI-Hilfe</label>
+        <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:0.5rem;">
+          Unsauberen Text aufräumen lassen oder ein Foto der Einkaufsliste hochladen –
+          die erkannten Artikel landen oben im Textfeld.
+        </p>
+        <div class="btn-group" style="flex-wrap:wrap;">
+          <button class="btn btn-secondary btn-sm" id="analyzeTextBtn">✨ Text per KI aufräumen</button>
+          <label class="btn btn-secondary btn-sm" for="photoInput" style="cursor:pointer;">📷 Foto wählen</label>
+          <input type="file" id="photoInput" accept="image/*" capture="environment" style="display:none;" />
+          <button class="btn btn-secondary btn-sm" id="analyzePhotoBtn" disabled>Foto analysieren</button>
+        </div>
+        <div id="photoName" style="font-size:0.8rem;color:var(--text-muted);margin-top:0.4rem;"></div>
+        <div id="analyzeItemsResult"></div>
+      </div>
+
       <div class="btn-group">
         <button class="btn btn-primary" id="importBtn">
           <span>🛍️</span> In Bring importieren
