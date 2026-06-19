@@ -5,12 +5,18 @@ services:
     container_name: bring-interface
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      # Linke Zahl = Port auf der NAS (per HOST_PORT änderbar), rechte = im Container
+      - "${HOST_PORT:-8095}:3000"
     environment:
       BRING_MAIL: ${BRING_MAIL}
       BRING_PASSWORD: ${BRING_PASSWORD}
       PORT: 3000
       DB_PATH: /data/recipes.db
     volumes:
-      # Synology-Bind-Mount: NAS-Ordner -> Container-Datenordner
-      - /volume2/docker/BRING/data:/data
+      # DATA_PATH leer  -> benanntes Docker-Volume "bring-data" (portabel, Standard)
+      # DATA_PATH gesetzt -> Bind-Mount auf einen Host-Ordner,
+      #   z. B. in Portainer: DATA_PATH=/volume2/docker/BRING/data
+      - "${DATA_PATH:-bring-data}:/data"
+
+volumes:
+  bring-data:
