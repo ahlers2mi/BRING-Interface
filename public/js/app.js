@@ -289,7 +289,10 @@ document.getElementById('addIngredientBtn').addEventListener('click', () => {
 function resetRecipeForm() {
   document.getElementById('recipeId').value = '';
   document.getElementById('recipeName').value = '';
+  document.getElementById('recipeUrl').value = '';
+  document.getElementById('recipePrepTime').value = '';
   document.getElementById('recipeDesc').value = '';
+  document.getElementById('recipeInstructions').value = '';
   document.getElementById('ingredientRows').innerHTML = '';
   document.getElementById('recipeFormTitle').textContent = 'Neues Rezept';
   document.getElementById('cancelEditBtn').style.display = 'none';
@@ -305,6 +308,9 @@ document.getElementById('saveRecipeBtn').addEventListener('click', async () => {
   const resultEl = document.getElementById('recipeFormResult');
   const name = document.getElementById('recipeName').value.trim();
   const description = document.getElementById('recipeDesc').value.trim();
+  const source_url = document.getElementById('recipeUrl').value.trim();
+  const prep_time = document.getElementById('recipePrepTime').value.trim();
+  const instructions = document.getElementById('recipeInstructions').value.trim();
   const id = document.getElementById('recipeId').value;
 
   if (!name) return flash(resultEl, 'Bitte einen Rezeptnamen eingeben.', 'error');
@@ -316,18 +322,20 @@ document.getElementById('saveRecipeBtn').addEventListener('click', async () => {
     }))
     .filter((i) => i.name.length > 0);
 
+  const payload = { name, description, source_url, prep_time, instructions, ingredients };
+
   setLoading(btn, true);
   try {
     if (id) {
       await apiFetch(`/api/recipes/${id}`, {
         method: 'PUT',
-        body: JSON.stringify({ name, description, ingredients }),
+        body: JSON.stringify(payload),
       });
       flash(resultEl, '✓ Rezept aktualisiert.');
     } else {
       await apiFetch('/api/recipes', {
         method: 'POST',
-        body: JSON.stringify({ name, description, ingredients }),
+        body: JSON.stringify(payload),
       });
       flash(resultEl, '✓ Rezept gespeichert.');
     }
@@ -364,7 +372,10 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
     // Ergebnis ins Formular übernehmen – Nutzer prüft und speichert selbst
     resetRecipeForm();
     document.getElementById('recipeName').value = recipe.name || '';
+    document.getElementById('recipeUrl').value = recipe.source_url || '';
+    document.getElementById('recipePrepTime').value = recipe.prep_time || '';
     document.getElementById('recipeDesc').value = recipe.description || '';
+    document.getElementById('recipeInstructions').value = recipe.instructions || '';
     const rows = document.getElementById('ingredientRows');
     rows.innerHTML = '';
     const ingredients = Array.isArray(recipe.ingredients) ? recipe.ingredients : [];
@@ -413,11 +424,31 @@ function buildRecipeCard(recipe) {
   const tags = recipe.ingredients
     .map((i) => `<span class="ingredient-tag">${escHtml(i.amount ? i.amount + ' ' + i.name : i.name)}</span>`)
     .join('');
+
+  const meta = [];
+  if (recipe.prep_time) meta.push(`⏱ ${escHtml(recipe.prep_time)}`);
+  if (recipe.source_url) {
+    const url = escHtml(recipe.source_url);
+    meta.push(`🔗 <a href="${url}" target="_blank" rel="noopener noreferrer">Link</a>`);
+  }
+  const metaHtml = meta.length
+    ? `<div style="font-size:0.85rem;color:var(--text-muted);margin-top:0.25rem;">${meta.join(' &nbsp;·&nbsp; ')}</div>`
+    : '';
+
+  const instructionsHtml = recipe.instructions
+    ? `<details style="margin-top:0.5rem;">
+         <summary style="cursor:pointer;font-size:0.9rem;">Zubereitung anzeigen</summary>
+         <div style="white-space:pre-wrap;font-size:0.9rem;margin-top:0.4rem;">${escHtml(recipe.instructions)}</div>
+       </details>`
+    : '';
+
   el.innerHTML = `
     <div class="recipe-info">
       <h3>${escHtml(recipe.name)}</h3>
+      ${metaHtml}
       ${recipe.description ? `<p>${escHtml(recipe.description)}</p>` : ''}
       <div style="margin-top:0.5rem;">${tags || '<em style="color:var(--text-muted);font-size:0.85rem;">Keine Zutaten eingetragen.</em>'}</div>
+      ${instructionsHtml}
     </div>
     <div style="display:flex;flex-direction:column;gap:0.4rem;flex-shrink:0;">
       <button class="btn btn-primary btn-sm" data-action="import">🛒 Importieren</button>
@@ -446,7 +477,10 @@ async function deleteRecipeById(id) {
 function editRecipe(recipe) {
   document.getElementById('recipeId').value = recipe.id;
   document.getElementById('recipeName').value = recipe.name;
+  document.getElementById('recipeUrl').value = recipe.source_url || '';
+  document.getElementById('recipePrepTime').value = recipe.prep_time || '';
   document.getElementById('recipeDesc').value = recipe.description || '';
+  document.getElementById('recipeInstructions').value = recipe.instructions || '';
   document.getElementById('recipeFormTitle').textContent = 'Rezept bearbeiten';
   document.getElementById('cancelEditBtn').style.display = 'inline-flex';
   const rows = document.getElementById('ingredientRows');

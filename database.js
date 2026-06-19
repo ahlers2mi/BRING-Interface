@@ -28,6 +28,17 @@ db.exec(`
   );
 `);
 
+// Migration: neue Rezept-Spalten ergänzen, falls noch nicht vorhanden.
+const recipeColumns = db
+  .prepare('PRAGMA table_info(recipes)')
+  .all()
+  .map((c) => c.name);
+for (const col of ['source_url', 'instructions', 'prep_time']) {
+  if (!recipeColumns.includes(col)) {
+    db.exec(`ALTER TABLE recipes ADD COLUMN ${col} TEXT`);
+  }
+}
+
 export function getSetting(key) {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
   return row ? row.value : null;
@@ -53,10 +64,26 @@ export function getRecipeById(id) {
   return recipe;
 }
 
-export function createRecipe({ name, description, ingredients = [] }) {
+export function createRecipe({
+  name,
+  description,
+  source_url,
+  instructions,
+  prep_time,
+  ingredients = [],
+}) {
   const info = db
-    .prepare('INSERT INTO recipes (name, description) VALUES (?, ?)')
-    .run(name, description || null);
+    .prepare(
+      `INSERT INTO recipes (name, description, source_url, instructions, prep_time)
+       VALUES (?, ?, ?, ?, ?)`
+    )
+    .run(
+      name,
+      description || null,
+      source_url || null,
+      instructions || null,
+      prep_time || null
+    );
   const recipeId = info.lastInsertRowid;
   const insertIng = db.prepare(
     'INSERT INTO ingredients (recipe_id, name, amount) VALUES (?, ?, ?)'
@@ -67,10 +94,20 @@ export function createRecipe({ name, description, ingredients = [] }) {
   return getRecipeById(recipeId);
 }
 
-export function updateRecipe(id, { name, description, ingredients }) {
-  db.prepare('UPDATE recipes SET name = ?, description = ? WHERE id = ?').run(
+export function updateRecipe(
+  id,
+  { name, description, source_url, instructions, prep_time, ingredients }
+) {
+  db.prepare(
+    `UPDATE recipes
+       SET name = ?, description = ?, source_url = ?, instructions = ?, prep_time = ?
+     WHERE id = ?`
+  ).run(
     name,
     description || null,
+    source_url || null,
+    instructions || null,
+    prep_time || null,
     id
   );
   if (Array.isArray(ingredients)) {
