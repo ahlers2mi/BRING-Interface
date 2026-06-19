@@ -12,7 +12,5 @@ services:
       PORT: 3000
       DB_PATH: /data/recipes.db
     volumes:
-      - bring-data:/data
-
-volumes:
-  bring-data:
+      # Synology-Bind-Mount: NAS-Ordner -> Container-Datenordner
+      - /volume2/docker/BRING/data:/data
