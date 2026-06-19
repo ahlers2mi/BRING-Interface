@@ -9,13 +9,15 @@ import {
   createRecipe,
   updateRecipe,
   deleteRecipe,
+  getSetting,
+  setSetting,
 } from './database.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+app.use(express.json({ limit: '12mb' })); // großzügig wegen Foto-Uploads (Base64)
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── Bring singleton ──────────────────────────────────────────────────────────
@@ -38,29 +40,38 @@ async function getBringClient() {
   return client;
 }
 
-// ── OpenRouter (KI-Rezeptanalyse) ───────────────────────────────────────────────
+// ── OpenRouter (KI-Analyse) ─────────────────────────────────────────────────────
 
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 // Modell überschreibbar via OPENROUTER_MODEL. Der Standard unterstützt
-// strukturierte JSON-Ausgaben (json_schema).
+// strukturierte JSON-Ausgaben (json_schema) und Bilder (Vision).
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
 
-const ANALYZE_SYSTEM_PROMPT =
+const RECIPE_SYSTEM_PROMPT =
   'Du extrahierst aus einem freien Rezepttext strukturierte Daten. ' +
   'Gib den Gerichtnamen, eine kurze Beschreibung und die Zutatenliste zurück. ' +
   'Trenne bei jeder Zutat die Mengenangabe (inkl. Einheit) sauber vom Zutatennamen. ' +
   'Behalte die Sprache des Originaltextes bei und erfinde keine Zutaten. ' +
   'Wenn für eine Zutat keine Menge angegeben ist, lass das Mengenfeld leer.';
 
+const ITEMS_SYSTEM_PROMPT =
+  'Du extrahierst eine Einkaufsliste aus dem Text oder Bild des Nutzers. ' +
+  'Gib eine Liste von Artikeln zurück, jeweils mit Name und Menge. ' +
+  'Trenne die Mengenangabe (inkl. Einheit, z. B. "500 g", "2 Packungen") sauber vom Artikelnamen. ' +
+  'Wenn keine Menge angegeben ist, lass das Mengenfeld leer. ' +
+  'Behalte die Sprache des Originals bei und erfinde keine Artikel.';
+
 // Extrahiert das JSON aus der Modellantwort (entfernt evtl. ```-Codeblöcke).
-function parseRecipeJson(content) {
+function parseJsonContent(content) {
   let txt = String(content).trim();
   const fence = txt.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fence) txt = fence[1].trim();
   return JSON.parse(txt);
 }
 
-async function analyzeRecipeText(text) {
+// Generischer OpenRouter-Aufruf mit erzwungenem JSON-Schema.
+// `content` ist entweder ein String oder ein Array von Content-Blöcken (für Bilder).
+async function callOpenRouter({ system, content, schemaName, schema }) {
   if (!process.env.OPENROUTER_API_KEY) {
     throw new Error(
       'OPENROUTER_API_KEY fehlt. Bitte den OpenRouter-API-Schlüssel als Umgebungsvariable setzen.'
@@ -72,18 +83,17 @@ async function analyzeRecipeText(text) {
     headers: {
       Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
       'Content-Type': 'application/json',
-      // Optionale OpenRouter-Attribution
       'X-Title': 'BRING-Interface',
     },
     body: JSON.stringify({
       model: OPENROUTER_MODEL,
       messages: [
-        { role: 'system', content: ANALYZE_SYSTEM_PROMPT },
-        { role: 'user', content: text },
+        { role: 'system', content: system },
+        { role: 'user', content },
       ],
       response_format: {
         type: 'json_schema',
-        json_schema: { name: 'recipe', strict: true, schema: RECIPE_SCHEMA },
+        json_schema: { name: schemaName, strict: true, schema },
       },
     }),
   });
@@ -94,9 +104,31 @@ async function analyzeRecipeText(text) {
   }
 
   const data = await res.json();
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error('Keine Antwort von der KI erhalten.');
-  return parseRecipeJson(content);
+  const answer = data.choices?.[0]?.message?.content;
+  if (!answer) throw new Error('Keine Antwort von der KI erhalten.');
+  return parseJsonContent(answer);
+}
+
+function analyzeRecipeText(text) {
+  return callOpenRouter({
+    system: RECIPE_SYSTEM_PROMPT,
+    content: text,
+    schemaName: 'recipe',
+    schema: RECIPE_SCHEMA,
+  });
+}
+
+// Analysiert Text und/oder ein Bild (Data-URL) zu einer Artikelliste.
+function analyzeItems({ text, image }) {
+  const blocks = [];
+  if (text) blocks.push({ type: 'text', text });
+  if (image) blocks.push({ type: 'image_url', image_url: { url: image } });
+  return callOpenRouter({
+    system: ITEMS_SYSTEM_PROMPT,
+    content: blocks.length ? blocks : String(text || ''),
+    schemaName: 'shopping_items',
+    schema: ITEMS_SCHEMA,
+  });
 }
 
 // JSON-Schema für die strukturierte Rezeptausgabe
@@ -137,6 +169,35 @@ const RECIPE_SCHEMA = {
   additionalProperties: false,
 };
 
+// JSON-Schema für die strukturierte Artikelliste (Einkaufsliste)
+const ITEMS_SCHEMA = {
+  type: 'object',
+  properties: {
+    items: {
+      type: 'array',
+      description: 'Die erkannten Einkaufsartikel.',
+      items: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description: 'Name des Artikels ohne Menge, z. B. "Milch".',
+          },
+          amount: {
+            type: 'string',
+            description:
+              'Menge inkl. Einheit, z. B. "2 Packungen". Leerer String, wenn keine Menge angegeben ist.',
+          },
+        },
+        required: ['name', 'amount'],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ['items'],
+  additionalProperties: false,
+};
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function parseItems(text) {
@@ -162,6 +223,19 @@ function parseItems(text) {
 }
 
 // ── Bring API routes ──────────────────────────────────────────────────────────
+
+// ── Einstellungen (zuletzt benutzte Liste merken) ──────────────────────────────
+
+app.get('/api/preferences', (_req, res) => {
+  res.json({ lastListUuid: getSetting('lastListUuid') });
+});
+
+app.put('/api/preferences', (req, res) => {
+  if (typeof req.body.lastListUuid === 'string') {
+    setSetting('lastListUuid', req.body.lastListUuid);
+  }
+  res.json({ lastListUuid: getSetting('lastListUuid') });
+});
 
 app.get('/api/status', async (_req, res) => {
   try {
@@ -192,6 +266,21 @@ app.get('/api/lists/:uuid/items', async (req, res) => {
   }
 });
 
+// POST /api/items/analyze – body: { text?, image? } – Text/Foto -> Artikelliste
+app.post('/api/items/analyze', async (req, res) => {
+  const text = (req.body.text || '').trim();
+  const image = req.body.image; // Data-URL (data:image/...;base64,...)
+  if (!text && !image) {
+    return res.status(400).json({ error: 'Bitte Text eingeben oder ein Foto hochladen.' });
+  }
+  try {
+    const result = await analyzeItems({ text, image });
+    res.json({ items: Array.isArray(result.items) ? result.items : [] });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/lists/:uuid/items  – body: { items: [{name, amount}] }
 app.post('/api/lists/:uuid/items', async (req, res) => {
   try {
@@ -206,6 +295,7 @@ app.post('/api/lists/:uuid/items', async (req, res) => {
       await client.saveItem(req.params.uuid, item.name, item.amount || '');
       results.push(item.name);
     }
+    setSetting('lastListUuid', req.params.uuid);
     res.json({ imported: results });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -284,6 +374,7 @@ app.post('/api/recipes/:id/import', async (req, res) => {
       await client.saveItem(listUuid, ing.name, ing.amount || '');
       imported.push(ing.name);
     }
+    setSetting('lastListUuid', listUuid);
     res.json({ imported });
   } catch (err) {
     res.status(500).json({ error: err.message });

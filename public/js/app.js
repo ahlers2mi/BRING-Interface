@@ -55,8 +55,38 @@ async function loadBringLists() {
   try {
     bringLists = await apiFetch('/api/lists');
     populateListSelects();
+    await applyLastList();
   } catch (err) {
     console.error('Listen konnten nicht geladen werden:', err.message);
+  }
+}
+
+// Zuletzt benutzte Bring-Liste vorwählen (geräteübergreifend, aus der DB).
+async function applyLastList() {
+  try {
+    const { lastListUuid } = await apiFetch('/api/preferences');
+    if (!lastListUuid) return;
+    const sel = document.getElementById('listSelect');
+    const importSel = document.getElementById('importListSelect');
+    const exists = (s) => [...s.options].some((o) => o.value === lastListUuid);
+    if (exists(sel)) {
+      sel.value = lastListUuid;
+      await loadCurrentItems(lastListUuid);
+    }
+    if (exists(importSel)) importSel.value = lastListUuid;
+  } catch {
+    /* Einstellungen optional – Fehler ignorieren */
+  }
+}
+
+async function saveLastList(uuid) {
+  try {
+    await apiFetch('/api/preferences', {
+      method: 'PUT',
+      body: JSON.stringify({ lastListUuid: uuid }),
+    });
+  } catch {
+    /* nicht kritisch */
   }
 }
 
@@ -117,10 +147,100 @@ document.getElementById('clearBtn').addEventListener('click', () => {
   document.getElementById('importResult').innerHTML = '';
 });
 
+// ── KI-Hilfe für die Einkaufsliste (Text + Foto) ────────────────────────────────
+
+let selectedPhoto = null;
+
+function itemsToTextarea(items) {
+  const lines = items
+    .map((i) => `${(i.amount || '').trim()} ${(i.name || '').trim()}`.trim())
+    .filter((l) => l.length > 0);
+  document.getElementById('itemsText').value = lines.join('\n');
+  return lines.length;
+}
+
+// Verkleinert ein Bild clientseitig und gibt eine JPEG-Data-URL zurück.
+function fileToResizedDataUrl(file, maxDim = 1280, quality = 0.8) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden.'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Bild konnte nicht geladen werden.'));
+      img.onload = () => {
+        const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+document.getElementById('analyzeTextBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('analyzeTextBtn');
+  const resultEl = document.getElementById('analyzeItemsResult');
+  const text = document.getElementById('itemsText').value.trim();
+  if (!text) return flash(resultEl, 'Bitte zuerst Text eingeben.', 'error');
+
+  setLoading(btn, true);
+  try {
+    const { items } = await apiFetch('/api/items/analyze', {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    });
+    const n = itemsToTextarea(items);
+    flash(resultEl, `✓ ${n} Artikel erkannt. Bitte oben prüfen und importieren.`);
+  } catch (err) {
+    flash(resultEl, `Fehler bei der Analyse: ${err.message}`, 'error');
+  } finally {
+    setLoading(btn, false);
+  }
+});
+
+document.getElementById('photoInput').addEventListener('change', (e) => {
+  selectedPhoto = e.target.files[0] || null;
+  document.getElementById('photoName').textContent = selectedPhoto
+    ? `Gewählt: ${selectedPhoto.name}`
+    : '';
+  document.getElementById('analyzePhotoBtn').disabled = !selectedPhoto;
+});
+
+document.getElementById('analyzePhotoBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('analyzePhotoBtn');
+  const resultEl = document.getElementById('analyzeItemsResult');
+  if (!selectedPhoto) return flash(resultEl, 'Bitte zuerst ein Foto wählen.', 'error');
+
+  setLoading(btn, true);
+  try {
+    const image = await fileToResizedDataUrl(selectedPhoto);
+    const { items } = await apiFetch('/api/items/analyze', {
+      method: 'POST',
+      body: JSON.stringify({ image }),
+    });
+    const n = itemsToTextarea(items);
+    flash(resultEl, `✓ ${n} Artikel vom Foto erkannt. Bitte oben prüfen und importieren.`);
+  } catch (err) {
+    flash(resultEl, `Fehler bei der Analyse: ${err.message}`, 'error');
+  } finally {
+    setLoading(btn, false);
+  }
+});
+
 document.getElementById('listSelect').addEventListener('change', async (e) => {
-  if (e.target.value) await loadCurrentItems(e.target.value);
-  else document.getElementById('currentItems').innerHTML =
-    'Wähle eine Liste aus, um die aktuellen Artikel anzuzeigen.';
+  if (e.target.value) {
+    await loadCurrentItems(e.target.value);
+    saveLastList(e.target.value);
+  } else {
+    document.getElementById('currentItems').innerHTML =
+      'Wähle eine Liste aus, um die aktuellen Artikel anzuzeigen.';
+  }
 });
 
 async function loadCurrentItems(listUuid) {
