@@ -215,7 +215,7 @@ document.getElementById('photoInput').addEventListener('change', (e) => {
 document.getElementById('analyzePhotoBtn').addEventListener('click', async () => {
   const btn = document.getElementById('analyzePhotoBtn');
   const resultEl = document.getElementById('analyzeItemsResult');
-  if (!selectedPhoto) return flash(resultEl, 'Bitte zuerst ein Foto wählen.', 'error');
+  if (!selectedPhoto) return flash(resultEl, 'Bitte zuerst ein Bild wählen.', 'error');
 
   setLoading(btn, true);
   try {
@@ -225,7 +225,7 @@ document.getElementById('analyzePhotoBtn').addEventListener('click', async () =>
       body: JSON.stringify({ image }),
     });
     const n = itemsToTextarea(items);
-    flash(resultEl, `✓ ${n} Artikel vom Foto erkannt. Bitte oben prüfen und importieren.`);
+    flash(resultEl, `✓ ${n} Artikel im Bild erkannt. Bitte oben prüfen und importieren.`);
   } catch (err) {
     flash(resultEl, `Fehler bei der Analyse: ${err.message}`, 'error');
   } finally {
