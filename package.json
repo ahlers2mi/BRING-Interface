@@ -20,7 +20,6 @@
   },
   "homepage": "https://github.com/ahlers2mi/BRING-Interface#readme",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.105.0",
     "better-sqlite3": "^12.11.1",
     "bring-shopping": "^2.0.1",
     "dotenv": "^17.4.2",
