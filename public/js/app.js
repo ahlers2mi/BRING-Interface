@@ -55,8 +55,38 @@ async function loadBringLists() {
   try {
     bringLists = await apiFetch('/api/lists');
     populateListSelects();
+    await applyLastList();
   } catch (err) {
     console.error('Listen konnten nicht geladen werden:', err.message);
+  }
+}
+
+// Zuletzt benutzte Bring-Liste vorwählen (geräteübergreifend, aus der DB).
+async function applyLastList() {
+  try {
+    const { lastListUuid } = await apiFetch('/api/preferences');
+    if (!lastListUuid) return;
+    const sel = document.getElementById('listSelect');
+    const importSel = document.getElementById('importListSelect');
+    const exists = (s) => [...s.options].some((o) => o.value === lastListUuid);
+    if (exists(sel)) {
+      sel.value = lastListUuid;
+      await loadCurrentItems(lastListUuid);
+    }
+    if (exists(importSel)) importSel.value = lastListUuid;
+  } catch {
+    /* Einstellungen optional – Fehler ignorieren */
+  }
+}
+
+async function saveLastList(uuid) {
+  try {
+    await apiFetch('/api/preferences', {
+      method: 'PUT',
+      body: JSON.stringify({ lastListUuid: uuid }),
+    });
+  } catch {
+    /* nicht kritisch */
   }
 }
 
@@ -204,9 +234,13 @@ document.getElementById('analyzePhotoBtn').addEventListener('click', async () =>
 });
 
 document.getElementById('listSelect').addEventListener('change', async (e) => {
-  if (e.target.value) await loadCurrentItems(e.target.value);
-  else document.getElementById('currentItems').innerHTML =
-    'Wähle eine Liste aus, um die aktuellen Artikel anzuzeigen.';
+  if (e.target.value) {
+    await loadCurrentItems(e.target.value);
+    saveLastList(e.target.value);
+  } else {
+    document.getElementById('currentItems').innerHTML =
+      'Wähle eine Liste aus, um die aktuellen Artikel anzuzeigen.';
+  }
 });
 
 async function loadCurrentItems(listUuid) {

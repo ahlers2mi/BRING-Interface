@@ -9,6 +9,8 @@ import {
   createRecipe,
   updateRecipe,
   deleteRecipe,
+  getSetting,
+  setSetting,
 } from './database.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -222,6 +224,19 @@ function parseItems(text) {
 
 // ── Bring API routes ──────────────────────────────────────────────────────────
 
+// ── Einstellungen (zuletzt benutzte Liste merken) ──────────────────────────────
+
+app.get('/api/preferences', (_req, res) => {
+  res.json({ lastListUuid: getSetting('lastListUuid') });
+});
+
+app.put('/api/preferences', (req, res) => {
+  if (typeof req.body.lastListUuid === 'string') {
+    setSetting('lastListUuid', req.body.lastListUuid);
+  }
+  res.json({ lastListUuid: getSetting('lastListUuid') });
+});
+
 app.get('/api/status', async (_req, res) => {
   try {
     await getBringClient();
@@ -280,6 +295,7 @@ app.post('/api/lists/:uuid/items', async (req, res) => {
       await client.saveItem(req.params.uuid, item.name, item.amount || '');
       results.push(item.name);
     }
+    setSetting('lastListUuid', req.params.uuid);
     res.json({ imported: results });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -358,6 +374,7 @@ app.post('/api/recipes/:id/import', async (req, res) => {
       await client.saveItem(listUuid, ing.name, ing.amount || '');
       imported.push(ing.name);
     }
+    setSetting('lastListUuid', listUuid);
     res.json({ imported });
   } catch (err) {
     res.status(500).json({ error: err.message });
