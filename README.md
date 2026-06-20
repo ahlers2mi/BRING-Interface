@@ -88,6 +88,16 @@ docker run -d \
 | `DB_PATH`       | Pfad zur SQLite-Datei (Standard: `recipes.db`, im Container `/data/recipes.db`) |
 | `OPENROUTER_API_KEY` | API-Schlüssel für die KI-Rezeptanalyse ([openrouter.ai/keys](https://openrouter.ai/keys)). Ohne den Schlüssel funktioniert die App weiter, nur die KI-Analyse ist deaktiviert. |
 | `OPENROUTER_MODEL` | Optional: KI-Modell für die Analyse (Standard: `openai/gpt-4o-mini`). Muss strukturierte JSON-Ausgaben unterstützen. |
+| `APP_PASSWORD` | Gemeinsames Passwort für den Zugriff. Leer = **kein** Schutz (nur für rein lokalen/VPN-Betrieb). Bei öffentlichem Zugriff zwingend setzen. |
+| `APP_SECRET` | Optional: Schlüssel zum Signieren der Session-Cookies (sonst aus `APP_PASSWORD` abgeleitet). |
+
+## Sicherheit / externer Zugriff
+
+Die App hat **keine** eingebaute Mehrbenutzer-Verwaltung. Für den Zugriff von außen:
+
+1. **`APP_PASSWORD` setzen** – schützt die gesamte App mit einem gemeinsamen Passwort (Session-Cookie, 30 Tage, Brute-Force-Bremse).
+2. **HTTPS ist Pflicht** – ein Passwort über reines HTTP wäre im Klartext im Netz. Stelle der App einen **Reverse Proxy mit TLS** voran (z. B. Synology-Reverse-Proxy mit Let's Encrypt) und gib nach außen **nur Port 443** frei, nicht den Container-Port.
+3. **Noch sicherer:** gar nicht öffentlich exponieren, sondern per **VPN** (z. B. WireGuard auf der UniFi UDR) zugreifen.
 
 ## Entwicklung
 
