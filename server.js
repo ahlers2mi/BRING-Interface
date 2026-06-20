@@ -19,6 +19,13 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.set('trust proxy', true); // korrekte HTTPS-Erkennung hinter Reverse Proxy
+
+// Versehentliche HTTP-Subressourcen automatisch auf HTTPS hochstufen (kein Mixed Content).
+app.use((_req, res, next) => {
+  res.setHeader('Content-Security-Policy', 'upgrade-insecure-requests');
+  next();
+});
+
 app.use(express.json({ limit: '12mb' })); // großzügig wegen Foto-Uploads (Base64)
 app.use(express.urlencoded({ extended: false })); // Login-Formular
 
