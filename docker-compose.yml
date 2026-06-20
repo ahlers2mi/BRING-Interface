@@ -12,6 +12,8 @@ services:
       BRING_PASSWORD: ${BRING_PASSWORD}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-4o-mini}
+      APP_PASSWORD: ${APP_PASSWORD}
+      APP_SECRET: ${APP_SECRET}
       PORT: 3000
       DB_PATH: /data/recipes.db
     volumes:

@@ -25,6 +25,11 @@ async function apiFetch(url, options = {}) {
     headers: { 'Content-Type': 'application/json', ...options.headers },
     ...options,
   });
+  if (res.status === 401) {
+    // Session abgelaufen / nicht angemeldet → zur Login-Seite.
+    window.location.href = '/login';
+    throw new Error('Nicht angemeldet.');
+  }
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
   return data;
@@ -36,6 +41,9 @@ async function loadStatus() {
   const badge = document.getElementById('statusBadge');
   try {
     const status = await apiFetch('/api/status');
+    if (status.authEnabled) {
+      document.getElementById('logoutLink').style.display = '';
+    }
     if (status.loggedIn) {
       badge.textContent = `✓ ${status.mail}`;
       badge.className = 'status-badge ok';

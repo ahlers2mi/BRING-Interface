@@ -3,6 +3,7 @@ import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import Bring from 'bring-shopping';
+import { registerAuth, authEnabled } from './auth.js';
 import {
   getAllRecipes,
   getRecipeById,
@@ -17,7 +18,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.set('trust proxy', true); // korrekte HTTPS-Erkennung hinter Reverse Proxy
 app.use(express.json({ limit: '12mb' })); // großzügig wegen Foto-Uploads (Base64)
+app.use(express.urlencoded({ extended: false })); // Login-Formular
+
+// Passwortschutz (greift nur, wenn APP_PASSWORD gesetzt ist) – vor allen Routen.
+registerAuth(app);
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ── Bring singleton ──────────────────────────────────────────────────────────
@@ -266,9 +273,9 @@ app.put('/api/preferences', (req, res) => {
 app.get('/api/status', async (_req, res) => {
   try {
     await getBringClient();
-    res.json({ loggedIn: true, mail: process.env.BRING_MAIL });
+    res.json({ loggedIn: true, mail: process.env.BRING_MAIL, authEnabled });
   } catch (err) {
-    res.json({ loggedIn: false, error: err.message });
+    res.json({ loggedIn: false, error: err.message, authEnabled });
   }
 });
 
