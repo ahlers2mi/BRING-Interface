@@ -14,7 +14,7 @@ const TOKEN = 'mealie-token';
 
 // ── Fake-Mealie ───────────────────────────────────────────────────────────────
 
-const calls = { list: 0, detail: 0, patch: [] };
+const calls = { list: 0, detail: 0, patch: [], createUrl: [] };
 
 // Zwei Rezepte, wie Mealie sie liefert: eines mit strukturierten Zutaten,
 // eines mit Freitext-Zutaten (food/unit leer).
@@ -117,6 +117,30 @@ const mealie = http.createServer((req, res) => {
       per_page: 100,
       total: items.length,
       total_pages: 1,
+    });
+  }
+
+  // Mealies eigener URL-Importer
+  if (url.pathname === '/api/recipes/create/url' && req.method === 'POST') {
+    let body = '';
+    req.on('data', (c) => (body += c));
+    return req.on('end', () => {
+      const { url: src } = JSON.parse(body || '{}');
+      const id = /\/rezepte\/(\d+)\//.exec(src || '')?.[1] || String(recipes.size + 1);
+      const slug = `chefkoch-${id}`;
+      calls.createUrl.push(src);
+      recipes.set(slug, {
+        id: `ck-${id}`,
+        slug,
+        name: `Chefkoch-Rezept ${id}`,
+        orgURL: src,
+        updatedAt: '2026-08-06T10:00:00',
+        recipeInstructions: [{ text: 'Kochen.' }],
+        recipeIngredient: [
+          { quantity: 1, unit: null, food: { name: 'Zutat' }, note: '', display: '1 Zutat' },
+        ],
+      });
+      return json({ slug }, 201);
     });
   }
 
@@ -390,4 +414,78 @@ test('Status meldet Erreichbarkeit und Version', async () => {
   assert.equal(res.json.reachable, true);
   assert.equal(res.json.version, 'v2.0.0-test');
   assert.ok(res.json.finishedAt);
+});
+
+// ── Chefkoch -> Mealie ────────────────────────────────────────────────────────
+
+test('Chefkoch-Suche übergibt die URLs an Mealies Importer', async () => {
+  const realFetch = globalThis.fetch;
+  // Chefkoch nachbauen, alles Richtung Testserver durchlassen.
+  globalThis.fetch = async (input, init) => {
+    const href = String(input);
+    if (href.includes('127.0.0.1')) return realFetch(input, init);
+    if (href.includes('/search-gateway/recipes')) {
+      const offset = Number(/offset=(\d+)/.exec(href)?.[1] || 0);
+      const results =
+        offset === 0 ? [901, 902, 903].map((n) => ({ recipe: { id: `20000000${n}` } })) : [];
+      return new Response(JSON.stringify({ results }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return new Response('not found', { status: 404 });
+  };
+
+  try {
+    const start = await api('/api/mealie/import-chefkoch', {
+      method: 'POST',
+      body: { query: 'auflauf', count: 3 },
+    });
+    assert.equal(start.status, 202, start.text);
+
+    // Ein zweiter Lauf parallel wird abgelehnt.
+    const parallel = await api('/api/mealie/import-chefkoch', {
+      method: 'POST',
+      body: { count: 3 },
+    });
+    assert.equal(parallel.status, 409);
+
+    let job = null;
+    for (let i = 0; i < 100; i += 1) {
+      job = (await api('/api/mealie/import-status')).json;
+      if (job.status !== 'running') break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    assert.equal(job.status, 'done', JSON.stringify(job.log));
+    assert.equal(job.imported, 3);
+    assert.equal(job.failed, 0);
+
+    // Die URLs sind bei Mealie angekommen …
+    assert.equal(calls.createUrl.length, 3);
+    assert.match(calls.createUrl[0], /^https:\/\/www\.chefkoch\.de\/rezepte\/\d+\/$/);
+
+    // … und der Abgleich am Ende hat sie in den Spiegel geholt.
+    const list = await api('/api/recipes');
+    const imported = list.json.filter((r) => r.name.startsWith('Chefkoch-Rezept'));
+    assert.equal(imported.length, 3);
+    assert.equal(imported[0].source, 'mealie');
+    assert.match(imported[0].source_url, /chefkoch\.de/);
+
+    // Zweiter Lauf: dieselben Rezepte werden übersprungen, nicht doppelt angelegt.
+    const before = calls.createUrl.length;
+    await api('/api/mealie/import-chefkoch', {
+      method: 'POST',
+      body: { query: 'auflauf', count: 3 },
+    });
+    for (let i = 0; i < 100; i += 1) {
+      job = (await api('/api/mealie/import-status')).json;
+      if (job.status !== 'running') break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    assert.equal(job.skipped, 3);
+    assert.equal(job.imported, 0);
+    assert.equal(calls.createUrl.length, before, 'keine erneuten Importe');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });

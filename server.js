@@ -10,6 +10,7 @@ import {
   getSourceIndex,
   upsertRecipeFromSource,
   markRecipesMissing,
+  findRecipeBySourceUrlPart,
   createRecipe,
   updateRecipe,
   deleteRecipe,
@@ -50,12 +51,15 @@ import {
   stripHtml,
 } from './lib/recipe-import.js';
 import {
+  cancelChefkochJob,
+  getChefkochJob,
   getSyncState,
   mealieAbout,
   mealieEnabled,
   mealieConfig,
   mealieRecipeUrl,
   pushRatingToMealie,
+  startChefkochToMealieJob,
   syncFromMealie,
 } from './lib/mealie.js';
 
@@ -843,7 +847,12 @@ app.post('/api/recipes/import/cancel', (_req, res) => {
 
 // ── Mealie als Rezeptquelle ───────────────────────────────────────────────────
 
-const mealieDeps = { upsertRecipeFromSource, getSourceIndex, markRecipesMissing };
+const mealieDeps = {
+  upsertRecipeFromSource,
+  getSourceIndex,
+  markRecipesMissing,
+  findRecipeBySourceUrlPart,
+};
 
 app.get('/api/mealie/status', async (_req, res) => {
   const state = getSyncState();
@@ -871,6 +880,30 @@ app.post('/api/mealie/sync', async (_req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// POST /api/mealie/import-chefkoch – body: { query?, count? }
+// Chefkoch-Suche liefert die URLs, Mealie importiert sie mit seinem eigenen
+// Scraper, danach wird der Spiegel abgeglichen.
+app.post('/api/mealie/import-chefkoch', (req, res) => {
+  try {
+    const job = startChefkochToMealieJob({
+      query: String(req.body?.query || '').trim(),
+      count: Number(req.body?.count) || 20,
+      deps: mealieDeps,
+    });
+    res.status(202).json(job);
+  } catch (err) {
+    res.status(409).json({ error: err.message });
+  }
+});
+
+app.get('/api/mealie/import-status', (_req, res) => {
+  res.json(getChefkochJob() || { status: 'idle' });
+});
+
+app.post('/api/mealie/import-cancel', (_req, res) => {
+  res.json({ cancelled: cancelChefkochJob(), job: getChefkochJob() });
 });
 
 // Adresse eines Rezepts in der Mealie-Oberfläche (für den Knopf in der Liste).

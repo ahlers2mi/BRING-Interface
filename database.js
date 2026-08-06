@@ -400,6 +400,16 @@ export function markRecipesMissing(prefix, keepExternalIds) {
   return missing;
 }
 
+// Gibt es schon ein Rezept, dessen Quell-URL diesen Teil enthält?
+// (Für den Chefkoch-Weg: "/rezepte/<id>/" ist eindeutig.)
+export function findRecipeBySourceUrlPart(part) {
+  if (!part) return null;
+  const row = db
+    .prepare(`SELECT id FROM recipes WHERE source_url LIKE '%' || ? || '%' LIMIT 1`)
+    .get(part);
+  return row ? getRecipeById(row.id) : null;
+}
+
 export function getRecipeBySlug(slug) {
   const row = db.prepare('SELECT id FROM recipes WHERE source_slug = ?').get(slug);
   return row ? getRecipeById(row.id) : null;

@@ -456,6 +456,56 @@ async function renderMealieStatus() {
   }
 }
 
+// Chefkoch -> Mealie (nur im Mealie-Modus sichtbar). Fortschritt wie beim
+// lokalen Massenimport, nur landen die Rezepte in Mealie.
+let ckPollTimer = null;
+
+function renderCkJob(job) {
+  const box = el('ckStatus');
+  if (!box) return;
+  if (!job || job.status === 'idle') {
+    box.innerHTML = '';
+    return;
+  }
+  const total = job.total || job.requested || 0;
+  const percent = total ? Math.min(100, Math.round((job.done / total) * 100)) : 0;
+  const statusText =
+    { running: '⏳ läuft', done: '✓ fertig', error: '✗ Fehler', cancelled: '■ abgebrochen' }[
+      job.status
+    ] || job.status;
+  box.innerHTML = `
+    <div class="progress"><div class="progress-bar" style="width:${percent}%"></div></div>
+    <div class="hint">
+      ${statusText} · ${job.done}/${total || '?'} · ${job.imported} in Mealie ·
+      ${job.skipped} übersprungen · ${job.failed} fehlgeschlagen
+    </div>
+    ${job.error ? `<div class="alert alert-error">${escHtml(job.error)}</div>` : ''}
+    <details class="log"><summary>Protokoll</summary><pre>${escHtml(
+      (job.log || []).join('\n')
+    )}</pre></details>`;
+  el('ckCancelBtn').style.display = job.status === 'running' ? 'inline-flex' : 'none';
+}
+
+async function pollCkJob() {
+  try {
+    const job = await apiFetch('/api/mealie/import-status');
+    renderCkJob(job);
+    if (job.status === 'running' || job.status === 'idle') return job;
+    clearInterval(ckPollTimer);
+    ckPollTimer = null;
+    el('ckImportBtn').disabled = false;
+    await refreshAll();
+    renderMealieStatus();
+    return job;
+  } catch (err) {
+    clearInterval(ckPollTimer);
+    ckPollTimer = null;
+    el('ckImportBtn').disabled = false;
+    flash('ckResult', `Fehler: ${escHtml(err.message)}`, 'error');
+    return null;
+  }
+}
+
 // ── Massenimport (Chefkoch) ───────────────────────────────────────────────────
 
 function renderImportJob(job) {
@@ -693,6 +743,42 @@ export async function initRecipes() {
     }
   });
 
+  on('ckImportBtn', 'click', async () => {
+    const query = el('ckQuery').value.trim();
+    const count = Number(el('ckCount').value) || 20;
+    if (
+      !confirm(
+        `${count} Rezepte von chefkoch.de über Mealie importieren?\n` +
+          'Das dauert je nach Anzahl einige Minuten und läuft im Hintergrund weiter.'
+      )
+    ) {
+      return;
+    }
+    el('ckImportBtn').disabled = true;
+    try {
+      await apiFetch('/api/mealie/import-chefkoch', {
+        method: 'POST',
+        body: JSON.stringify({ query, count }),
+      });
+      flash('ckResult', '✓ Import gestartet – Fortschritt siehe unten.', 'info');
+      if (!ckPollTimer) {
+        ckPollTimer = setInterval(pollCkJob, 2000);
+        pollCkJob();
+      }
+    } catch (err) {
+      flash('ckResult', `Fehler: ${escHtml(err.message)}`, 'error');
+      el('ckImportBtn').disabled = false;
+    }
+  });
+
+  on('ckCancelBtn', 'click', async () => {
+    try {
+      await apiFetch('/api/mealie/import-cancel', { method: 'POST' });
+    } catch (err) {
+      flash('ckResult', `Fehler: ${escHtml(err.message)}`, 'error');
+    }
+  });
+
   // Liste filtern
   on('recipeSearch', 'input', () => {
     visibleCount = 30;
@@ -733,5 +819,12 @@ export async function initRecipes() {
   if (job?.status === 'running') {
     el('bulkImportBtn').disabled = true;
     startPolling();
+  }
+  if (mealieActive()) {
+    const ck = await pollCkJob();
+    if (ck?.status === 'running') {
+      el('ckImportBtn').disabled = true;
+      ckPollTimer = setInterval(pollCkJob, 2000);
+    }
   }
 }
