@@ -157,10 +157,23 @@
           Sucht auf Chefkoch (Suchbegriff leer = beliebte Rezepte) und übergibt die
           Treffer an Mealies eigenen Importer – der liest die Seiten aus. Danach
           wird automatisch abgeglichen. Schon vorhandene Rezepte werden übersprungen.
+          Mit der Mindestbewertung kommen nur gut bewertete Rezepte rein; die
+          Stimmenzahl sortiert Ausreißer mit einer einzigen 5-Sterne-Wertung aus.
+          0 schaltet den jeweiligen Filter ab.
         </p>
         <div class="inline-fields">
           <input type="text" id="ckQuery" placeholder="Suchbegriff (optional), z. B. Auflauf" />
-          <input type="number" id="ckCount" value="20" min="1" max="500" title="Anzahl" />
+          <input type="number" id="ckCount" value="20" min="1" max="500" title="Anzahl Rezepte" />
+        </div>
+        <div class="inline-fields" style="margin-top:0.5rem;">
+          <label class="check">min. Bewertung
+            <input type="number" id="ckMinRating" value="4" min="0" max="5" step="0.1"
+              title="0 = kein Filter" style="width:5rem;" /> ★
+          </label>
+          <label class="check">min. Stimmen
+            <input type="number" id="ckMinVotes" value="20" min="0" max="10000"
+              title="0 = kein Filter" style="width:6rem;" />
+          </label>
           <button class="btn btn-primary" id="ckImportBtn">Holen</button>
           <button class="btn btn-danger" id="ckCancelBtn" style="display:none;">Abbrechen</button>
         </div>
@@ -200,10 +213,23 @@
           Holt viele Rezepte auf einmal (Suchbegriff leer = beliebte Rezepte quer
           durch alle Kategorien). Der Import läuft im Hintergrund weiter, wenn du
           die Seite wechselst; Rezepte, die schon vorhanden sind, werden übersprungen.
+          Mit der Mindestbewertung kommen nur Rezepte rein, die auf Chefkoch gut
+          bewertet sind – die Stimmenzahl sortiert Ausreißer mit einer einzigen
+          5-Sterne-Wertung aus. 0 schaltet den jeweiligen Filter ab.
         </p>
         <div class="inline-fields">
           <input type="text" id="bulkQuery" placeholder="Suchbegriff (optional), z. B. Auflauf" />
-          <input type="number" id="bulkCount" value="200" min="1" max="1000" title="Anzahl" />
+          <input type="number" id="bulkCount" value="200" min="1" max="1000" title="Anzahl Rezepte" />
+        </div>
+        <div class="inline-fields" style="margin-top:0.5rem;">
+          <label class="check">min. Bewertung
+            <input type="number" id="bulkMinRating" value="4" min="0" max="5" step="0.1"
+              title="0 = kein Filter" style="width:5rem;" /> ★
+          </label>
+          <label class="check">min. Stimmen
+            <input type="number" id="bulkMinVotes" value="20" min="0" max="10000"
+              title="0 = kein Filter" style="width:6rem;" />
+          </label>
           <button class="btn btn-primary" id="bulkImportBtn">Import starten</button>
           <button class="btn btn-danger" id="bulkCancelBtn" style="display:none;">Abbrechen</button>
         </div>

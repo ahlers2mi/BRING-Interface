@@ -829,6 +829,8 @@ app.post('/api/recipes/import/chefkoch', blockWhenMealie, (req, res) => {
     const job = startImportJob({
       query: String(req.body?.query || '').trim(),
       count: Number(req.body?.count) || 50,
+      minRating: Number(req.body?.minRating) || 0,
+      minVotes: Number(req.body?.minVotes) || 0,
       deps: { createRecipe, findRecipeByExternalId, findRecipeByName },
     });
     res.status(202).json(job);
@@ -890,6 +892,8 @@ app.post('/api/mealie/import-chefkoch', (req, res) => {
     const job = startChefkochToMealieJob({
       query: String(req.body?.query || '').trim(),
       count: Number(req.body?.count) || 20,
+      minRating: Number(req.body?.minRating) || 0,
+      minVotes: Number(req.body?.minVotes) || 0,
       deps: mealieDeps,
     });
     res.status(202).json(job);
