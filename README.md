@@ -75,8 +75,33 @@ Die `docker-compose.yml` ist dafür schon vorbereitet (kein fester `image:`-Name
 `pull_policy: build`). Bei automatischen Updates (GitOps) gilt dasselbe: nur
 „Re-deploy", nicht „Re-pull".
 
-Die Umgebungsvariablen trägt man in Portainer entweder als Stack-Variablen ein
-(gleiche Namen wie in der `.env`) oder über „Load variables from .env file".
+Die Umgebungsvariablen trägt man in Portainer als Stack-Variablen ein (gleiche
+Namen wie in der `.env`) – **eine `.env` aus dem Repo liest Portainer nicht**,
+die ist gar nicht eingecheckt. Portainer schreibt die Werte in eine `stack.env`
+neben die Stack-Dateien.
+
+Zwei Fallen beim Aktualisieren:
+
+- **„Update the stack" holt Git nicht neu.** Den aktuellen Repo-Stand zieht nur
+  „Pull and redeploy" (GitOps-Bereich) – oder ein neu angelegter Stack. Bricht
+  „Pull and redeploy" ab, bleibt der alte Checkout liegen und jeder Redeploy
+  baut wieder denselben Commit.
+- **`compose up` baut nur, wenn das Image fehlt.** Ohne `--build` startet ein
+  Redeploy einfach das alte Image – erkennbar an unverändertem Zeitstempel und
+  gleicher Image-ID. Erzwingen lässt es sich mit gelöschtem Image oder von der
+  Shell aus:
+
+  ```bash
+  S=<Portainer-Datenpfad>/compose/<stack-id>      # z. B. /volume2/docker/PORTAINER/compose/8
+  sudo docker compose -p <stackname> --project-directory "$S" --env-file "$S/stack.env" up -d --build
+  ```
+
+Woran man erkennt, dass wirklich der neue Stand läuft:
+
+```bash
+docker exec bring-interface printenv API_TOKEN     # Token da?
+docker exec bring-interface grep -c api/fhem server.js   # > 0 = Wochenplan drin
+```
 
 ```bash
 docker compose logs -f      # Logs ansehen
