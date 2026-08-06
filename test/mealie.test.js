@@ -271,7 +271,8 @@ test('Abgleich spiegelt Rezepte samt Zutaten, Zeiten und Tags', async () => {
   assert.equal(auflauf.servings, '4 Portionen');
   assert.equal(auflauf.source_url, 'https://www.chefkoch.de/rezepte/123/Auberginen.html');
   assert.deepEqual(auflauf.tags, ['Ofen', 'Hauptgericht']);
-  assert.match(auflauf.image_url, /\/api\/media\/recipes\/11111111.*min-original\.webp$/);
+  // Bilder laufen über unseren Server (MEALIE_URL ist im Browser nicht erreichbar).
+  assert.equal(auflauf.image_url, '/api/mealie/image/11111111-1111-1111-1111-111111111111');
   assert.equal(
     auflauf.instructions,
     '1. Auberginen halbieren.\n2. Füllung einfüllen und backen.'

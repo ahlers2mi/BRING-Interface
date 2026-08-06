@@ -1,0 +1,265 @@
+/* Wandtablet-Ansicht des Wochenplans: dunkel, große Flächen, wenig Text.
+   Gedacht für ~1000 px Breite (Fully/Tablet), funktioniert auch am Handy. */
+
+:root {
+  --bg: #0f1115;
+  --panel: #171a21;
+  --panel-2: #1e222b;
+  --line: #2a2f3a;
+  --text: #e8eaef;
+  --muted: #99a1b3;
+  --accent: #f97316;
+  --good: #22c55e;
+  --bad: #ef4444;
+  --radius: 1rem;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 1.25rem;
+  font-size: 17px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.kicker {
+  display: block;
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ── Kopf ─────────────────────────────────────────────────────────────────── */
+
+.board-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.board-head h1 { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.01em; }
+
+.head-right { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+
+.clock { font-size: 1.5rem; font-variant-numeric: tabular-nums; color: var(--muted); }
+
+/* ── Knöpfe ───────────────────────────────────────────────────────────────── */
+
+.btn {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 0.6rem 1.1rem;
+  font-size: 0.95rem;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 2.75rem; /* Fingerfreundlich */
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+
+.btn:hover { background: #262b36; border-color: #3a4150; }
+.btn:active { transform: scale(0.97); }
+.btn[disabled] { opacity: 0.5; }
+
+.btn-accent { background: var(--accent); border-color: var(--accent); color: #1a1206; font-weight: 600; }
+.btn-accent:hover { background: #fb8b3c; border-color: #fb8b3c; }
+
+.btn-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+/* ── Heute ────────────────────────────────────────────────────────────────── */
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(14rem, 22rem) 1fr;
+  gap: 1.5rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.hero-image {
+  border-radius: 0.75rem;
+  background: var(--panel-2) center/cover no-repeat;
+  min-height: 13rem;
+  position: relative;
+}
+
+.hero-image.empty::after {
+  content: '🍽';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 3.5rem;
+  opacity: 0.25;
+}
+
+.hero-text { display: flex; flex-direction: column; gap: 0.6rem; min-width: 0; }
+
+.hero-text h2 {
+  font-size: 2.1rem;
+  line-height: 1.15;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.hero-meta { color: var(--muted); font-size: 0.95rem; }
+.hero-meta .sep { opacity: 0.4; margin: 0 0.5rem; }
+
+.stars { color: var(--accent); letter-spacing: 0.1em; }
+
+/* ── Bewertungsknöpfe ─────────────────────────────────────────────────────── */
+
+.rate-row { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+
+.rate {
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  border-radius: 0.75rem;
+  font-size: 1.4rem;
+  line-height: 1;
+  padding: 0.5rem 0.7rem;
+  cursor: pointer;
+  min-width: 3rem;
+  min-height: 2.9rem;
+}
+
+.rate:hover { background: #2b3140; }
+.rate.done { border-color: var(--accent); background: #2a1d0f; }
+
+/* ── Wochentage ───────────────────────────────────────────────────────────── */
+
+.days {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+/* Auf dem Wandtablet lieber wenige große Karten als viele kleine – aus zwei
+   Metern Abstand zählt Lesbarkeit mehr als Übersicht. */
+@media (min-width: 900px) {
+  .days { grid-template-columns: repeat(3, 1fr); }
+  .day-img { height: 9rem; }
+  .day .dish { font-size: 1.15rem; }
+}
+
+.day {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 12rem;
+}
+
+.day.today { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.day.cooked { opacity: 0.75; }
+
+.day-img {
+  height: 6.5rem;
+  background: var(--panel-2) center/cover no-repeat;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.day-img.empty::after {
+  content: '＋';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 2rem;
+  color: var(--muted);
+  opacity: 0.5;
+}
+
+.day-body { padding: 0.6rem 0.75rem 0.75rem; display: flex; flex-direction: column; gap: 0.3rem; flex: 1; }
+
+.day-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+.day-name { font-weight: 600; font-size: 0.95rem; }
+.day-date { font-size: 0.75rem; color: var(--muted); }
+
+.dish { font-size: 1.02rem; line-height: 1.25; }
+.dish.empty { color: var(--muted); font-style: italic; }
+
+.day-meta { font-size: 0.78rem; color: var(--muted); margin-top: auto; }
+
+.badge {
+  display: inline-block;
+  font-size: 0.68rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.badge.cooked { color: var(--good); border-color: #1f4030; }
+.badge.skipped { color: var(--bad); border-color: #45242a; }
+
+.day-actions { display: flex; gap: 0.3rem; padding: 0 0.75rem 0.75rem; flex-wrap: wrap; }
+
+.mini {
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  border-radius: 0.6rem;
+  padding: 0.4rem 0.5rem;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  min-height: 2.4rem;
+  flex: 1 1 auto; /* füllt die Zeile gleichmäßig, bleibt fingerfreundlich */
+  max-width: 3.2rem;
+}
+
+.mini:hover { background: #2b3140; }
+
+/* ── Fuß / Meldungen ──────────────────────────────────────────────────────── */
+
+.board-foot { display: flex; flex-direction: column; gap: 0.6rem; }
+
+.message { min-height: 1.5rem; font-size: 0.95rem; }
+.message .ok { color: var(--good); }
+.message .err { color: var(--bad); }
+.message .info { color: var(--muted); }
+
+.spinner {
+  display: inline-block;
+  width: 1rem; height: 1rem;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Klein / Hochformat ───────────────────────────────────────────────────── */
+
+@media (max-width: 720px) {
+  body { padding: 0.75rem; font-size: 16px; }
+  .hero { grid-template-columns: 1fr; }
+  .hero-image { min-height: 9rem; }
+  .hero-text h2 { font-size: 1.6rem; }
+  .clock { font-size: 1.2rem; }
+}

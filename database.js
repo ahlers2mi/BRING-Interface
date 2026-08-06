@@ -448,6 +448,21 @@ export function deleteRecipes(ids) {
   return run(ids);
 }
 
+// Bild-Adressen aus früheren Abgleichen geradeziehen: absolute Adressen auf die
+// Mealie-Instanz (oft die interne Docker-Adresse) lädt kein Browser.
+export function normalizeMealieImageUrls() {
+  const info = db
+    .prepare(
+      `UPDATE recipes
+          SET image_url = '/api/mealie/image/' || substr(external_id, 8)
+        WHERE external_id LIKE 'mealie:%'
+          AND image_url IS NOT NULL
+          AND image_url LIKE 'http%'`
+    )
+    .run();
+  return info.changes;
+}
+
 export function getRecipeBySlug(slug) {
   const row = db.prepare('SELECT id FROM recipes WHERE source_slug = ?').get(slug);
   return row ? getRecipeById(row.id) : null;

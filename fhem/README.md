@@ -166,7 +166,35 @@ attr vizKueche skin zeilen
 attr vizKueche zoom 1.2
 ```
 
-## 6. Alle FHEM-Endpunkte
+## 6. Wandtablet-Ansicht einbetten
+
+Die App bringt eine eigene, dunkle Wochenplan-Seite mit – heutiges Gericht groß
+mit Bild, die Woche als Karten, Bewerten und Würfeln direkt per Finger:
+
+```
+http://192.168.69.10:3555/plan?token=DEINTOKEN
+```
+
+Der Token in der Adresse ersetzt die Anmeldung, die Seite kann also ohne Login
+auf einem Tablet oder in FHEM hängen. Sie lädt sich jede Minute selbst neu.
+
+In FHEM als Rahmen einbinden (klassisches FHEMWEB kann das sicher):
+
+```
+define wl_wochenplan weblink iframe http://192.168.69.10:3555/plan?token=DEINTOKEN
+attr wl_wochenplan alias Wochenplan
+attr wl_wochenplan htmlattr width="1000" height="860" frameborder="0" scrolling="no"
+attr wl_wochenplan room Küche,FHEMVIZ->Küche
+```
+
+> Ob **FHEMVIZ** ein `weblink` als Kachel darstellt, hängt von seiner Version ab –
+> das ist nicht Teil dieser App. Falls die Kachel leer bleibt, gibt es zwei
+> gangbare Wege: die Seite auf dem Tablet direkt aufrufen (im Fully als eigener
+> Tab oder als Start-Adresse) oder das bestehende `HTTP.Wochenplan`-Gerät als
+> kompakte Übersicht in FHEMVIZ behalten und die Seite nur zum Bedienen öffnen.
+> Beides braucht keine Änderung an FHEM.
+
+## 7. Alle FHEM-Endpunkte
 
 Alle Routen sind sowohl per GET als auch per POST erreichbar – GET, damit ein
 `{ GetFileFromURL(...) }` bzw. ein `setXXURL` genügt.

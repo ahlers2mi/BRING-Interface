@@ -14,6 +14,7 @@ import {
   recipeHasHistory,
   getMissingRecipes,
   deleteRecipes,
+  normalizeMealieImageUrls,
   createRecipe,
   updateRecipe,
   deleteRecipe,
@@ -56,6 +57,7 @@ import {
 import {
   cancelChefkochJob,
   deleteRecipeInMealie,
+  fetchMealieImage,
   getChefkochJob,
   mapMealieRecipe,
   repairThinMealieRecipe,
@@ -88,6 +90,11 @@ app.use(express.urlencoded({ extended: false })); // Login-Formular
 registerAuth(app);
 
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Bequeme Adresse für die Wandtablet-Ansicht (kann in FHEM als Rahmen hängen).
+app.get('/plan', (_req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'plan.html'));
+});
 
 // ── Bring singleton ──────────────────────────────────────────────────────────
 
@@ -875,6 +882,7 @@ const mealieDeps = {
   recipeHasHistory,
   getMissingRecipes,
   deleteRecipes,
+  normalizeMealieImageUrls,
 };
 
 app.get('/api/mealie/status', async (_req, res) => {
@@ -902,6 +910,34 @@ app.post('/api/mealie/sync', async (_req, res) => {
     res.json(state);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/mealie/image/:id – Rezeptbild aus Mealie durchleiten. Nötig, weil
+// MEALIE_URL bei gemeinsamer Stack die interne Docker-Adresse ist und Mealies
+// Medien je nach Einstellung den Token brauchen.
+const imageCache = new Map(); // id|size -> {body, type, at}
+const IMAGE_TTL_MS = 60 * 60 * 1000;
+
+app.get('/api/mealie/image/:id', async (req, res) => {
+  if (!mealieEnabled()) return res.status(404).end();
+  const size = req.query.size === 'original' ? 'original' : 'min-original';
+  const key = `${req.params.id}|${size}`;
+  const hit = imageCache.get(key);
+  if (hit && Date.now() - hit.at < IMAGE_TTL_MS) {
+    res.setHeader('Content-Type', hit.type);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.end(hit.body);
+  }
+  try {
+    const image = await fetchMealieImage(req.params.id, { size });
+    imageCache.set(key, { ...image, at: Date.now() });
+    if (imageCache.size > 400) imageCache.delete(imageCache.keys().next().value);
+    res.setHeader('Content-Type', image.type);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.end(image.body);
+  } catch {
+    res.status(404).end();
   }
 });
 
