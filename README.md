@@ -60,6 +60,24 @@ Neustarts und Updates hinweg erhalten.
 > Neue oder geänderte Werte in der `.env` (z. B. `API_TOKEN`) kommen erst mit
 > `docker compose up -d` im Container an – ein bloßes `restart` genügt nicht.
 
+### Portainer (Stack aus dem Git-Repo)
+
+Das Image wird hier **aus dem Dockerfile gebaut** und liegt in keiner Registry.
+Deshalb beim Deploy/Redeploy die Option **„Re-pull image"** bzw. „Pull latest
+image" **aus**lassen – sonst versucht Portainer `docker compose pull` und
+bricht ab mit:
+
+```
+pull access denied for bring-interface, repository does not exist
+```
+
+Die `docker-compose.yml` ist dafür schon vorbereitet (kein fester `image:`-Name,
+`pull_policy: build`). Bei automatischen Updates (GitOps) gilt dasselbe: nur
+„Re-deploy", nicht „Re-pull".
+
+Die Umgebungsvariablen trägt man in Portainer entweder als Stack-Variablen ein
+(gleiche Namen wie in der `.env`) oder über „Load variables from .env file".
+
 ```bash
 docker compose logs -f      # Logs ansehen
 docker compose down         # Container stoppen
