@@ -824,6 +824,29 @@ export async function initRecipes() {
     }
   });
 
+  on('mealieRepairBtn', 'click', async (e) => {
+    const btn = e.currentTarget;
+    setLoading(btn, true);
+    try {
+      const r = await apiFetch('/api/mealie/repair', { method: 'POST' });
+      flash(
+        'mealieResult',
+        r.checked === 0
+          ? 'Keine unvollständigen Chefkoch-Rezepte gefunden.'
+          : `✓ ${r.repaired} von ${r.checked} ergänzt` +
+              `${r.unchanged ? `, ${r.unchanged} ohne neue Daten (vermutlich PLUS-Rezepte)` : ''}` +
+              `${r.failed ? `, ${r.failed} fehlgeschlagen` : ''}.` +
+              (r.names.length ? ` Ergänzt: ${escHtml(r.names.slice(0, 5).join(', '))}` : ''),
+        r.repaired ? 'success' : 'info'
+      );
+      await refreshAll();
+    } catch (err) {
+      flash('mealieResult', `Fehler: ${escHtml(err.message)}`, 'error');
+    } finally {
+      setLoading(btn, false);
+    }
+  });
+
   on('mealieSyncBtn', 'click', async (e) => {
     const btn = e.currentTarget;
     setLoading(btn, true);

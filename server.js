@@ -57,6 +57,8 @@ import {
   cancelChefkochJob,
   deleteRecipeInMealie,
   getChefkochJob,
+  mapMealieRecipe,
+  repairThinMealieRecipe,
   getSyncState,
   mealieAbout,
   mealieEnabled,
@@ -901,6 +903,46 @@ app.post('/api/mealie/sync', async (_req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// POST /api/mealie/repair – schon vorhandene, unvollständig importierte
+// Chefkoch-Rezepte aus der Chefkoch-API nachtragen. Betrifft nur Rezepte mit
+// Chefkoch-Quelle, bei denen Zubereitung oder Zutaten fehlen.
+app.post('/api/mealie/repair', async (_req, res) => {
+  if (!mealieEnabled()) {
+    return res.status(400).json({ error: 'Mealie ist nicht konfiguriert.' });
+  }
+  const candidates = getAllRecipes({ withIngredients: true }).filter(
+    (r) =>
+      r.source_slug &&
+      !r.source_missing &&
+      /chefkoch\.de\/rezepte\/\d+\//.test(r.source_url || '') &&
+      (!String(r.instructions || '').trim() || (r.ingredients || []).length <= 3)
+  );
+
+  const result = { checked: candidates.length, repaired: 0, unchanged: 0, failed: 0, names: [] };
+  for (const recipe of candidates) {
+    try {
+      const { outcome, detail } = await repairThinMealieRecipe({
+        slug: recipe.source_slug,
+        sourceUrl: recipe.source_url,
+      });
+      if (outcome === 'repaired') {
+        result.repaired += 1;
+        result.names.push(recipe.name);
+        // Direkt auffrischen: auf ein hochgezähltes `updatedAt` in Mealie ist
+        // kein Verlass, der inkrementelle Abgleich würde das Rezept sonst
+        // überspringen.
+        const mapped = detail && mapMealieRecipe(detail, mealieConfig().url);
+        if (mapped) upsertRecipeFromSource(mapped);
+      } else {
+        result.unchanged += 1;
+      }
+    } catch {
+      result.failed += 1;
+    }
+  }
+  res.json(result);
 });
 
 // GET /api/mealie/orphans – was die Quelle nicht mehr kennt (Vorschau).

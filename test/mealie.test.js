@@ -612,3 +612,108 @@ test('verwaiste Rezepte lassen sich auflisten und aufräumen', async () => {
   assert.equal((await api(`/api/recipes/${mitHistorie.id}`)).status, 404);
   assert.equal((await api('/api/mealie/orphans')).json.count, 0);
 });
+
+// ── Teaser-Rezepte (PLUS) aus der Chefkoch-API ergänzen ───────────────────────
+
+test('dünn importierte Chefkoch-Rezepte werden aus der API ergänzt', async () => {
+  const realFetch = globalThis.fetch;
+  // Mealies Scraper liefert nur einen Teaser, die Chefkoch-API das ganze Rezept.
+  recipes.set('teaser', {
+    id: 'teaser-1',
+    slug: 'teaser',
+    name: 'One-Pot-Pasta',
+    orgURL: 'https://www.chefkoch.de/rezepte/4160151664389021/One-Pot-Pasta.html',
+    updatedAt: '2026-08-07T12:00:00',
+    recipeInstructions: [{ text: 'Instructions not provided.' }],
+    recipeIngredient: [
+      { quantity: 1, unit: null, food: { name: 'Zwiebel' } },
+      { quantity: 1, unit: null, food: { name: 'Knoblauchzehe' } },
+      { quantity: 100, unit: { abbreviation: 'g' }, food: { name: 'Pfifferlinge' } },
+    ],
+  });
+  await api('/api/mealie/sync', { method: 'POST' });
+
+  globalThis.fetch = async (input, init) => {
+    const href = String(input);
+    if (href.includes('127.0.0.1')) return realFetch(input, init);
+    if (href.includes('api.chefkoch.de/v2/recipes/4160151664389021')) {
+      return new Response(
+        JSON.stringify({
+          id: '4160151664389021',
+          title: 'One-Pot-Pasta mit Spinat und Pfifferlingen',
+          instructions: 'Zwiebel würfeln.\nAlles in den Topf.\nKöcheln lassen.',
+          servings: 2,
+          preparationTime: 15,
+          siteUrl: 'https://www.chefkoch.de/rezepte/4160151664389021/One-Pot-Pasta.html',
+          ingredientGroups: [
+            {
+              ingredients: [
+                { name: 'Zwiebel', unit: '', amount: 1 },
+                { name: 'Knoblauchzehe', unit: '', amount: 1 },
+                { name: 'Pfifferlinge', unit: 'g', amount: 100 },
+                { name: 'Spaghetti', unit: 'g', amount: 250 },
+                { name: 'Sahne', unit: 'ml', amount: 200 },
+                { name: 'Blattspinat', unit: 'g', amount: 150 },
+              ],
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      );
+    }
+    return new Response('not found', { status: 404 });
+  };
+
+  try {
+    const res = await api('/api/mealie/repair', { method: 'POST' });
+    assert.equal(res.status, 200, res.text);
+    assert.ok(res.json.checked >= 1, JSON.stringify(res.json));
+    assert.equal(res.json.repaired, 1);
+
+    // In Mealie steht jetzt das ganze Rezept …
+    const inMealie = recipes.get('teaser');
+    assert.equal(inMealie.recipeIngredient.length, 6);
+    assert.equal(inMealie.recipeInstructions.length, 3);
+    assert.match(inMealie.recipeInstructions[0].text, /Zwiebel würfeln/);
+
+    // … und der Spiegel hat es übernommen, obwohl das Test-Mealie sein
+    // `updatedAt` beim PATCH absichtlich NICHT hochzählt.
+    assert.equal(inMealie.updatedAt, '2026-08-07T12:00:00');
+    const mirrored = (await api('/api/recipes')).json.find((r) => r.source_slug === 'teaser');
+    assert.equal(mirrored.ingredients.length, 6);
+    assert.match(mirrored.instructions, /Alles in den Topf/);
+    assert.ok(mirrored.ingredients.some((i) => i.name.includes('Spaghetti')));
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('liefert die Chefkoch-API auch nichts, bleibt es beim Teaser', async () => {
+  const realFetch = globalThis.fetch;
+  recipes.set('plus-only', {
+    id: 'plus-1',
+    slug: 'plus-only',
+    name: 'PLUS-Rezept',
+    orgURL: 'https://www.chefkoch.de/rezepte/999999999999/Plus.html',
+    updatedAt: '2026-08-07T13:00:00',
+    recipeInstructions: [],
+    recipeIngredient: [{ quantity: 1, unit: null, food: { name: 'Geheimnis' } }],
+  });
+  await api('/api/mealie/sync', { method: 'POST' });
+
+  globalThis.fetch = async (input, init) => {
+    const href = String(input);
+    if (href.includes('127.0.0.1')) return realFetch(input, init);
+    return new Response('paywall', { status: 403 }); // API und HTML gesperrt
+  };
+  try {
+    const res = await api('/api/mealie/repair', { method: 'POST' });
+    assert.equal(res.status, 200, res.text);
+    assert.equal(res.json.repaired, 0);
+    assert.ok(res.json.unchanged + res.json.failed >= 1);
+    // Nichts kaputt gemacht:
+    assert.equal(recipes.get('plus-only').recipeIngredient.length, 1);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
