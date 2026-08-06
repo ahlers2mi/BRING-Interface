@@ -180,6 +180,12 @@ px Breite ausgelegt (drei Karten je Reihe), funktioniert aber auch am Handy.
 http://<host>:<port>/plan?token=<API_TOKEN>
 ```
 
+Zusätzlich gibt es den Plan **als Bild** unter `/plan.svg?token=…` – für
+Dashboards, die keine Webseite einbetten können, aber Bilder anzeigen (FHEMVIZ
+z. B. stellt einen `weblink iframe` nicht dar, ein Bild-Widget dagegen schon).
+Die Fotos stecken als data:-URI im SVG, weil ein SVG in einem `<img>` keine
+externen Bilder nachlädt.
+
 Mit `?token=…` braucht die Seite keine Anmeldung – so kann sie dauerhaft auf
 einem Tablet laufen oder in FHEM als Rahmen (`weblink iframe`) hängen, siehe
 [`fhem/README.md`](fhem/README.md). Rezeptbilder liefert der Server selbst aus

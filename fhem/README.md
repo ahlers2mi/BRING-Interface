@@ -187,12 +187,36 @@ attr wl_wochenplan htmlattr width="1000" height="860" frameborder="0" scrolling=
 attr wl_wochenplan room Küche,FHEMVIZ->Küche
 ```
 
-> Ob **FHEMVIZ** ein `weblink` als Kachel darstellt, hängt von seiner Version ab –
-> das ist nicht Teil dieser App. Falls die Kachel leer bleibt, gibt es zwei
-> gangbare Wege: die Seite auf dem Tablet direkt aufrufen (im Fully als eigener
-> Tab oder als Start-Adresse) oder das bestehende `HTTP.Wochenplan`-Gerät als
-> kompakte Übersicht in FHEMVIZ behalten und die Seite nur zum Bedienen öffnen.
-> Beides braucht keine Änderung an FHEM.
+> **FHEMVIZ stellt einen `weblink iframe` nicht dar** (nachgeprüft: das Gerät
+> wird geladen, bekommt aber keine Kachel). Für das Dashboard gibt es deshalb
+> den Bild-Weg, siehe unten. Im klassischen FHEMWEB funktioniert der Rahmen.
+
+### Als Bild-Kachel in FHEMVIZ
+
+FHEMVIZ kennt ein Bild-Widget (`vizWidget image`) – so hängt auch das
+Wetter-Icon im Dashboard. Dafür liefert die App den Wochenplan **als Bild**:
+
+```
+http://192.168.69.10:3555/plan.svg?token=DEINTOKEN
+```
+
+Ein SVG mit heutigem Gericht groß, den sechs anderen Tagen als Karten, Sternen
+und „✓ gekocht" – die Fotos stecken als data:-URI **im Bild**, weil ein SVG in
+einem `<img>` keine externen Bilder nachlädt. Serverseitig eine Minute
+zwischengespeichert.
+
+```
+define wl_wochenplan_bild weblink image http://192.168.69.10:3555/plan.svg?token=DEINTOKEN
+attr wl_wochenplan_bild alias Wochenplan
+attr wl_wochenplan_bild room Küche,FHEMVIZ->Küche
+attr wl_wochenplan_bild vizWidget image
+attr wl_wochenplan_bild vizSize 2x2
+```
+
+Bleibt die Kachel leer, ist die Alternative `attr HTTP.Wochenplan vizWidget image`
+plus `attr HTTP.Wochenplan vizImage http://…/plan.svg?token=…` – dann trägt das
+vorhandene HTTPMOD-Gerät das Bild. Zum Bedienen (Würfeln, Bewerten) bleibt die
+Seite `/plan`; die Bild-Kachel ist zum Hinsehen.
 
 ## 7. Alle FHEM-Endpunkte
 
