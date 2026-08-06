@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Wochenplan</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <meta name="theme-color" content="#0f1115" />
+  <link rel="stylesheet" href="/css/plan.css" />
+</head>
+<body>
+
+<header class="board-head">
+  <div>
+    <span class="kicker">Wochenplan</span>
+    <h1 id="weekLabel">…</h1>
+  </div>
+  <div class="head-right">
+    <div id="clock" class="clock"></div>
+    <div class="btn-row">
+      <button class="btn" id="prevBtn" title="Woche zurück">←</button>
+      <button class="btn" id="todayBtn">Heute</button>
+      <button class="btn" id="nextBtn" title="Woche vor">→</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- Heute groß -->
+  <section class="hero" id="hero">
+    <div class="hero-image" id="heroImage"></div>
+    <div class="hero-text">
+      <span class="kicker" id="heroDay">Heute</span>
+      <h2 id="heroName">…</h2>
+      <div class="hero-meta" id="heroMeta"></div>
+      <div class="rate-row" id="heroRate"></div>
+      <div class="btn-row">
+        <button class="btn btn-accent" id="rollTodayBtn">🎲 Heute neu würfeln</button>
+        <a class="btn" id="heroLink" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">↗ Rezept</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Restliche Tage -->
+  <section class="days" id="days"></section>
+
+  <footer class="board-foot">
+    <div class="btn-row">
+      <button class="btn" id="rollWeekBtn">🎲 Ganze Woche würfeln</button>
+      <button class="btn" id="rollEmptyBtn">🎲 Nur leere Tage</button>
+      <button class="btn" id="shoppingBtn">🛒 Wocheneinkauf in Bring</button>
+    </div>
+    <div id="message" class="message"></div>
+  </footer>
+</main>
+
+<script src="/js/plan-view.js" type="module"></script>
+</body>
+</html>

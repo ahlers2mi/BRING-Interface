@@ -168,6 +168,24 @@ Die App hat **keine** eingebaute Mehrbenutzer-Verwaltung. Für den Zugriff von a
 2. **HTTPS ist Pflicht** – ein Passwort über reines HTTP wäre im Klartext im Netz. Stelle der App einen **Reverse Proxy mit TLS** voran (z. B. Synology-Reverse-Proxy mit Let's Encrypt) und gib nach außen **nur Port 443** frei, nicht den Container-Port.
 3. **Noch sicherer:** gar nicht öffentlich exponieren, sondern per **VPN** (z. B. WireGuard auf der UniFi UDR) zugreifen.
 
+## Wandtablet-Ansicht
+
+Unter **`/plan`** liegt eine eigene, dunkle Seite für ein Küchen- oder
+Wandtablet: heutiges Gericht groß mit Bild, die Woche als Karten mit
+Vorschaubildern, Sterne, Bewerten und Würfeln mit dem Finger, dazu
+Wocheneinkauf nach Bring. Sie lädt sich jede Minute selbst neu und ist auf ~1000
+px Breite ausgelegt (drei Karten je Reihe), funktioniert aber auch am Handy.
+
+```
+http://<host>:<port>/plan?token=<API_TOKEN>
+```
+
+Mit `?token=…` braucht die Seite keine Anmeldung – so kann sie dauerhaft auf
+einem Tablet laufen oder in FHEM als Rahmen (`weblink iframe`) hängen, siehe
+[`fhem/README.md`](fhem/README.md). Rezeptbilder liefert der Server selbst aus
+(`/api/mealie/image/<id>`), damit sie auch dann laden, wenn Mealie nur intern
+erreichbar ist.
+
 ## Wochenplan & Würfel
 
 Der Würfel zieht gewichtet, nicht gleichverteilt:

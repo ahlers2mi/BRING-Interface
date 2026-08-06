@@ -144,6 +144,24 @@ test('ganze Woche würfeln füllt alle sieben Tage', async () => {
   }
 });
 
+test('Plan-Antwort enthält alles, was die Wandtablet-Ansicht braucht', async () => {
+  const plan = await api('/api/plan');
+  const day = plan.json.days.find((d) => d.recipe);
+  assert.ok(day, 'ein Tag mit Rezept');
+  // Ohne diese Felder bleibt die Tablet-Seite leer bzw. bilderlos.
+  for (const key of [
+    'id',
+    'name',
+    'prep_time',
+    'image_url',
+    'servings',
+    'avg_stars',
+    'rating_count',
+  ]) {
+    assert.ok(key in day.recipe, `Feld ${key} fehlt in der Plan-Antwort`);
+  }
+});
+
 test('einzelnen Tag würfeln und Tag manuell setzen', async () => {
   const before = await api('/api/plan');
   const day = before.json.days[0];
