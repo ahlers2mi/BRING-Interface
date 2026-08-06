@@ -11,6 +11,7 @@ import {
   upsertRecipeFromSource,
   markRecipesMissing,
   findRecipeBySourceUrlPart,
+  recipeHasHistory,
   createRecipe,
   updateRecipe,
   deleteRecipe,
@@ -52,6 +53,7 @@ import {
 } from './lib/recipe-import.js';
 import {
   cancelChefkochJob,
+  deleteRecipeInMealie,
   getChefkochJob,
   getSyncState,
   mealieAbout,
@@ -493,9 +495,21 @@ app.put('/api/recipes/:id', blockWhenMealie, (req, res) => {
   res.json(updated);
 });
 
-app.delete('/api/recipes/:id', blockWhenMealie, (req, res) => {
+// Löschen: im Mealie-Modus grundsätzlich dort – Ausnahme sind Rezepte, die es
+// in Mealie schon nicht mehr gibt. Die liegen hier nur noch wegen ihrer
+// Bewertungs- und Plan-Historie und dürfen weg, wenn man sie nicht braucht.
+app.delete('/api/recipes/:id', (req, res) => {
   const recipe = getRecipeById(Number(req.params.id));
   if (!recipe) return res.status(404).json({ error: 'Rezept nicht gefunden.' });
+  if (mealieEnabled() && recipe.source === 'mealie' && !recipe.source_missing) {
+    return res.status(409).json({
+      error:
+        'Dieses Rezept gehört zu Mealie. Nimm den Knopf „In Mealie löschen" – ' +
+        'der löscht es dort und räumt hier auf. Alternativ in Mealie über ' +
+        '„Manage Data" → Recipes.',
+      mealie: mealieConfig().publicUrl || mealieConfig().url,
+    });
+  }
   deleteRecipe(Number(req.params.id));
   res.json({ success: true });
 });
@@ -829,6 +843,8 @@ app.post('/api/recipes/import/chefkoch', blockWhenMealie, (req, res) => {
     const job = startImportJob({
       query: String(req.body?.query || '').trim(),
       count: Number(req.body?.count) || 50,
+      minRating: Number(req.body?.minRating) || 0,
+      minVotes: Number(req.body?.minVotes) || 0,
       deps: { createRecipe, findRecipeByExternalId, findRecipeByName },
     });
     res.status(202).json(job);
@@ -852,6 +868,7 @@ const mealieDeps = {
   getSourceIndex,
   markRecipesMissing,
   findRecipeBySourceUrlPart,
+  recipeHasHistory,
 };
 
 app.get('/api/mealie/status', async (_req, res) => {
@@ -882,6 +899,40 @@ app.post('/api/mealie/sync', async (_req, res) => {
   }
 });
 
+// DELETE /api/mealie/recipe/:id – löscht das Rezept in Mealie und räumt hier auf.
+// Der Weg über die API ist verlässlich; in Mealies Oberfläche ist das Löschen
+// einzelner Rezepte je nach Version schwer zu finden.
+app.delete('/api/mealie/recipe/:id', async (req, res) => {
+  const recipe = getRecipeById(Number(req.params.id));
+  if (!recipe) return res.status(404).json({ error: 'Rezept nicht gefunden.' });
+  if (!mealieEnabled()) {
+    return res.status(400).json({ error: 'Mealie ist nicht konfiguriert.' });
+  }
+  if (!recipe.source_slug) {
+    return res.status(400).json({ error: 'Dieses Rezept stammt nicht aus Mealie.' });
+  }
+  try {
+    await deleteRecipeInMealie(recipe.source_slug);
+    // Ohne Bewertungen und Plan-Einträge kann der Spiegel-Eintrag gleich weg,
+    // sonst bleibt er als Historie stehen (markiert, nicht mehr würfelbar).
+    if (recipeHasHistory(recipe.id)) {
+      markRecipesMissing('mealie:', []);
+      return res.json({
+        deleted: true,
+        kept: true,
+        message:
+          'In Mealie gelöscht. Hier bleibt das Rezept wegen seiner Bewertungen ' +
+          'bzw. Plan-Einträge stehen – markiert und nicht mehr würfelbar. Mit ' +
+          '„Endgültig löschen" verschwindet auch die Historie.',
+      });
+    }
+    deleteRecipe(recipe.id);
+    res.json({ deleted: true, kept: false });
+  } catch (err) {
+    res.status(502).json({ error: `Löschen in Mealie fehlgeschlagen: ${err.message}` });
+  }
+});
+
 // POST /api/mealie/import-chefkoch – body: { query?, count? }
 // Chefkoch-Suche liefert die URLs, Mealie importiert sie mit seinem eigenen
 // Scraper, danach wird der Spiegel abgeglichen.
@@ -890,6 +941,8 @@ app.post('/api/mealie/import-chefkoch', (req, res) => {
     const job = startChefkochToMealieJob({
       query: String(req.body?.query || '').trim(),
       count: Number(req.body?.count) || 20,
+      minRating: Number(req.body?.minRating) || 0,
+      minVotes: Number(req.body?.minVotes) || 0,
       deps: mealieDeps,
     });
     res.status(202).json(job);

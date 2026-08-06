@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 
 import {
   collectJsonLdNodes,
+  extractChefkochCandidatesFromApi,
+  filterChefkochByRating,
+  readChefkochRating,
   decodeEntities,
   extractChefkochIdsFromApi,
   extractChefkochIdsFromHtml,
@@ -151,4 +154,84 @@ test('mapChefkochApiRecipe verträgt unvollständige Antworten', () => {
   assert.equal(minimal.name, 'Nur Titel');
   assert.deepEqual(minimal.ingredients, []);
   assert.equal(minimal.prep_time, '');
+});
+
+test('readChefkochRating versteht beide Schreibweisen', () => {
+  assert.deepEqual(readChefkochRating({ rating: { rating: 4.6, numVotes: 120 } }), {
+    rating: 4.6,
+    votes: 120,
+  });
+  assert.deepEqual(readChefkochRating({ rating: 3.2, numVotes: 5 }), {
+    rating: 3.2,
+    votes: 5,
+  });
+  assert.deepEqual(readChefkochRating({}), { rating: null, votes: null });
+  assert.deepEqual(readChefkochRating(null), { rating: null, votes: null });
+});
+
+test('extractChefkochCandidatesFromApi liefert Bewertungen mit', () => {
+  const candidates = extractChefkochCandidatesFromApi({
+    results: [
+      { recipe: { id: '1', rating: { rating: 4.8, numVotes: 300 } } },
+      { recipe: { id: '2' } },
+    ],
+  });
+  assert.deepEqual(candidates, [
+    { id: '1', rating: 4.8, votes: 300 },
+    { id: '2', rating: null, votes: null },
+  ]);
+});
+
+test('filterChefkochByRating siebt schlechte und dünn bewertete Rezepte aus', async () => {
+  const candidates = [
+    { id: 'gut', rating: 4.7, votes: 250 },
+    { id: 'mittel', rating: 3.4, votes: 90 },
+    { id: 'ausreisser', rating: 5, votes: 1 }, // eine einzige Wertung
+  ];
+  assert.deepEqual(
+    await filterChefkochByRating(candidates, { minRating: 4, minVotes: 20 }),
+    ['gut']
+  );
+  // Ohne Filter bleibt alles drin.
+  assert.deepEqual(await filterChefkochByRating(candidates, {}), [
+    'gut',
+    'mittel',
+    'ausreisser',
+  ]);
+});
+
+test('filterChefkochByRating laedt fehlende Bewertungen nach', async () => {
+  const asked = [];
+  const fetchImpl = async (url) => {
+    const id = /\/recipes\/([^/]+)$/.exec(String(url))?.[1];
+    asked.push(id);
+    const rating = id === 'topf' ? 4.9 : 2.0;
+    return new Response(JSON.stringify({ id, rating: { rating, numVotes: 80 } }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+  const kept = await filterChefkochByRating(
+    [{ id: 'topf', rating: null, votes: null }, { id: 'flop', rating: null, votes: null }],
+    { minRating: 4, minVotes: 10, fetchImpl }
+  );
+  assert.deepEqual(kept, ['topf']);
+  assert.deepEqual(asked.sort(), ['flop', 'topf']);
+});
+
+test('filterChefkochByRating: Rezepte ohne Bewertung fallen raus (oder bleiben auf Wunsch)', async () => {
+  const fetchImpl = async () =>
+    new Response(JSON.stringify({ rating: null }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  const candidates = [{ id: 'x', rating: null, votes: null }];
+  assert.deepEqual(
+    await filterChefkochByRating(candidates, { minRating: 4, fetchImpl }),
+    []
+  );
+  assert.deepEqual(
+    await filterChefkochByRating(candidates, { minRating: 4, fetchImpl, keepUnrated: true }),
+    ['x']
+  );
 });

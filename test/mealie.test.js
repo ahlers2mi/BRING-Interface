@@ -14,7 +14,7 @@ const TOKEN = 'mealie-token';
 
 // ── Fake-Mealie ───────────────────────────────────────────────────────────────
 
-const calls = { list: 0, detail: 0, patch: [], createUrl: [] };
+const calls = { list: 0, detail: 0, patch: [], createUrl: [], deleted: [] };
 
 // Zwei Rezepte, wie Mealie sie liefert: eines mit strukturierten Zutaten,
 // eines mit Freitext-Zutaten (food/unit leer).
@@ -149,6 +149,11 @@ const mealie = http.createServer((req, res) => {
     calls.detail += 1;
     const recipe = recipes.get(slug);
     return recipe ? json(recipe) : json({ detail: 'not found' }, 404);
+  }
+  if (slug && req.method === 'DELETE') {
+    const existed = recipes.delete(slug);
+    calls.deleted.push(slug);
+    return existed ? json({ slug }) : json({ detail: 'not found' }, 404);
   }
   if (slug && req.method === 'PATCH') {
     let body = '';
@@ -394,6 +399,28 @@ test('in Mealie gelöschte Rezepte bleiben mit Historie, werden aber nicht gewü
   await api('/api/mealie/sync', { method: 'POST' });
   const back = await api(`/api/recipes/${pfann.id}`);
   assert.equal(back.json.source_missing, false);
+
+  // Für den folgenden Löschtest wieder aus Mealie entfernen.
+  recipes.delete('pfannkuchen');
+  await api('/api/mealie/sync', { method: 'POST' });
+});
+
+test('in Mealie gelöschte Rezepte darf man hier entfernen, andere nicht', async () => {
+  const list = await api('/api/recipes');
+  const lebendig = list.json.find((r) => !r.source_missing);
+  const verschwunden = list.json.find((r) => r.source_missing);
+
+  // Ein Rezept, das es in Mealie noch gibt: hier gesperrt.
+  const gesperrt = await api(`/api/recipes/${lebendig.id}`, { method: 'DELETE' });
+  assert.equal(gesperrt.status, 409);
+  assert.match(gesperrt.json.error, /In Mealie löschen/);
+  assert.match(gesperrt.json.error, /Manage Data/);
+
+  // Eines, das in Mealie weg ist: darf raus (nur noch Historie).
+  assert.ok(verschwunden, 'Testaufbau: ein in Mealie gelöschtes Rezept');
+  const weg = await api(`/api/recipes/${verschwunden.id}`, { method: 'DELETE' });
+  assert.equal(weg.status, 200, weg.text);
+  assert.equal((await api(`/api/recipes/${verschwunden.id}`)).status, 404);
 });
 
 test('falscher Token liefert eine verständliche Meldung', async () => {
@@ -488,4 +515,46 @@ test('Chefkoch-Suche übergibt die URLs an Mealies Importer', async () => {
   } finally {
     globalThis.fetch = realFetch;
   }
+});
+
+test('Knopf "In Mealie löschen": Rezept ohne Historie verschwindet ganz', async () => {
+  // Ein frisch importiertes Chefkoch-Rezept hat weder Bewertung noch Plan-Eintrag.
+  const list = await api('/api/recipes');
+  const frisch = list.json.find((r) => r.name.startsWith('Chefkoch-Rezept'));
+  assert.ok(frisch, 'Testaufbau: importiertes Rezept vorhanden');
+
+  const res = await api(`/api/mealie/recipe/${frisch.id}`, { method: 'DELETE' });
+  assert.equal(res.status, 200, res.text);
+  assert.equal(res.json.deleted, true);
+  assert.equal(res.json.kept, false);
+
+  // In Mealie weg …
+  assert.ok(calls.deleted.includes(frisch.source_slug));
+  // … und hier auch.
+  assert.equal((await api(`/api/recipes/${frisch.id}`)).status, 404);
+});
+
+test('Knopf "In Mealie löschen": Rezept mit Historie bleibt als Historie stehen', async () => {
+  // Historie selbst herstellen, statt sich auf einen früheren Würfelwurf zu
+  // verlassen: ein vorhandenes Mealie-Rezept einplanen und bewerten.
+  const kandidaten = (await api('/api/recipes')).json.filter(
+    (r) => r.source_slug && !r.source_missing
+  );
+  assert.ok(kandidaten.length, 'Testaufbau: Mealie-Rezept vorhanden');
+  const ziel = kandidaten[0];
+  await api(`/api/plan/${todayIso}`, { method: 'PUT', body: { recipe_id: ziel.id } });
+  await api(`/api/plan/${todayIso}/rate`, { method: 'POST', body: { rating: 'gut' } });
+
+  const mitHistorie = (await api(`/api/recipes/${ziel.id}`)).json;
+  assert.ok(mitHistorie.rating_count > 0, 'Bewertung sitzt');
+
+  const res = await api(`/api/mealie/recipe/${mitHistorie.id}`, { method: 'DELETE' });
+  assert.equal(res.status, 200, res.text);
+  assert.equal(res.json.kept, true);
+  assert.match(res.json.message, /Bewertungen/);
+
+  const after = await api(`/api/recipes/${mitHistorie.id}`);
+  assert.equal(after.status, 200, 'Rezept bleibt wegen der Historie');
+  assert.equal(after.json.source_missing, true);
+  assert.equal(after.json.rating_count, mitHistorie.rating_count, 'Bewertungen erhalten');
 });

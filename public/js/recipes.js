@@ -242,9 +242,11 @@ function buildRecipeCard(recipe) {
         recipe.blocked ? '✅ Entsperren' : '⛔ Sperren'
       }</button>
       ${
-        mealieLink
-          ? ''
-          : '<button class="btn btn-danger btn-sm" data-action="delete">🗑 Löschen</button>'
+        mealieLink && !recipe.source_missing
+          ? '<button class="btn btn-danger btn-sm" data-action="mealie-delete">🗑 In Mealie löschen</button>'
+          : `<button class="btn btn-danger btn-sm" data-action="delete">🗑 ${
+              recipe.source_missing ? 'Endgültig löschen' : 'Löschen'
+            }</button>`
       }
     </div>
   `;
@@ -271,6 +273,29 @@ function buildRecipeCard(recipe) {
   node
     .querySelector('[data-action="delete"]')
     ?.addEventListener('click', () => deleteRecipeById(recipe.id, recipe.name));
+
+  node
+    .querySelector('[data-action="mealie-delete"]')
+    ?.addEventListener('click', async (e) => {
+      if (
+        !confirm(
+          `"${recipe.name}" in Mealie löschen?\n` +
+            'Das Rezept verschwindet dort dauerhaft. Bewertungen und Plan-Einträge ' +
+            'bleiben hier erhalten, falls es welche gibt.'
+        )
+      ) {
+        return;
+      }
+      setLoading(e.currentTarget, true);
+      try {
+        const res = await apiFetch(`/api/mealie/recipe/${recipe.id}`, { method: 'DELETE' });
+        await refreshAll();
+        if (res.kept) alert(res.message);
+      } catch (err) {
+        alert(`Fehler: ${err.message}`);
+        setLoading(e.currentTarget, false);
+      }
+    });
 
   wireRatingButtons(node, async (rating, btn) => {
     setLoading(btn, true);
@@ -477,7 +502,9 @@ function renderCkJob(job) {
     <div class="progress"><div class="progress-bar" style="width:${percent}%"></div></div>
     <div class="hint">
       ${statusText} · ${job.done}/${total || '?'} · ${job.imported} in Mealie ·
-      ${job.skipped} übersprungen · ${job.failed} fehlgeschlagen
+      ${job.skipped} übersprungen · ${job.failed} fehlgeschlagen${
+        job.minRating ? ` · Filter ab ${job.minRating}★` : ''
+      }${job.minVotes ? ` / ${job.minVotes} Stimmen` : ''}
     </div>
     ${job.error ? `<div class="alert alert-error">${escHtml(job.error)}</div>` : ''}
     <details class="log"><summary>Protokoll</summary><pre>${escHtml(
@@ -694,6 +721,8 @@ export async function initRecipes() {
     const resultEl = el('bulkImportResult');
     const query = el('bulkQuery').value.trim();
     const count = Number(el('bulkCount').value) || 200;
+    const minRating = Number(el('bulkMinRating').value) || 0;
+    const minVotes = Number(el('bulkMinVotes').value) || 0;
     if (
       !confirm(
         `${count} Rezepte von chefkoch.de importieren?\n` +
@@ -706,7 +735,7 @@ export async function initRecipes() {
     try {
       await apiFetch('/api/recipes/import/chefkoch', {
         method: 'POST',
-        body: JSON.stringify({ query, count }),
+        body: JSON.stringify({ query, count, minRating, minVotes }),
       });
       flash(resultEl, '✓ Import gestartet – Fortschritt siehe unten.', 'info');
       startPolling();
@@ -746,6 +775,8 @@ export async function initRecipes() {
   on('ckImportBtn', 'click', async () => {
     const query = el('ckQuery').value.trim();
     const count = Number(el('ckCount').value) || 20;
+    const minRating = Number(el('ckMinRating').value) || 0;
+    const minVotes = Number(el('ckMinVotes').value) || 0;
     if (
       !confirm(
         `${count} Rezepte von chefkoch.de über Mealie importieren?\n` +
@@ -758,7 +789,7 @@ export async function initRecipes() {
     try {
       await apiFetch('/api/mealie/import-chefkoch', {
         method: 'POST',
-        body: JSON.stringify({ query, count }),
+        body: JSON.stringify({ query, count, minRating, minVotes }),
       });
       flash('ckResult', '✓ Import gestartet – Fortschritt siehe unten.', 'info');
       if (!ckPollTimer) {
