@@ -1,0 +1,116 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# BRING-Interface: Wochenplan in FHEM
+#
+# Einfügen über  set myCommander execute  (98_Commands.pm) – eine Zeile = ein
+# Befehl, Zeilen mit # werden ignoriert.
+#
+# VORHER ANPASSEN (zweimal suchen/ersetzen):
+#   192.168.69.XX:3000  ->  Adresse des BRING-Interface
+#   DEINTOKEN           ->  Wert von API_TOKEN aus der .env des Containers
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Abruf alle 5 Minuten. Die Antwort ist flaches JSON, damit reading..JSON greift.
+define HTTP.Wochenplan HTTPMOD http://192.168.69.XX:3000/api/fhem/plan?token=DEINTOKEN 300
+attr HTTP.Wochenplan alias Wochenplan
+attr HTTP.Wochenplan icon scene_dinner
+attr HTTP.Wochenplan room Küche,FHEMVIZ->Küche
+attr HTTP.Wochenplan group Küche
+attr HTTP.Wochenplan enableControlSet 1
+attr HTTP.Wochenplan timeout 15
+attr HTTP.Wochenplan showMatched 0
+
+# ── Readings aus dem JSON ────────────────────────────────────────────────────
+attr HTTP.Wochenplan reading01Name heute
+attr HTTP.Wochenplan reading01JSON today
+attr HTTP.Wochenplan reading02Name heute_status
+attr HTTP.Wochenplan reading02JSON today_status
+attr HTTP.Wochenplan reading03Name heute_bewertung
+attr HTTP.Wochenplan reading03JSON today_rating
+attr HTTP.Wochenplan reading04Name heute_sterne
+attr HTTP.Wochenplan reading04JSON today_stars
+attr HTTP.Wochenplan reading05Name heute_zeit
+attr HTTP.Wochenplan reading05JSON today_time
+attr HTTP.Wochenplan reading06Name morgen
+attr HTTP.Wochenplan reading06JSON tomorrow
+attr HTTP.Wochenplan reading07Name woche
+attr HTTP.Wochenplan reading07JSON week
+attr HTTP.Wochenplan reading08Name geplant
+attr HTTP.Wochenplan reading08JSON planned
+attr HTTP.Wochenplan reading09Name leere_tage
+attr HTTP.Wochenplan reading09JSON empty
+attr HTTP.Wochenplan reading10Name stand
+attr HTTP.Wochenplan reading10JSON updated
+attr HTTP.Wochenplan reading11Name mo
+attr HTTP.Wochenplan reading11JSON mon
+attr HTTP.Wochenplan reading12Name di
+attr HTTP.Wochenplan reading12JSON tue
+attr HTTP.Wochenplan reading13Name mi
+attr HTTP.Wochenplan reading13JSON wed
+attr HTTP.Wochenplan reading14Name do
+attr HTTP.Wochenplan reading14JSON thu
+attr HTTP.Wochenplan reading15Name fr
+attr HTTP.Wochenplan reading15JSON fri
+attr HTTP.Wochenplan reading16Name sa
+attr HTTP.Wochenplan reading16JSON sat
+attr HTTP.Wochenplan reading17Name so
+attr HTTP.Wochenplan reading17JSON sun
+attr HTTP.Wochenplan reading18Name mo_sterne
+attr HTTP.Wochenplan reading18JSON mon_stars
+attr HTTP.Wochenplan reading19Name di_sterne
+attr HTTP.Wochenplan reading19JSON tue_stars
+attr HTTP.Wochenplan reading20Name mi_sterne
+attr HTTP.Wochenplan reading20JSON wed_stars
+attr HTTP.Wochenplan reading21Name do_sterne
+attr HTTP.Wochenplan reading21JSON thu_stars
+attr HTTP.Wochenplan reading22Name fr_sterne
+attr HTTP.Wochenplan reading22JSON fri_stars
+attr HTTP.Wochenplan reading23Name sa_sterne
+attr HTTP.Wochenplan reading23JSON sat_stars
+attr HTTP.Wochenplan reading24Name so_sterne
+attr HTTP.Wochenplan reading24JSON sun_stars
+
+# ── Befehle ──────────────────────────────────────────────────────────────────
+# Die Aktions-URLs antworten mit demselben JSON wie der Abruf, deshalb sind die
+# Readings nach einem set sofort aktuell (setParseResponse 1).
+attr HTTP.Wochenplan setParseResponse 1
+attr HTTP.Wochenplan set01Name wuerfeln_woche
+attr HTTP.Wochenplan set01URL http://192.168.69.XX:3000/api/fhem/roll?scope=week&token=DEINTOKEN
+attr HTTP.Wochenplan set01NoArg 1
+attr HTTP.Wochenplan set02Name wuerfeln_heute
+attr HTTP.Wochenplan set02URL http://192.168.69.XX:3000/api/fhem/roll?scope=day&date=today&token=DEINTOKEN
+attr HTTP.Wochenplan set02NoArg 1
+attr HTTP.Wochenplan set03Name wuerfeln_morgen
+attr HTTP.Wochenplan set03URL http://192.168.69.XX:3000/api/fhem/roll?scope=day&date=tomorrow&token=DEINTOKEN
+attr HTTP.Wochenplan set03NoArg 1
+attr HTTP.Wochenplan set04Name wuerfeln_leere_tage
+attr HTTP.Wochenplan set04URL http://192.168.69.XX:3000/api/fhem/roll?scope=week&onlyEmpty=1&token=DEINTOKEN
+attr HTTP.Wochenplan set04NoArg 1
+attr HTTP.Wochenplan set05Name bewerten
+attr HTTP.Wochenplan set05URL http://192.168.69.XX:3000/api/fhem/rate?date=today&rating=$val&token=DEINTOKEN
+attr HTTP.Wochenplan set05Hint lecker,gut,ok,maessig,schlecht,rausgeflogen,nie_wieder
+attr HTTP.Wochenplan set06Name einkaufsliste
+attr HTTP.Wochenplan set06URL http://192.168.69.XX:3000/api/fhem/shopping?week=current&token=DEINTOKEN
+attr HTTP.Wochenplan set06NoArg 1
+
+# ── Anzeige ──────────────────────────────────────────────────────────────────
+attr HTTP.Wochenplan stateFormat Heute: heute
+attr HTTP.Wochenplan webCmd wuerfeln_heute:wuerfeln_woche:bewerten
+attr HTTP.Wochenplan webCmdLabel Heute würfeln:Woche würfeln:Bewerten
+attr HTTP.Wochenplan event-on-change-reading .*
+
+# ── FHEMVIZ ──────────────────────────────────────────────────────────────────
+# Wochenplan als Kachel: Tage als Werte, Bewertung über den webCmd-Knopf.
+attr HTTP.Wochenplan vizState heute
+attr HTTP.Wochenplan vizReadings heute:Heute,morgen:Morgen,mo:Mo,di:Di,mi:Mi,do:Do,fr:Fr,sa:Sa,so:So
+attr HTTP.Wochenplan sortby 5
+
+# ── Optional: sonntags automatisch die neue Woche würfeln ────────────────────
+define a_wochenplan_wuerfeln at *18:00:00 { if ((localtime)[6] == 0) { fhem("set HTTP.Wochenplan wuerfeln_woche") } }
+attr a_wochenplan_wuerfeln alias Wochenplan sonntags würfeln
+attr a_wochenplan_wuerfeln room Küche
+
+# ── Optional: morgens ansagen, was es heute gibt ─────────────────────────────
+# send_to_all ist die vorhandene Hausfunktion (siehe andere Notifys).
+define a_wochenplan_ansage at *07:30:00 { my $e = ReadingsVal("HTTP.Wochenplan","heute",""); if ($e ne "") { send_to_all("S", "Heute gibt es: $e", "Wochenplan") } }
+attr a_wochenplan_ansage alias Wochenplan Ansage
+attr a_wochenplan_ansage room Küche

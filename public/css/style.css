@@ -67,7 +67,13 @@ nav {
   border-bottom: 2px solid var(--border);
   background: var(--card);
   padding: 0 1.5rem;
+  overflow-x: auto; /* vier Tabs passen auf dem Handy sonst nicht */
+  scrollbar-width: none;
 }
+
+nav::-webkit-scrollbar { display: none; }
+
+nav button { white-space: nowrap; }
 
 nav button {
   background: none;
@@ -308,9 +314,366 @@ textarea {
   to { transform: rotate(360deg); }
 }
 
+/* ── Kleinteile ───────────────────────────────────────────────────────────── */
+
+.hint {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.box-muted {
+  background: #f6f6f6;
+  padding: 0.75rem;
+  border-radius: var(--radius);
+}
+
+.empty-hint {
+  color: var(--text-muted);
+  text-align: center;
+  padding: 2rem;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.25rem 0;
+}
+
+.meta {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-top: 0.2rem;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: var(--border);
+  color: var(--text-muted);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.badge-good { background: #dcfce7; color: #166534; }
+.badge-bad { background: #fee2e2; color: #991b1b; }
+.badge-blocked { background: #e2e8f0; color: #475569; }
+.badge-today { background: var(--bring-orange); color: #fff; }
+
+.chip {
+  display: inline-block;
+  font-size: 0.75rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-muted);
+  margin: 0.15rem 0.2rem 0 0;
+}
+
+.chip-good { background: #dcfce7; border-color: #bbf7d0; color: #166534; }
+.chip-bad { background: #fee2e2; border-color: #fecaca; color: #991b1b; }
+
+.chips { margin-top: 0.3rem; }
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.check input { width: auto; }
+
+.inline-fields {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.inline-fields input[type='text'],
+.inline-fields input[type='search'] { flex: 1 1 12rem; }
+.inline-fields input[type='number'] { width: 6rem; }
+
+ul.plain {
+  list-style: none;
+  font-size: 0.88rem;
+  margin-top: 0.3rem;
+}
+
+ul.plain li { padding: 0.1rem 0; }
+
+/* ── Statistik-Zeile / Geschmacksprofil ───────────────────────────────────── */
+
+.stat-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.stat {
+  flex: 1 1 5rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem;
+  text-align: center;
+}
+
+.stat b { display: block; font-size: 1.2rem; }
+.stat span { font-size: 0.72rem; color: var(--text-muted); }
+
+.taste-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+/* ── Wochenplan ───────────────────────────────────────────────────────────── */
+
+.plan-head {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.plan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.plan-day {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.75rem 0.9rem;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.plan-day.is-today { border-color: var(--bring-orange); box-shadow: 0 0 0 2px rgba(249,115,22,.18); }
+.plan-day.is-past { opacity: 0.85; }
+.plan-day.is-cooked { background: #f7fdf9; }
+.plan-day.is-skipped { background: #fdf7f7; }
+
+.plan-day-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.plan-day-body { flex: 1; min-height: 3rem; }
+
+.plan-recipe {
+  font-size: 0.98rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.plan-recipe a { color: inherit; text-decoration: none; }
+.plan-recipe a:hover { text-decoration: underline; }
+
+.plan-empty { color: var(--text-muted); font-size: 0.88rem; padding: 0.5rem 0; }
+
+.plan-day-actions,
+.plan-day-rate {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.plan-day-rate { border-top: 1px dashed var(--border); padding-top: 0.5rem; }
+
+/* ── Bewertungsknöpfe ─────────────────────────────────────────────────────── */
+
+.rating-row {
+  display: inline-flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.btn-rate {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 0.25rem 0.5rem;
+  font-size: 0.95rem;
+  line-height: 1.1;
+}
+
+.btn-rate:hover { background: #fff7ed; border-color: #fed7aa; }
+.btn-rate span { font-size: 0.75rem; }
+
+.rate-block {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.6rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border);
+}
+
+/* ── Rezeptliste ──────────────────────────────────────────────────────────── */
+
+.recipe-item.is-blocked { opacity: 0.6; }
+
+.recipe-item p {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+}
+
+.recipe-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.ingredient-tags { margin-top: 0.5rem; }
+
+details.instructions { margin-top: 0.5rem; }
+details.instructions summary { cursor: pointer; font-size: 0.88rem; }
+details.instructions > div {
+  white-space: pre-wrap;
+  font-size: 0.88rem;
+  margin-top: 0.4rem;
+}
+
+.tag-have { background: #dcfce7; border-color: #bbf7d0; color: #166534; }
+.tag-missing { background: #fff1f2; border-color: #fecdd3; color: #9f1239; }
+
+/* ── Abdeckungsbalken (Reste-Küche) ───────────────────────────────────────── */
+
+.coverage {
+  position: relative;
+  height: 0.9rem;
+  background: var(--border);
+  border-radius: 999px;
+  margin: 0.4rem 0;
+  max-width: 16rem;
+}
+
+.coverage-bar {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--bring-orange);
+}
+
+.coverage-bar.good { background: var(--success); }
+.coverage-bar.mid { background: var(--bring-orange); }
+.coverage-bar.low { background: #94a3b8; }
+
+.coverage span {
+  position: absolute;
+  right: -2.6rem;
+  top: -0.1rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+/* ── Fortschritt (Massenimport) ───────────────────────────────────────────── */
+
+.progress {
+  height: 0.6rem;
+  background: var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+  margin: 0.5rem 0 0.3rem;
+}
+
+.progress-bar {
+  height: 100%;
+  background: var(--bring-orange);
+  transition: width 0.3s;
+}
+
+details.log summary { cursor: pointer; font-size: 0.8rem; color: var(--text-muted); }
+
+details.log pre {
+  font-size: 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  padding: 0.5rem;
+  max-height: 12rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  margin-top: 0.3rem;
+}
+
+/* ── Modal ────────────────────────────────────────────────────────────────── */
+
+.modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.modal-box {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  max-width: 26rem;
+  width: 100%;
+  max-height: 85vh;
+  overflow: auto;
+  box-shadow: var(--shadow-lg);
+}
+
+.modal-box h2 { font-size: 1.1rem; margin-bottom: 1rem; }
+
+.picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 22rem;
+  overflow: auto;
+}
+
+.picker-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: center;
+  text-align: left;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text);
+}
+
+.picker-item:hover { border-color: var(--bring-orange); background: #fff7ed; }
+
 /* ── Responsive ───────────────────────────────────────────────────────────── */
 
 @media (max-width: 600px) {
-  nav button { padding: 0.7rem 0.75rem; font-size: 0.875rem; }
+  nav button { padding: 0.7rem 0.6rem; font-size: 0.82rem; }
   .recipe-item { flex-direction: column; }
+  .recipe-actions { flex-direction: row; flex-wrap: wrap; }
+  .taste-grid { grid-template-columns: 1fr; }
+  .plan-grid { grid-template-columns: 1fr; }
+  main { margin: 1rem auto; }
 }

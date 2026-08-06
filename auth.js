@@ -12,11 +12,36 @@ const SECRET =
     ? crypto.createHash('sha256').update('bring-interface:' + PASSWORD).digest('hex')
     : '');
 
+// Token für Maschinen-Zugriffe (FHEM, Skripte). Damit kommt man an die
+// /api/-Routen, ohne sich per Formular anzumelden.
+const API_TOKEN = process.env.API_TOKEN || '';
+
 const COOKIE = 'bring_auth';
 const MAX_AGE_MS = 1000 * 60 * 60 * 24 * 30; // 30 Tage
 const ALLOW_PATHS = new Set(['/login', '/logout', '/favicon.svg']);
 
 export const authEnabled = Boolean(PASSWORD);
+export const apiTokenEnabled = Boolean(API_TOKEN);
+
+function safeEqual(a, b) {
+  const bufA = Buffer.from(String(a));
+  const bufB = Buffer.from(String(b));
+  return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+}
+
+// Token aus Header (`X-API-Token`, `Authorization: Bearer …`) oder
+// Query-Parameter `?token=` – letzteres, weil FHEM/HTTPMOD damit am einfachsten
+// arbeitet.
+export function tokenMatches(req) {
+  if (!API_TOKEN) return false;
+  const header = req.headers['x-api-token'];
+  const bearer = /^Bearer\s+(.+)$/i.exec(req.headers.authorization || '')?.[1];
+  const query = req.query?.token;
+  for (const candidate of [header, bearer, query]) {
+    if (candidate && safeEqual(candidate, API_TOKEN)) return true;
+  }
+  return false;
+}
 
 function sign(value) {
   return crypto.createHmac('sha256', SECRET).update(value).digest('hex');
@@ -50,9 +75,7 @@ function parseCookies(header) {
 }
 
 function passwordMatches(input) {
-  const a = Buffer.from(String(input));
-  const b = Buffer.from(PASSWORD);
-  return a.length === b.length && crypto.timingSafeEqual(a, b);
+  return safeEqual(input, PASSWORD);
 }
 
 function isSecure(req) {
@@ -122,7 +145,7 @@ export function registerAuth(app) {
 
   // Schutz-Middleware für alle nachfolgenden Routen/Assets.
   app.use((req, res, next) => {
-    if (isAuthed(req) || ALLOW_PATHS.has(req.path)) return next();
+    if (isAuthed(req) || tokenMatches(req) || ALLOW_PATHS.has(req.path)) return next();
     if (req.path.startsWith('/api/')) {
       return res.status(401).json({ error: 'Nicht angemeldet.' });
     }
