@@ -11,7 +11,7 @@ import {
   wireModalDismiss,
 } from './core.js';
 import { initShopping, loadCurrentItems } from './shopping.js';
-import { initRecipes, loadTaste, renderRecipeList } from './recipes.js';
+import { applyMealieMode, initRecipes, loadTaste, renderRecipeList } from './recipes.js';
 import { initPlan, loadPlan } from './plan.js';
 import { initFridge } from './fridge.js';
 
@@ -95,6 +95,7 @@ async function init() {
   onRecipesChanged(renderRecipeList);
 
   await loadStatus();
+  applyMealieMode(); // Rezeptpflege ausblenden, wenn Mealie die Quelle ist
   await loadBringLists();
   await initRecipes();
   await refreshRecipes();

@@ -74,6 +74,10 @@ const NEW_RECIPE_COLUMNS = {
   source: 'TEXT',
   external_id: 'TEXT',
   blocked: 'INTEGER NOT NULL DEFAULT 0',
+  // Spiegel-Verwaltung für externe Quellen (Mealie):
+  source_slug: 'TEXT',
+  source_updated_at: 'TEXT',
+  source_missing: 'INTEGER NOT NULL DEFAULT 0',
 };
 for (const [col, type] of Object.entries(NEW_RECIPE_COLUMNS)) {
   if (!recipeColumns.includes(col)) {
@@ -185,6 +189,7 @@ function decorate(recipe, stats) {
   return {
     ...recipe,
     blocked: Boolean(recipe.blocked),
+    source_missing: Boolean(recipe.source_missing),
     tags: tagsToArray(recipe.tags),
     rating_count: s.rating_count || 0,
     avg_stars: s.avg_stars ?? null,
@@ -339,6 +344,65 @@ export function updateRecipe(id, fields) {
 
 export function deleteRecipe(id) {
   db.prepare('DELETE FROM recipes WHERE id = ?').run(id);
+}
+
+// ── Spiegel einer externen Quelle (Mealie) ────────────────────────────────────
+
+// external_id -> { id, source_updated_at } für alle Rezepte einer Quelle.
+export function getSourceIndex(prefix) {
+  const rows = db
+    .prepare(
+      `SELECT id, external_id, source_updated_at FROM recipes
+        WHERE external_id LIKE ? || '%'`
+    )
+    .all(prefix);
+  return new Map(rows.map((r) => [r.external_id, r]));
+}
+
+// Rezept aus der Quelle einfügen oder aktualisieren (Schlüssel: external_id).
+// Bewertungen und Plan-Einträge bleiben erhalten, weil die id stehen bleibt.
+export function upsertRecipeFromSource(recipe) {
+  const existing = recipe.external_id ? findRecipeByExternalId(recipe.external_id) : null;
+  if (!existing) {
+    const created = createRecipe(recipe);
+    db.prepare(
+      `UPDATE recipes SET source_slug = ?, source_updated_at = ?, source_missing = 0
+        WHERE id = ?`
+    ).run(recipe.source_slug || null, recipe.source_updated_at || null, created.id);
+    return getRecipeById(created.id);
+  }
+  const updated = updateRecipe(existing.id, {
+    ...recipe,
+    // `blocked` gehört uns, nicht der Quelle – nicht überschreiben.
+    blocked: existing.blocked,
+  });
+  db.prepare(
+    `UPDATE recipes SET source_slug = ?, source_updated_at = ?, source_missing = 0
+      WHERE id = ?`
+  ).run(recipe.source_slug || null, recipe.source_updated_at || null, existing.id);
+  return updated ? getRecipeById(existing.id) : null;
+}
+
+// Alles, was die Quelle nicht mehr kennt, als fehlend markieren (nicht löschen –
+// daran hängen Bewertungen und die Plan-Historie). Rückgabe: Anzahl.
+export function markRecipesMissing(prefix, keepExternalIds) {
+  const keep = new Set(keepExternalIds);
+  const rows = db
+    .prepare(`SELECT id, external_id FROM recipes WHERE external_id LIKE ? || '%'`)
+    .all(prefix);
+  const setMissing = db.prepare('UPDATE recipes SET source_missing = ? WHERE id = ?');
+  let missing = 0;
+  for (const row of rows) {
+    const gone = !keep.has(row.external_id);
+    setMissing.run(gone ? 1 : 0, row.id);
+    if (gone) missing += 1;
+  }
+  return missing;
+}
+
+export function getRecipeBySlug(slug) {
+  const row = db.prepare('SELECT id FROM recipes WHERE source_slug = ?').get(slug);
+  return row ? getRecipeById(row.id) : null;
 }
 
 export function setRecipeBlocked(id, blocked) {

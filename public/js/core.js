@@ -95,6 +95,19 @@ export function tagChips(tags) {
   return tags.map((t) => `<span class="chip">${escHtml(t)}</span>`).join('');
 }
 
+// Adresse eines Rezepts in der Mealie-Oberfläche (Muster kommt aus /api/status).
+export function mealieRecipeLink(slug) {
+  const mealie = state.status?.mealie;
+  if (!mealie?.enabled || !slug) return '';
+  return String(mealie.recipeUrlPattern || '{base}/g/home/r/{slug}')
+    .replace('{base}', mealie.url)
+    .replace('{slug}', slug);
+}
+
+export function mealieActive() {
+  return Boolean(state.status?.mealie?.enabled);
+}
+
 // ── Bring-Listen ──────────────────────────────────────────────────────────────
 
 const LIST_SELECT_IDS = ['listSelect', 'importListSelect', 'planListSelect'];
