@@ -422,6 +422,32 @@ export function recipeHasHistory(id) {
   return ratings + planned > 0;
 }
 
+// Alle Rezepte, die die Quelle nicht mehr kennt – mit dem Hinweis, ob Historie
+// dranhängt (Bewertungen oder Plan-Einträge).
+export function getMissingRecipes() {
+  const stats = ratingStats();
+  return db
+    .prepare('SELECT * FROM recipes WHERE source_missing = 1 ORDER BY name COLLATE NOCASE')
+    .all()
+    .map((r) => {
+      const full = decorate(r, stats);
+      return { ...full, has_history: recipeHasHistory(r.id) };
+    });
+}
+
+// Löscht mehrere Rezepte in einer Transaktion. Rückgabe: Anzahl.
+export function deleteRecipes(ids) {
+  const stmt = db.prepare('DELETE FROM recipes WHERE id = ?');
+  const run = db.transaction((list) => {
+    let n = 0;
+    for (const id of list) {
+      if (stmt.run(id).changes) n += 1;
+    }
+    return n;
+  });
+  return run(ids);
+}
+
 export function getRecipeBySlug(slug) {
   const row = db.prepare('SELECT id FROM recipes WHERE source_slug = ?').get(slug);
   return row ? getRecipeById(row.id) : null;

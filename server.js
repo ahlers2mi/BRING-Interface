@@ -12,6 +12,8 @@ import {
   markRecipesMissing,
   findRecipeBySourceUrlPart,
   recipeHasHistory,
+  getMissingRecipes,
+  deleteRecipes,
   createRecipe,
   updateRecipe,
   deleteRecipe,
@@ -55,6 +57,8 @@ import {
   cancelChefkochJob,
   deleteRecipeInMealie,
   getChefkochJob,
+  mapMealieRecipe,
+  repairThinMealieRecipe,
   getSyncState,
   mealieAbout,
   mealieEnabled,
@@ -869,6 +873,8 @@ const mealieDeps = {
   markRecipesMissing,
   findRecipeBySourceUrlPart,
   recipeHasHistory,
+  getMissingRecipes,
+  deleteRecipes,
 };
 
 app.get('/api/mealie/status', async (_req, res) => {
@@ -897,6 +903,79 @@ app.post('/api/mealie/sync', async (_req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// POST /api/mealie/repair – schon vorhandene, unvollständig importierte
+// Chefkoch-Rezepte aus der Chefkoch-API nachtragen. Betrifft nur Rezepte mit
+// Chefkoch-Quelle, bei denen Zubereitung oder Zutaten fehlen.
+app.post('/api/mealie/repair', async (_req, res) => {
+  if (!mealieEnabled()) {
+    return res.status(400).json({ error: 'Mealie ist nicht konfiguriert.' });
+  }
+  const candidates = getAllRecipes({ withIngredients: true }).filter(
+    (r) =>
+      r.source_slug &&
+      !r.source_missing &&
+      /chefkoch\.de\/rezepte\/\d+\//.test(r.source_url || '') &&
+      (!String(r.instructions || '').trim() || (r.ingredients || []).length <= 3)
+  );
+
+  const result = { checked: candidates.length, repaired: 0, unchanged: 0, failed: 0, names: [] };
+  for (const recipe of candidates) {
+    try {
+      const { outcome, detail } = await repairThinMealieRecipe({
+        slug: recipe.source_slug,
+        sourceUrl: recipe.source_url,
+      });
+      if (outcome === 'repaired') {
+        result.repaired += 1;
+        result.names.push(recipe.name);
+        // Direkt auffrischen: auf ein hochgezähltes `updatedAt` in Mealie ist
+        // kein Verlass, der inkrementelle Abgleich würde das Rezept sonst
+        // überspringen.
+        const mapped = detail && mapMealieRecipe(detail, mealieConfig().url);
+        if (mapped) upsertRecipeFromSource(mapped);
+      } else {
+        result.unchanged += 1;
+      }
+    } catch {
+      result.failed += 1;
+    }
+  }
+  res.json(result);
+});
+
+// GET /api/mealie/orphans – was die Quelle nicht mehr kennt (Vorschau).
+// Absichtlich unter /api/mealie/, damit es nicht mit /api/recipes/:id kollidiert.
+app.get('/api/mealie/orphans', (_req, res) => {
+  const orphans = getMissingRecipes();
+  res.json({
+    count: orphans.length,
+    with_history: orphans.filter((r) => r.has_history).length,
+    without_history: orphans.filter((r) => !r.has_history).length,
+    items: orphans.map((r) => ({
+      id: r.id,
+      name: r.name,
+      has_history: r.has_history,
+      rating_count: r.rating_count,
+      times_cooked: r.times_cooked,
+    })),
+  });
+});
+
+// DELETE /api/mealie/orphans?withHistory=1 – aufräumen.
+// Ohne den Schalter bleiben Rezepte mit Bewertungen oder Plan-Einträgen stehen,
+// damit man die Lern-Historie nicht versehentlich wegwirft.
+app.delete('/api/mealie/orphans', (req, res) => {
+  const withHistory = req.query.withHistory === '1' || req.body?.withHistory === true;
+  const orphans = getMissingRecipes();
+  const doomed = orphans.filter((r) => withHistory || !r.has_history);
+  const deleted = deleteRecipes(doomed.map((r) => r.id));
+  res.json({
+    deleted,
+    kept: orphans.length - deleted,
+    names: doomed.map((r) => r.name),
+  });
 });
 
 // DELETE /api/mealie/recipe/:id – löscht das Rezept in Mealie und räumt hier auf.

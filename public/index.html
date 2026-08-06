@@ -145,9 +145,12 @@
       <div id="mealieStatus"><span class="spinner"></span></div>
       <div class="btn-group">
         <button class="btn btn-primary btn-sm" id="mealieSyncBtn">🔄 Jetzt abgleichen</button>
+        <button class="btn btn-secondary btn-sm" id="mealieRepairBtn"
+          title="Chefkoch-Rezepte, bei denen Zubereitung oder Zutaten fehlen, aus der Chefkoch-API nachtragen">🩹 Dünne Rezepte ergänzen</button>
         <a class="btn btn-secondary btn-sm" id="mealieOpenLink" href="#" target="_blank" rel="noopener noreferrer">↗ Mealie öffnen</a>
       </div>
       <div id="mealieResult"></div>
+      <div id="mealieOrphans"></div>
 
       <hr />
 
@@ -331,6 +334,7 @@
           <option value="favourites">Favoriten (ab 4★)</option>
           <option value="unrated">Noch nicht bewertet</option>
           <option value="blocked">Gesperrt</option>
+          <option value="missing">In Mealie gelöscht</option>
         </select>
       </div>
       <div class="hint" id="recipeCount"></div>
