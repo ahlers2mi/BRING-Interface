@@ -54,6 +54,7 @@ import {
   startImportJob,
   stripHtml,
 } from './lib/recipe-import.js';
+import { renderPlanSvg } from './lib/plan-svg.js';
 import {
   cancelChefkochJob,
   deleteRecipeInMealie,
@@ -910,6 +911,54 @@ app.post('/api/mealie/sync', async (_req, res) => {
     res.json(state);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /plan.svg – Wochenplan als Bild, für Dashboards die keine Webseite
+// einbetten können (FHEMVIZ zeigt `weblink image` bzw. `vizWidget image` an,
+// einen `weblink iframe` nicht). Die Fotos müssen als data:-URI eingebettet
+// werden: ein SVG in einem <img> lädt keine externen Bilder nach.
+const svgCache = { at: 0, week: null, body: null };
+
+async function collectImages(view) {
+  const images = new Map();
+  if (!mealieEnabled()) return images;
+  const ids = new Map();
+  for (const day of view.days) {
+    const url = day.recipe?.image_url || '';
+    const id = /^\/api\/mealie\/image\/(.+)$/.exec(url)?.[1];
+    if (id) ids.set(day.recipe.id, id);
+  }
+  for (const [recipeId, mealieId] of ids) {
+    try {
+      const { body, type } = await fetchMealieImage(mealieId, { size: 'min-original' });
+      images.set(recipeId, `data:${type};base64,${body.toString('base64')}`);
+    } catch {
+      /* ohne Bild geht es auch – dann steht ein Platzhalter im Bild */
+    }
+  }
+  return images;
+}
+
+app.get('/plan.svg', async (req, res) => {
+  const week = resolveWeek(req.query.week);
+  if (!week) return res.status(400).end();
+  // Eine Minute zwischenspeichern: die Kachel fragt regelmäßig nach, und jedes
+  // Bild kostet sonst mehrere Abrufe bei Mealie.
+  if (svgCache.body && svgCache.week === week && Date.now() - svgCache.at < 60000) {
+    res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'max-age=60');
+    return res.end(svgCache.body);
+  }
+  try {
+    const view = buildWeekView(week);
+    const svg = renderPlanSvg(view, await collectImages(view));
+    Object.assign(svgCache, { at: Date.now(), week, body: svg });
+    res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
+    res.setHeader('Cache-Control', 'max-age=60');
+    res.end(svg);
+  } catch (err) {
+    res.status(500).type('text/plain').end(err.message);
   }
 });
 
