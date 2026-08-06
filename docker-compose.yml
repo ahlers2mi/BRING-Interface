@@ -64,8 +64,13 @@ services:
       # Erstes Konto beim allerersten Start; Passwort danach in Mealie ändern.
       DEFAULT_EMAIL: ${MEALIE_DEFAULT_EMAIL:-changeme@email.com}
     volumes:
-      # Benanntes Volume – SQLite gehört nicht auf eine Netzwerkfreigabe.
-      - mealie-data:/app/data
+      # MEALIE_DATA_PATH leer  -> benanntes Volume "mealie-data"
+      # MEALIE_DATA_PATH gesetzt -> Ordner auf der NAS, z. B.
+      #   MEALIE_DATA_PATH=/volume2/docker/MEALIE/data
+      # Der Ordner muss PUID:PGID gehören (Standard 1000:1000). Auf eine
+      # SMB/NFS-Freigabe gehört die SQLite-Datei nicht – ein lokales Volume
+      # der NAS ist richtig.
+      - "${MEALIE_DATA_PATH:-mealie-data}:/app/data"
     deploy:
       resources:
         limits:
