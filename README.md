@@ -51,9 +51,14 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Die App ist anschließend unter **http://<host>:3000** erreichbar. Die
+Die App ist anschließend unter **http://<host>:8095** erreichbar (`HOST_PORT`
+in der `.env` änderbar; Port 3000 gilt nur *innerhalb* des Containers und ist
+auf einer Synology häufig schon von einem anderen Dienst belegt). Die
 SQLite-Datenbank liegt im benannten Volume `bring-data` und bleibt damit über
 Neustarts und Updates hinweg erhalten.
+
+> Neue oder geänderte Werte in der `.env` (z. B. `API_TOKEN`) kommen erst mit
+> `docker compose up -d` im Container an – ein bloßes `restart` genügt nicht.
 
 ```bash
 docker compose logs -f      # Logs ansehen
@@ -96,7 +101,8 @@ docker run -d \
 | `OPENROUTER_MODEL` | Optional: KI-Modell für die Analyse (Standard: `openai/gpt-4o-mini`). Muss strukturierte JSON-Ausgaben unterstützen. |
 | `APP_PASSWORD` | Gemeinsames Passwort für den Zugriff. Leer = **kein** Schutz (nur für rein lokalen/VPN-Betrieb). Bei öffentlichem Zugriff zwingend setzen. |
 | `APP_SECRET` | Optional: Schlüssel zum Signieren der Session-Cookies (sonst aus `APP_PASSWORD` abgeleitet). |
-| `API_TOKEN` | Token für Maschinen-Zugriffe auf `/api/…` (FHEM, Skripte) – als `?token=…`, Header `X-API-Token` oder `Authorization: Bearer …`. Leer = aus. |
+| `API_TOKEN` | Token für Maschinen-Zugriffe auf `/api/…` (FHEM, Skripte) – als `?token=…`, Header `X-API-Token` oder `Authorization: Bearer …`. Leer = aus. Am besten ohne `&`, `#` oder `+`, damit der Wert unverändert in eine URL passt. |
+| `HOST_PORT` | Nur `docker-compose.yml`: Port auf der NAS (Standard 8095) – im Container bleibt es 3000. |
 | `IMPORT_DELAY_MS` | Pause zwischen den Abrufen beim Rezept-Import (Standard 250 ms – bitte nicht zu klein wählen). |
 | `IMPORT_CONCURRENCY` | Parallele Abrufe beim Massenimport (Standard 3). |
 | `IMPORT_TIMEOUT_MS` | Timeout je Abruf beim Import (Standard 20000). |

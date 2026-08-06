@@ -4,13 +4,21 @@
 # Einfügen über  set myCommander execute  (98_Commands.pm) – eine Zeile = ein
 # Befehl, Zeilen mit # werden ignoriert.
 #
-# VORHER ANPASSEN (zweimal suchen/ersetzen):
-#   192.168.69.XX:3000  ->  Adresse des BRING-Interface
+# VORHER ANPASSEN (jeweils global suchen/ersetzen):
+#   192.168.69.10:8095  ->  Adresse des BRING-Interface auf der NAS.
+#                           ACHTUNG: der Port ist HOST_PORT aus der
+#                           docker-compose.yml (Standard 8095) - NICHT 3000,
+#                           das ist nur der Port INNERHALB des Containers.
+#                           Auf 3000 antwortet auf der Synology oft ein
+#                           anderer Dienst (z. B. Grafana) mit eigenem 401.
+#                           Alternativ die Reverse-Proxy-Adresse, z. B.
+#                           https://bring.<deine-domain>
 #   DEINTOKEN           ->  Wert von API_TOKEN aus der .env des Containers
+#                           (danach: docker compose up -d, nicht nur restart)
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Abruf alle 5 Minuten. Die Antwort ist flaches JSON, damit reading..JSON greift.
-define HTTP.Wochenplan HTTPMOD http://192.168.69.XX:3000/api/fhem/plan?token=DEINTOKEN 300
+define HTTP.Wochenplan HTTPMOD http://192.168.69.10:8095/api/fhem/plan?token=DEINTOKEN 300
 attr HTTP.Wochenplan alias Wochenplan
 attr HTTP.Wochenplan icon scene_dinner
 attr HTTP.Wochenplan room Küche,FHEMVIZ->Küche
@@ -74,22 +82,22 @@ attr HTTP.Wochenplan reading24JSON sun_stars
 # Readings nach einem set sofort aktuell (setParseResponse 1).
 attr HTTP.Wochenplan setParseResponse 1
 attr HTTP.Wochenplan set01Name wuerfeln_woche
-attr HTTP.Wochenplan set01URL http://192.168.69.XX:3000/api/fhem/roll?scope=week&token=DEINTOKEN
+attr HTTP.Wochenplan set01URL http://192.168.69.10:8095/api/fhem/roll?scope=week&token=DEINTOKEN
 attr HTTP.Wochenplan set01NoArg 1
 attr HTTP.Wochenplan set02Name wuerfeln_heute
-attr HTTP.Wochenplan set02URL http://192.168.69.XX:3000/api/fhem/roll?scope=day&date=today&token=DEINTOKEN
+attr HTTP.Wochenplan set02URL http://192.168.69.10:8095/api/fhem/roll?scope=day&date=today&token=DEINTOKEN
 attr HTTP.Wochenplan set02NoArg 1
 attr HTTP.Wochenplan set03Name wuerfeln_morgen
-attr HTTP.Wochenplan set03URL http://192.168.69.XX:3000/api/fhem/roll?scope=day&date=tomorrow&token=DEINTOKEN
+attr HTTP.Wochenplan set03URL http://192.168.69.10:8095/api/fhem/roll?scope=day&date=tomorrow&token=DEINTOKEN
 attr HTTP.Wochenplan set03NoArg 1
 attr HTTP.Wochenplan set04Name wuerfeln_leere_tage
-attr HTTP.Wochenplan set04URL http://192.168.69.XX:3000/api/fhem/roll?scope=week&onlyEmpty=1&token=DEINTOKEN
+attr HTTP.Wochenplan set04URL http://192.168.69.10:8095/api/fhem/roll?scope=week&onlyEmpty=1&token=DEINTOKEN
 attr HTTP.Wochenplan set04NoArg 1
 attr HTTP.Wochenplan set05Name bewerten
-attr HTTP.Wochenplan set05URL http://192.168.69.XX:3000/api/fhem/rate?date=today&rating=$val&token=DEINTOKEN
+attr HTTP.Wochenplan set05URL http://192.168.69.10:8095/api/fhem/rate?date=today&rating=$val&token=DEINTOKEN
 attr HTTP.Wochenplan set05Hint lecker,gut,ok,maessig,schlecht,rausgeflogen,nie_wieder
 attr HTTP.Wochenplan set06Name einkaufsliste
-attr HTTP.Wochenplan set06URL http://192.168.69.XX:3000/api/fhem/shopping?week=current&token=DEINTOKEN
+attr HTTP.Wochenplan set06URL http://192.168.69.10:8095/api/fhem/shopping?week=current&token=DEINTOKEN
 attr HTTP.Wochenplan set06NoArg 1
 
 # ── Anzeige ──────────────────────────────────────────────────────────────────

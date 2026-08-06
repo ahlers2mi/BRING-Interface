@@ -7,11 +7,15 @@ auf Knopfdruck. Grundlage ist ein **HTTPMOD**-Gerät – kein eigenes Modul nöt
 ## 1. Token setzen
 
 In der `.env` des Containers einen beliebigen, langen Wert eintragen und den
-Container neu starten:
+Container **neu erstellen** (`docker compose up -d`, nicht nur `restart` –
+neue Umgebungsvariablen kommen sonst nicht an):
 
 ```
 API_TOKEN=einLangerZufallswert
 ```
+
+Am besten ohne Sonderzeichen wie `&`, `#` oder `+`, damit der Wert unverändert
+in eine URL passt (`@` ist unproblematisch).
 
 Damit kommen Maschinen (FHEM, Skripte) an die `/api/`-Routen, ohne sich am
 Login-Formular anzumelden – auch dann, wenn `APP_PASSWORD` gesetzt ist. Der
@@ -22,8 +26,24 @@ umgeht.
 Kurzer Test von der FHEM-Kommandozeile:
 
 ```
-{ GetFileFromURL("http://192.168.69.XX:3000/api/fhem/plan?token=DEINTOKEN") }
+{ GetFileFromURL("http://192.168.69.10:8095/api/fhem/plan?token=DEINTOKEN") }
 ```
+
+> **Port beachten:** In der `docker-compose.yml` wird `${HOST_PORT:-8095}:3000`
+> gemappt – auf der NAS lauscht also standardmäßig **8095**, die 3000 gilt nur
+> innerhalb des Containers. Auf 3000 antwortet auf einer Synology oft ein
+> anderer Dienst (z. B. Grafana) mit einem eigenen `401`. Alternativ die
+> Reverse-Proxy-Adresse verwenden (`https://bring.<domain>/api/fhem/plan?token=…`),
+> HTTPMOD kann HTTPS.
+>
+> Fingerabdrücke zum Einordnen der Antwort:
+>
+> | Antwort | Bedeutung |
+> |---------|-----------|
+> | `{"week":"2026-W32",…}` | passt |
+> | `{"error":"Nicht angemeldet."}` | richtige App, aber Token falsch oder `API_TOKEN` nicht im Container gesetzt |
+> | `Cannot GET /api/fhem/plan` (HTML) | richtige App, aber noch der alte Stand ohne Wochenplan |
+> | irgendwas mit `messageId`/`traceID` o. Ä. | falscher Port – das ist ein anderer Dienst |
 
 ## 2. Gerät anlegen
 
@@ -123,5 +143,5 @@ Alle Routen sind sowohl per GET als auch per POST erreichbar – GET, damit ein
 Beispiel für ein eigenes Notify (z. B. Bewertung über einen Taster):
 
 ```
-define n_wochenplan_lecker notify taster_kueche:short.* { GetFileFromURL("http://192.168.69.XX:3000/api/fhem/rate?date=today&rating=lecker&token=DEINTOKEN") }
+define n_wochenplan_lecker notify taster_kueche:short.* { GetFileFromURL("http://192.168.69.10:8095/api/fhem/rate?date=today&rating=lecker&token=DEINTOKEN") }
 ```
