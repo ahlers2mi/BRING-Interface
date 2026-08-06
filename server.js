@@ -809,6 +809,19 @@ app.post('/api/recipes/import/cancel', (_req, res) => {
 // Flache Werte für HTTPMOD (readingXXJSON) und Aktionen, die auch per GET
 // gehen – so genügt in FHEM ein `GetFileFromURL(...)` bzw. ein setXXURL.
 
+// Werte für FHEM entschärfen: Anführungszeichen, Backslashes und Zeilenumbrüche
+// würden die Regex-Auswertung in HTTPMOD ("<key>":"([^"]*)") zerreißen. Die
+// Regex-Variante ist nötig, weil HTTPMOD bei der JSON-Auswertung Umlaute zu
+// Perl-Wide-Chars dekodiert und FHEM sie dann falsch ausgibt ("Gef?llte").
+function fhemValue(value) {
+  if (typeof value !== 'string') return value;
+  return value
+    .replace(/[\\"]/g, "'")
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 function fhemPlanPayload() {
   const week = weekOf(todayIso());
   const view = buildWeekView(week);
@@ -844,6 +857,7 @@ function fhemPlanPayload() {
     payload[`${day.key}_stars`] = day.rating?.stars || 0;
   }
   payload.state = payload.today ? `Heute: ${payload.today}` : 'Heute: nichts geplant';
+  for (const [key, value] of Object.entries(payload)) payload[key] = fhemValue(value);
   return payload;
 }
 

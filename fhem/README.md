@@ -87,6 +87,16 @@ Angelegt werden:
 | `a_wochenplan_wuerfeln` | optional: sonntags 18:00 die neue Woche würfeln     |
 | `a_wochenplan_ansage`   | optional: morgens per `send_to_all` ansagen         |
 
+### Warum Regex statt `reading..JSON`
+
+Bei der JSON-Auswertung dekodiert HTTPMOD den Text zu Perl-Zeichen; FHEM gibt
+Umlaute dann als einzelnes Byte aus und im Browser steht „Gef**?**llte
+Auberginen". Der Block liest die Werte deshalb per `reading..Regex` direkt aus
+dem Antworttext – damit bleiben die UTF-8-Bytes unverändert. Die Antwort ist
+flach aufgebaut und serverseitig von Anführungszeichen befreit, `"([^"]*)"`
+genügt also. Wer seine Installation auf `attr global encoding unicode` gestellt
+hat, kann stattdessen `reading01JSON today` usw. verwenden.
+
 ## 3. Readings
 
 | Reading | Inhalt |
