@@ -156,6 +156,9 @@ delete process.env.API_TOKEN;
 process.env.MEALIE_URL = mealieUrl;
 process.env.MEALIE_TOKEN = TOKEN;
 process.env.MEALIE_RECIPE_URL = '{base}/g/home/r/{slug}';
+// So sieht es in einer gemeinsamen Stack aus: intern der Dienstname, im Browser
+// die Adresse der NAS. Hier steht statt des Dienstnamens der Testserver.
+process.env.MEALIE_BASE_URL = 'http://192.168.69.10:9925';
 
 const { app } = await import('../server.js');
 const server = app.listen(0);
@@ -192,6 +195,33 @@ test('Status meldet Mealie als Quelle', async () => {
   const res = await api('/api/status');
   assert.equal(res.json.mealie.enabled, true);
   assert.equal(res.json.mealie.url, mealieUrl);
+});
+
+test('Links zeigen auf die Browser-Adresse, nicht auf die interne', async () => {
+  const status = await api('/api/status');
+  // Intern wird die API-Adresse benutzt …
+  assert.equal(status.json.mealie.url, mealieUrl);
+  // … für Links im Browser aber MEALIE_BASE_URL/MEALIE_PUBLIC_URL.
+  assert.equal(status.json.mealie.publicUrl, 'http://192.168.69.10:9925');
+
+  const link = await api('/api/mealie/recipe-url/auberginen-auflauf');
+  assert.equal(
+    link.json.url,
+    'http://192.168.69.10:9925/g/home/r/auberginen-auflauf',
+    'Rezept-Link muss vom Browser aus erreichbar sein'
+  );
+
+  // MEALIE_PUBLIC_URL hat Vorrang.
+  process.env.MEALIE_PUBLIC_URL = 'https://mealie.example.org';
+  try {
+    const withPublic = await api('/api/mealie/recipe-url/auberginen-auflauf');
+    assert.equal(
+      withPublic.json.url,
+      'https://mealie.example.org/g/home/r/auberginen-auflauf'
+    );
+  } finally {
+    delete process.env.MEALIE_PUBLIC_URL;
+  }
 });
 
 test('Abgleich spiegelt Rezepte samt Zutaten, Zeiten und Tags', async () => {

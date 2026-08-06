@@ -152,8 +152,10 @@ docker run -d \
 | `MEALIE_SYNC_MINUTES` | Abgleich-Intervall in Minuten (Standard 15). |
 | `MEALIE_PUSH_RATINGS` | Bewertungen als `rating`/`lastMade` nach Mealie zurückschreiben (Standard an, `0` = aus). |
 | `MEALIE_RECIPE_URL` | Muster für den Link in die Mealie-Oberfläche (Standard `{base}/g/home/r/{slug}`). |
+| `MEALIE_PUBLIC_URL` | Adresse von Mealie **aus dem Browser** (für die Links). Fällt auf `MEALIE_BASE_URL`, dann `MEALIE_URL` zurück. |
 | `COMPOSE_PROFILES` | Nur `docker-compose.yml`: `mealie` startet Mealie als zweiten Container mit. |
 | `MEALIE_PORT`, `MEALIE_BASE_URL`, `MEALIE_VERSION`, `MEALIE_DEFAULT_EMAIL`, `PUID`, `PGID`, `TZ` | Nur für den mitgelieferten Mealie-Dienst (Port 9925, Image-Tag, erstes Konto, Zeitzone). |
+| `MEALIE_DATA_PATH` | Ordner auf der NAS für Mealies Daten (leer = benanntes Volume `mealie-data`). Muss `PUID:PGID` gehören. |
 | `IMPORT_DELAY_MS` | Pause zwischen den Abrufen beim Rezept-Import (Standard 250 ms – bitte nicht zu klein wählen). |
 | `IMPORT_CONCURRENCY` | Parallele Abrufe beim Massenimport (Standard 3). |
 | `IMPORT_TIMEOUT_MS` | Timeout je Abruf beim Import (Standard 20000). |
@@ -216,17 +218,32 @@ Stack-Variablen:
 ```
 COMPOSE_PROFILES=mealie
 MEALIE_URL=http://mealie:9000          # Container-zu-Container, kein Port nötig
-MEALIE_TOKEN=<Token, siehe unten>
+MEALIE_TOKEN=                          # erst nach dem ersten Start (siehe unten)
 MEALIE_PORT=9925                       # nur für die Mealie-Oberfläche im Browser
-MEALIE_BASE_URL=http://192.168.69.10:9925
+MEALIE_BASE_URL=http://192.168.69.10:9925      # Adresse im Browser (für Links)
+MEALIE_DATA_PATH=/volume2/docker/MEALIE/data   # leer = Volume "mealie-data"
 TZ=Europe/Berlin
+PUID=1000
+PGID=1000
 ```
 
 Dann `docker compose up -d` (bzw. Stack in Portainer aktualisieren) – Portainer
-zeigt danach zwei Container. Mealie liegt im benannten Volume `mealie-data`;
-SQLite gehört **nicht** auf eine SMB/NFS-Freigabe, das Volume ist der richtige
-Ort. Wer Mealie lieber getrennt betreibt, lässt das Profil aus und trägt bei
-`MEALIE_URL` die normale Adresse ein (`http://192.168.69.10:9925`).
+zeigt danach zwei Container.
+
+Zum Speicherort: analog zu `DATA_PATH` dieser App kann Mealie entweder ein
+benanntes Volume benutzen (Standard) oder einen Ordner auf der NAS
+(`MEALIE_DATA_PATH`). Bei einem Ordner muss der **vorher existieren und
+`PUID:PGID` gehören**:
+
+```bash
+sudo mkdir -p /volume2/docker/MEALIE/data
+sudo chown -R 1000:1000 /volume2/docker/MEALIE/data
+```
+
+Auf eine SMB/NFS-Freigabe gehört die SQLite-Datei nicht – ein lokales Volume der
+NAS (`/volume2/...`) ist in Ordnung. Wer Mealie lieber getrennt betreibt, lässt
+das Profil aus und trägt bei `MEALIE_URL` die normale Adresse ein
+(`http://192.168.69.10:9925`).
 
 Erste Schritte in Mealie:
 
@@ -247,7 +264,14 @@ MEALIE_URL=http://192.168.69.10:9925
 MEALIE_TOKEN=<Token aus "Manage Your API Tokens">
 ```
 
-> Der Link auf ein Rezept in Mealie folgt `MEALIE_RECIPE_URL`
+> **Zwei Adressen, ein Unterschied:** `MEALIE_URL` benutzt der Server für die
+> API – bei gemeinsamer Stack der Dienstname `http://mealie:9000`, im Browser
+> also unerreichbar. Die Knöpfe „Mealie öffnen" und „In Mealie" nehmen deshalb
+> `MEALIE_PUBLIC_URL`, ersatzweise `MEALIE_BASE_URL` (das der Mealie-Container
+> ohnehin bekommt) und erst zuletzt `MEALIE_URL`. Bei getrennt betriebenem
+> Mealie sind beide gleich, dann genügt `MEALIE_URL`.
+>
+> Der Link auf ein Rezept folgt `MEALIE_RECIPE_URL`
 > (Standard `{base}/g/home/r/{slug}`); ältere Mealie-Versionen brauchen
 > `{base}/recipe/{slug}`.
 

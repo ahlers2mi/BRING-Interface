@@ -409,7 +409,8 @@ export function applyMealieMode() {
   }
   if (!active) return;
   const link = el('mealieOpenLink');
-  if (link) link.href = state.status.mealie.url;
+  const mealie = state.status.mealie;
+  if (link) link.href = mealie.publicUrl || mealie.url;
   renderMealieStatus();
 }
 
@@ -429,7 +430,7 @@ async function renderMealieStatus() {
           }`;
     target.innerHTML = `
       <p class="hint">
-        Rezepte werden in <a href="${escHtml(s.url)}" target="_blank" rel="noopener noreferrer">Mealie</a>
+        Rezepte werden in <a href="${escHtml(s.publicUrl || s.url)}" target="_blank" rel="noopener noreferrer">Mealie</a>
         gepflegt${s.version ? ` (${escHtml(s.version)})` : ''}. Diese App hält einen Spiegel,
         damit Wochenplan, Bewertungen und Reste-Suche auch dann funktionieren,
         wenn Mealie gerade nicht läuft. Abgeglichen wird beim Start und alle paar
