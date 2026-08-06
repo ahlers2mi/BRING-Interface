@@ -39,5 +39,38 @@ services:
       #   z. B. in Portainer: DATA_PATH=/volume2/docker/BRING/data
       - "${DATA_PATH:-bring-data}:/data"
 
+  # ── Mealie (optional) ──────────────────────────────────────────────────────
+  # Standardmäßig AUS. Einschalten mit der Stack-Variable
+  #   COMPOSE_PROFILES=mealie
+  # (oder indem man die profiles-Zeile hier löscht). Danach in den Variablen
+  #   MEALIE_URL=http://mealie:9000
+  # setzen – die beiden Container erreichen sich über den Dienstnamen, dafür
+  # muss kein Port nach außen offen sein. Der Port unten ist nur für die
+  # Mealie-Oberfläche im Browser.
+  mealie:
+    profiles: ["mealie"]
+    image: ghcr.io/mealie-recipes/mealie:${MEALIE_VERSION:-v3.22.0}
+    container_name: mealie
+    restart: unless-stopped
+    ports:
+      - "${MEALIE_PORT:-9925}:9000"
+    environment:
+      ALLOW_SIGNUP: "false"
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-Europe/Berlin}
+      # Adresse, unter der Mealie im Browser erreichbar ist (für Links/Mails)
+      BASE_URL: ${MEALIE_BASE_URL:-http://localhost:9925}
+      # Erstes Konto beim allerersten Start; Passwort danach in Mealie ändern.
+      DEFAULT_EMAIL: ${MEALIE_DEFAULT_EMAIL:-changeme@email.com}
+    volumes:
+      # Benanntes Volume – SQLite gehört nicht auf eine Netzwerkfreigabe.
+      - mealie-data:/app/data
+    deploy:
+      resources:
+        limits:
+          memory: 1000M
+
 volumes:
   bring-data:
+  mealie-data:

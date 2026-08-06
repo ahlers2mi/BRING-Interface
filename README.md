@@ -152,6 +152,8 @@ docker run -d \
 | `MEALIE_SYNC_MINUTES` | Abgleich-Intervall in Minuten (Standard 15). |
 | `MEALIE_PUSH_RATINGS` | Bewertungen als `rating`/`lastMade` nach Mealie zurückschreiben (Standard an, `0` = aus). |
 | `MEALIE_RECIPE_URL` | Muster für den Link in die Mealie-Oberfläche (Standard `{base}/g/home/r/{slug}`). |
+| `COMPOSE_PROFILES` | Nur `docker-compose.yml`: `mealie` startet Mealie als zweiten Container mit. |
+| `MEALIE_PORT`, `MEALIE_BASE_URL`, `MEALIE_VERSION`, `MEALIE_DEFAULT_EMAIL`, `PUID`, `PGID`, `TZ` | Nur für den mitgelieferten Mealie-Dienst (Port 9925, Image-Tag, erstes Konto, Zeitzone). |
 | `IMPORT_DELAY_MS` | Pause zwischen den Abrufen beim Rezept-Import (Standard 250 ms – bitte nicht zu klein wählen). |
 | `IMPORT_CONCURRENCY` | Parallele Abrufe beim Massenimport (Standard 3). |
 | `IMPORT_TIMEOUT_MS` | Timeout je Abruf beim Import (Standard 20000). |
@@ -204,6 +206,41 @@ Wochenplan und FHEM weiter.
 - Übernommen werden Name, Beschreibung, Zutaten (aus `food`/`unit`/`quantity`,
   sonst der Freitext), Zubereitung, Zeiten, Portionen, Tags und Kategorien,
   Bild und die Quell-URL (`orgURL`).
+
+### Mealie in derselben Stack mitlaufen lassen
+
+Die `docker-compose.yml` enthält Mealie schon als **optionalen** Dienst
+(`profiles: ["mealie"]`, also standardmäßig aus). Einschalten über die
+Stack-Variablen:
+
+```
+COMPOSE_PROFILES=mealie
+MEALIE_URL=http://mealie:9000          # Container-zu-Container, kein Port nötig
+MEALIE_TOKEN=<Token, siehe unten>
+MEALIE_PORT=9925                       # nur für die Mealie-Oberfläche im Browser
+MEALIE_BASE_URL=http://192.168.69.10:9925
+TZ=Europe/Berlin
+```
+
+Dann `docker compose up -d` (bzw. Stack in Portainer aktualisieren) – Portainer
+zeigt danach zwei Container. Mealie liegt im benannten Volume `mealie-data`;
+SQLite gehört **nicht** auf eine SMB/NFS-Freigabe, das Volume ist der richtige
+Ort. Wer Mealie lieber getrennt betreibt, lässt das Profil aus und trägt bei
+`MEALIE_URL` die normale Adresse ein (`http://192.168.69.10:9925`).
+
+Erste Schritte in Mealie:
+
+1. `http://<host>:9925` öffnen und mit `changeme@email.com` / `MyPassword`
+   anmelden (manche Versionen nutzen `changeme@example.com`; eindeutig wird es,
+   wenn du `MEALIE_DEFAULT_EMAIL` selbst setzt). Passwort sofort ändern.
+2. Oben rechts über das Profil → **Manage Your API Tokens** → Token anlegen und
+   den Wert als `MEALIE_TOKEN` in die Stack-Variablen eintragen, Stack neu
+   deployen.
+3. Rezepte in Mealie importieren (Mealie kann einzelne URLs und ganze
+   URL-Listen). Danach in dieser App „Jetzt abgleichen" – oder einfach den
+   nächsten automatischen Abgleich abwarten.
+
+Getrennt betrieben sieht es so aus:
 
 ```
 MEALIE_URL=http://192.168.69.10:9925
