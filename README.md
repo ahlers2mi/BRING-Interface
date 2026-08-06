@@ -203,12 +203,13 @@ Wochenplan und FHEM weiter.
   nicht), werden aber als `rating` und `lastMade` nach Mealie zurückgeschrieben –
   best-effort, ein Fehler dort verhindert die Bewertung hier nicht.
   Abschaltbar mit `MEALIE_PUSH_RATINGS=0`.
-- **Löschen passiert in Mealie** (Rezept → Drei-Punkte-Menü → *Delete*, oder für
-  mehrere auf einmal über *Manage Data* → Recipes). Nach dem nächsten Abgleich
-  bleibt das Rezept hier als „in Mealie nicht mehr vorhanden" stehen – daran
-  hängen Bewertungen und Plan-Historie – wird aber nicht mehr gewürfelt. Erst
-  dann lässt es sich auch hier endgültig löschen; solange es in Mealie existiert,
-  lehnt die App das Löschen ab (`409`).
+- **Löschen** geht am einfachsten über den Knopf **„In Mealie löschen"** an der
+  Rezeptkarte: er löscht das Rezept per API in Mealie und räumt hier auf. Hat das
+  Rezept Bewertungen oder Plan-Einträge, bleibt es als Historie stehen (markiert,
+  nicht mehr würfelbar) und lässt sich danach mit „Endgültig löschen" auch hier
+  entfernen. In Mealies eigener Oberfläche ist das Löschen einzelner Rezepte je
+  nach Version schwer zu finden; für viele auf einmal geht dort
+  *Manage Data* → Recipes.
 - Übernommen werden Name, Beschreibung, Zutaten (aus `food`/`unit`/`quantity`,
   sonst der Freitext), Zubereitung, Zeiten, Portionen, Tags und Kategorien,
   Bild und die Quell-URL (`orgURL`).

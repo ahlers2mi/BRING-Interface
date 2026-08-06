@@ -11,6 +11,7 @@ import {
   upsertRecipeFromSource,
   markRecipesMissing,
   findRecipeBySourceUrlPart,
+  recipeHasHistory,
   createRecipe,
   updateRecipe,
   deleteRecipe,
@@ -52,6 +53,7 @@ import {
 } from './lib/recipe-import.js';
 import {
   cancelChefkochJob,
+  deleteRecipeInMealie,
   getChefkochJob,
   getSyncState,
   mealieAbout,
@@ -502,9 +504,9 @@ app.delete('/api/recipes/:id', (req, res) => {
   if (mealieEnabled() && recipe.source === 'mealie' && !recipe.source_missing) {
     return res.status(409).json({
       error:
-        'Dieses Rezept gehört zu Mealie – dort löschen (Rezept → Drei-Punkte-Menü ' +
-        '→ Delete, oder „Manage Data" für mehrere auf einmal). Nach dem nächsten ' +
-        'Abgleich verschwindet es auch hier aus dem Wochenplan.',
+        'Dieses Rezept gehört zu Mealie. Nimm den Knopf „In Mealie löschen" – ' +
+        'der löscht es dort und räumt hier auf. Alternativ in Mealie über ' +
+        '„Manage Data" → Recipes.',
       mealie: mealieConfig().publicUrl || mealieConfig().url,
     });
   }
@@ -866,6 +868,7 @@ const mealieDeps = {
   getSourceIndex,
   markRecipesMissing,
   findRecipeBySourceUrlPart,
+  recipeHasHistory,
 };
 
 app.get('/api/mealie/status', async (_req, res) => {
@@ -893,6 +896,40 @@ app.post('/api/mealie/sync', async (_req, res) => {
     res.json(state);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/mealie/recipe/:id – löscht das Rezept in Mealie und räumt hier auf.
+// Der Weg über die API ist verlässlich; in Mealies Oberfläche ist das Löschen
+// einzelner Rezepte je nach Version schwer zu finden.
+app.delete('/api/mealie/recipe/:id', async (req, res) => {
+  const recipe = getRecipeById(Number(req.params.id));
+  if (!recipe) return res.status(404).json({ error: 'Rezept nicht gefunden.' });
+  if (!mealieEnabled()) {
+    return res.status(400).json({ error: 'Mealie ist nicht konfiguriert.' });
+  }
+  if (!recipe.source_slug) {
+    return res.status(400).json({ error: 'Dieses Rezept stammt nicht aus Mealie.' });
+  }
+  try {
+    await deleteRecipeInMealie(recipe.source_slug);
+    // Ohne Bewertungen und Plan-Einträge kann der Spiegel-Eintrag gleich weg,
+    // sonst bleibt er als Historie stehen (markiert, nicht mehr würfelbar).
+    if (recipeHasHistory(recipe.id)) {
+      markRecipesMissing('mealie:', []);
+      return res.json({
+        deleted: true,
+        kept: true,
+        message:
+          'In Mealie gelöscht. Hier bleibt das Rezept wegen seiner Bewertungen ' +
+          'bzw. Plan-Einträge stehen – markiert und nicht mehr würfelbar. Mit ' +
+          '„Endgültig löschen" verschwindet auch die Historie.',
+      });
+    }
+    deleteRecipe(recipe.id);
+    res.json({ deleted: true, kept: false });
+  } catch (err) {
+    res.status(502).json({ error: `Löschen in Mealie fehlgeschlagen: ${err.message}` });
   }
 });
 

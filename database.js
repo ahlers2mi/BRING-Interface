@@ -410,6 +410,18 @@ export function findRecipeBySourceUrlPart(part) {
   return row ? getRecipeById(row.id) : null;
 }
 
+// Hängen an dem Rezept Bewertungen oder Plan-Einträge? Dann ist es Historie und
+// wird beim Löschen in der Quelle nur markiert, nicht entfernt.
+export function recipeHasHistory(id) {
+  const ratings = db
+    .prepare('SELECT COUNT(*) AS n FROM ratings WHERE recipe_id = ?')
+    .get(id).n;
+  const planned = db
+    .prepare('SELECT COUNT(*) AS n FROM meal_plan WHERE recipe_id = ?')
+    .get(id).n;
+  return ratings + planned > 0;
+}
+
 export function getRecipeBySlug(slug) {
   const row = db.prepare('SELECT id FROM recipes WHERE source_slug = ?').get(slug);
   return row ? getRecipeById(row.id) : null;

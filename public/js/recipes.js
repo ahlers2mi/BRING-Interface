@@ -243,7 +243,7 @@ function buildRecipeCard(recipe) {
       }</button>
       ${
         mealieLink && !recipe.source_missing
-          ? ''
+          ? '<button class="btn btn-danger btn-sm" data-action="mealie-delete">🗑 In Mealie löschen</button>'
           : `<button class="btn btn-danger btn-sm" data-action="delete">🗑 ${
               recipe.source_missing ? 'Endgültig löschen' : 'Löschen'
             }</button>`
@@ -273,6 +273,29 @@ function buildRecipeCard(recipe) {
   node
     .querySelector('[data-action="delete"]')
     ?.addEventListener('click', () => deleteRecipeById(recipe.id, recipe.name));
+
+  node
+    .querySelector('[data-action="mealie-delete"]')
+    ?.addEventListener('click', async (e) => {
+      if (
+        !confirm(
+          `"${recipe.name}" in Mealie löschen?\n` +
+            'Das Rezept verschwindet dort dauerhaft. Bewertungen und Plan-Einträge ' +
+            'bleiben hier erhalten, falls es welche gibt.'
+        )
+      ) {
+        return;
+      }
+      setLoading(e.currentTarget, true);
+      try {
+        const res = await apiFetch(`/api/mealie/recipe/${recipe.id}`, { method: 'DELETE' });
+        await refreshAll();
+        if (res.kept) alert(res.message);
+      } catch (err) {
+        alert(`Fehler: ${err.message}`);
+        setLoading(e.currentTarget, false);
+      }
+    });
 
   wireRatingButtons(node, async (rating, btn) => {
     setLoading(btn, true);
