@@ -7,6 +7,9 @@ import { registerAuth, authEnabled, apiTokenEnabled } from './auth.js';
 import {
   getAllRecipes,
   getRecipeById,
+  getSourceIndex,
+  upsertRecipeFromSource,
+  markRecipesMissing,
   createRecipe,
   updateRecipe,
   deleteRecipe,
@@ -46,6 +49,15 @@ import {
   startImportJob,
   stripHtml,
 } from './lib/recipe-import.js';
+import {
+  getSyncState,
+  mealieAbout,
+  mealieEnabled,
+  mealieConfig,
+  mealieRecipeUrl,
+  pushRatingToMealie,
+  syncFromMealie,
+} from './lib/mealie.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -315,6 +327,7 @@ app.get('/api/status', async (_req, res) => {
     authEnabled,
     apiTokenEnabled,
     aiEnabled: Boolean(process.env.OPENROUTER_API_KEY),
+    mealie: { ...getSyncState(), recipeUrlPattern: mealieConfig().recipeUrlPattern },
   };
   try {
     await getBringClient();
@@ -417,7 +430,20 @@ app.post('/api/recipes/analyze', async (req, res) => {
   }
 });
 
-app.post('/api/recipes', (req, res) => {
+// Wenn Mealie die Quelle ist, werden Rezepte dort gepflegt – lokale Änderungen
+// würde der nächste Abgleich ohnehin überschreiben.
+function blockWhenMealie(req, res, next) {
+  if (!mealieEnabled()) return next();
+  return res.status(409).json({
+    error:
+      'Rezepte werden in Mealie gepflegt. Dort anlegen/ändern und danach ' +
+      '„Aus Mealie abgleichen" drücken (oder den nächsten automatischen ' +
+      'Abgleich abwarten).',
+    mealie: mealieConfig().url,
+  });
+}
+
+app.post('/api/recipes', blockWhenMealie, (req, res) => {
   const {
     name,
     description,
@@ -456,14 +482,14 @@ app.get('/api/recipes/:id', (req, res) => {
   res.json(recipe);
 });
 
-app.put('/api/recipes/:id', (req, res) => {
+app.put('/api/recipes/:id', blockWhenMealie, (req, res) => {
   const recipe = getRecipeById(Number(req.params.id));
   if (!recipe) return res.status(404).json({ error: 'Rezept nicht gefunden.' });
   const updated = updateRecipe(Number(req.params.id), req.body);
   res.json(updated);
 });
 
-app.delete('/api/recipes/:id', (req, res) => {
+app.delete('/api/recipes/:id', blockWhenMealie, (req, res) => {
   const recipe = getRecipeById(Number(req.params.id));
   if (!recipe) return res.status(404).json({ error: 'Rezept nicht gefunden.' });
   deleteRecipe(Number(req.params.id));
@@ -542,6 +568,17 @@ function applyRating({ recipeId, planDate, resolved, comment }) {
   const entry = getPlanEntry(date);
   if (entry && entry.recipe_id === recipeId) {
     updatePlanStatus(date, resolved.kind === 'cooked' ? 'cooked' : 'skipped');
+  }
+
+  // Nach Mealie zurückschreiben, damit dort derselbe Stand steht. Absichtlich
+  // ohne await und mit gefangenem Fehler: die Bewertung hier ist schon sicher.
+  const recipe = getRecipeById(recipeId);
+  if (mealieEnabled() && recipe?.source_slug && resolved.kind === 'cooked') {
+    pushRatingToMealie({
+      slug: recipe.source_slug,
+      rating: resolved.stars,
+      lastMade: date,
+    }).catch(() => {});
   }
   return rating;
 }
@@ -739,7 +776,7 @@ app.post('/api/fridge/search', (req, res) => {
 
 // POST /api/recipes/import/url – body: { url, save?, ai? }
 // Holt ein Rezept von einer Webseite (schema.org-Daten, bei Chefkoch die API).
-app.post('/api/recipes/import/url', async (req, res) => {
+app.post('/api/recipes/import/url', blockWhenMealie, async (req, res) => {
   const url = String(req.body?.url || '').trim();
   if (!/^https?:\/\//i.test(url)) {
     return res.status(400).json({ error: 'Bitte eine vollständige http(s)-URL angeben.' });
@@ -783,7 +820,7 @@ app.post('/api/recipes/import/url', async (req, res) => {
 
 // POST /api/recipes/import/chefkoch – body: { query?, count? }
 // Startet den Massenimport im Hintergrund (Fortschritt via /status).
-app.post('/api/recipes/import/chefkoch', (req, res) => {
+app.post('/api/recipes/import/chefkoch', blockWhenMealie, (req, res) => {
   try {
     const job = startImportJob({
       query: String(req.body?.query || '').trim(),
@@ -802,6 +839,43 @@ app.get('/api/recipes/import/status', (_req, res) => {
 
 app.post('/api/recipes/import/cancel', (_req, res) => {
   res.json({ cancelled: cancelImportJob(), job: getImportJob() });
+});
+
+// ── Mealie als Rezeptquelle ───────────────────────────────────────────────────
+
+const mealieDeps = { upsertRecipeFromSource, getSourceIndex, markRecipesMissing };
+
+app.get('/api/mealie/status', async (_req, res) => {
+  const state = getSyncState();
+  if (!state.enabled) return res.json(state);
+  try {
+    const { version } = await mealieAbout();
+    res.json({ ...state, reachable: true, version });
+  } catch (err) {
+    res.json({ ...state, reachable: false, error: err.message });
+  }
+});
+
+// Abgleich anstoßen. Läuft synchron, dauert bei wenigen hundert Rezepten
+// Sekunden – Details werden nur für Neues/Geändertes geholt.
+app.post('/api/mealie/sync', async (_req, res) => {
+  if (!mealieEnabled()) {
+    return res.status(400).json({
+      error: 'Mealie ist nicht konfiguriert (MEALIE_URL und MEALIE_TOKEN setzen).',
+    });
+  }
+  try {
+    const state = await syncFromMealie({ deps: mealieDeps });
+    if (state.status === 'error') return res.status(502).json(state);
+    res.json(state);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Adresse eines Rezepts in der Mealie-Oberfläche (für den Knopf in der Liste).
+app.get('/api/mealie/recipe-url/:slug', (req, res) => {
+  res.json({ url: mealieRecipeUrl(req.params.slug) });
 });
 
 // ── FHEM-Schnittstelle ────────────────────────────────────────────────────────
@@ -944,6 +1018,27 @@ if (startedDirectly) {
   app.listen(PORT, () => {
     console.log(`BRING-Interface läuft auf http://localhost:${PORT}`);
   });
+
+  // Mealie-Spiegel beim Start und danach im Intervall abgleichen.
+  if (mealieEnabled()) {
+    const { url, syncMinutes } = mealieConfig();
+    console.log(`Mealie als Rezeptquelle: ${url} (Abgleich alle ${syncMinutes} Min.)`);
+    const run = () =>
+      syncFromMealie({ deps: mealieDeps })
+        .then((state) => {
+          if (state.status === 'error') {
+            console.warn(`Mealie-Abgleich fehlgeschlagen: ${state.error}`);
+          } else {
+            console.log(
+              `Mealie-Abgleich: ${state.added} neu, ${state.updated} geändert, ` +
+                `${state.unchanged} unverändert, ${state.missing} verschwunden`
+            );
+          }
+        })
+        .catch((err) => console.warn(`Mealie-Abgleich fehlgeschlagen: ${err.message}`));
+    run();
+    setInterval(run, syncMinutes * 60 * 1000).unref();
+  }
 }
 
 export { app };

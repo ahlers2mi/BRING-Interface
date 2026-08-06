@@ -6,6 +6,8 @@ import {
   closeModal,
   deDate,
   el,
+  mealieActive,
+  mealieRecipeLink,
   escHtml,
   flash,
   on,
@@ -172,7 +174,9 @@ export function renderRecipeList() {
 
 function buildRecipeCard(recipe) {
   const node = document.createElement('div');
-  node.className = `recipe-item${recipe.blocked ? ' is-blocked' : ''}`;
+  node.className = `recipe-item${recipe.blocked || recipe.source_missing ? ' is-blocked' : ''}`;
+  const mealieLink =
+    recipe.source === 'mealie' ? mealieRecipeLink(recipe.source_slug) : '';
 
   const tags = (recipe.ingredients || [])
     .map(
@@ -194,6 +198,9 @@ function buildRecipeCard(recipe) {
     );
   }
   if (recipe.rejected_count) meta.push(`🗑 ${recipe.rejected_count}× rausgeflogen`);
+  if (recipe.source_missing) {
+    meta.push('⚠️ in Mealie nicht mehr vorhanden – wird nicht mehr gewürfelt');
+  }
   if (recipe.source_url) {
     meta.push(
       `🔗 <a href="${escHtml(recipe.source_url)}" target="_blank" rel="noopener noreferrer">Quelle</a>`
@@ -224,11 +231,21 @@ function buildRecipeCard(recipe) {
     </div>
     <div class="recipe-actions">
       <button class="btn btn-primary btn-sm" data-action="import">🛒 Zutaten</button>
-      <button class="btn btn-secondary btn-sm" data-action="edit">✏️ Bearbeiten</button>
+      ${
+        mealieLink
+          ? `<a class="btn btn-secondary btn-sm" href="${escHtml(
+              mealieLink
+            )}" target="_blank" rel="noopener noreferrer">✏️ In Mealie</a>`
+          : '<button class="btn btn-secondary btn-sm" data-action="edit">✏️ Bearbeiten</button>'
+      }
       <button class="btn btn-secondary btn-sm" data-action="block">${
         recipe.blocked ? '✅ Entsperren' : '⛔ Sperren'
       }</button>
-      <button class="btn btn-danger btn-sm" data-action="delete">🗑 Löschen</button>
+      ${
+        mealieLink
+          ? ''
+          : '<button class="btn btn-danger btn-sm" data-action="delete">🗑 Löschen</button>'
+      }
     </div>
   `;
 
@@ -237,7 +254,7 @@ function buildRecipeCard(recipe) {
     .addEventListener('click', () => openImportModal(recipe.id));
   node
     .querySelector('[data-action="edit"]')
-    .addEventListener('click', () => editRecipe(recipe));
+    ?.addEventListener('click', () => editRecipe(recipe));
   node.querySelector('[data-action="block"]').addEventListener('click', async (e) => {
     setLoading(e.currentTarget, true);
     try {
@@ -253,7 +270,7 @@ function buildRecipeCard(recipe) {
   });
   node
     .querySelector('[data-action="delete"]')
-    .addEventListener('click', () => deleteRecipeById(recipe.id, recipe.name));
+    ?.addEventListener('click', () => deleteRecipeById(recipe.id, recipe.name));
 
   wireRatingButtons(node, async (rating, btn) => {
     setLoading(btn, true);
@@ -375,6 +392,64 @@ export async function loadTaste() {
       </p>`;
   } catch (err) {
     target.innerHTML = `<div class="alert alert-error">Geschmacksprofil nicht ladbar: ${escHtml(
+      err.message
+    )}</div>`;
+  }
+}
+
+// ── Mealie als Rezeptquelle ───────────────────────────────────────────────────
+
+// Ist Mealie die Quelle, verschwinden die lokalen Pflege- und Importkarten:
+// Änderungen dort würde der nächste Abgleich ohnehin überschreiben.
+export function applyMealieMode() {
+  const active = mealieActive();
+  el('mealieCard').style.display = active ? '' : 'none';
+  for (const id of ['recipeFormCard', 'importCard', 'aiRecipeCard']) {
+    if (el(id)) el(id).style.display = active ? 'none' : '';
+  }
+  if (!active) return;
+  const link = el('mealieOpenLink');
+  if (link) link.href = state.status.mealie.url;
+  renderMealieStatus();
+}
+
+async function renderMealieStatus() {
+  const target = el('mealieStatus');
+  if (!target) return;
+  try {
+    const s = await apiFetch('/api/mealie/status');
+    const when = s.finishedAt
+      ? new Date(s.finishedAt).toLocaleString('de-DE')
+      : 'noch nicht';
+    const counts =
+      s.status === 'idle'
+        ? ''
+        : `${s.added} neu · ${s.updated} geändert · ${s.unchanged} unverändert${
+            s.missing ? ` · ${s.missing} in Mealie gelöscht` : ''
+          }`;
+    target.innerHTML = `
+      <p class="hint">
+        Rezepte werden in <a href="${escHtml(s.url)}" target="_blank" rel="noopener noreferrer">Mealie</a>
+        gepflegt${s.version ? ` (${escHtml(s.version)})` : ''}. Diese App hält einen Spiegel,
+        damit Wochenplan, Bewertungen und Reste-Suche auch dann funktionieren,
+        wenn Mealie gerade nicht läuft. Abgeglichen wird beim Start und alle paar
+        Minuten automatisch.
+      </p>
+      ${
+        s.reachable === false
+          ? `<div class="alert alert-error">Mealie nicht erreichbar: ${escHtml(
+              s.error || 'unbekannter Fehler'
+            )}</div>`
+          : ''
+      }
+      <div class="hint">Letzter Abgleich: ${escHtml(when)}${counts ? ` — ${counts}` : ''}</div>
+      ${
+        s.status === 'error' && s.error
+          ? `<div class="alert alert-error">${escHtml(s.error)}</div>`
+          : ''
+      }`;
+  } catch (err) {
+    target.innerHTML = `<div class="alert alert-error">Mealie-Status nicht ladbar: ${escHtml(
       err.message
     )}</div>`;
   }
@@ -595,6 +670,25 @@ export async function initRecipes() {
       await apiFetch('/api/recipes/import/cancel', { method: 'POST' });
     } catch (err) {
       flash('bulkImportResult', `Fehler: ${escHtml(err.message)}`, 'error');
+    }
+  });
+
+  on('mealieSyncBtn', 'click', async (e) => {
+    const btn = e.currentTarget;
+    setLoading(btn, true);
+    try {
+      const s = await apiFetch('/api/mealie/sync', { method: 'POST' });
+      flash(
+        'mealieResult',
+        `✓ Abgleich fertig: ${s.added} neu, ${s.updated} geändert, ${s.unchanged} unverändert` +
+          (s.missing ? `, ${s.missing} in Mealie gelöscht` : '')
+      );
+      await refreshAll();
+      renderMealieStatus();
+    } catch (err) {
+      flash('mealieResult', `Fehler: ${escHtml(err.message)}`, 'error');
+    } finally {
+      setLoading(btn, false);
     }
   });
 

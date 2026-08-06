@@ -10,6 +10,7 @@ Web Interface für Bring APP
 - **Wochenplan mit Würfelfunktion** – einzelne Tage oder die ganze Woche auswürfeln lassen, Tage von Hand belegen und die Zutaten der kompletten Woche in einem Schritt nach Bring schieben.
 - **Bewertungen** – nach dem Essen „lecker / gut / ok / mies" vergeben, oder ein Rezept als **rausgeflogen** markieren (gar nicht gekocht) bzw. mit **nie wieder** dauerhaft sperren.
 - **Gelernter Geschmack** – aus den Bewertungen entsteht ein Profil beliebter und unbeliebter Zutaten und Kategorien; der Würfel bevorzugt, was ankommt, und meidet, was durchgefallen ist.
+- **Mealie-Anbindung** (optional) – [Mealie](https://mealie.io) als Rezeptquelle: Rezepte dort pflegen, hier spiegeln; Bewertungen wandern als `rating`/`lastMade` zurück.
 - **Rezept-Import** – einzelne Rezepte per Link (Chefkoch und alle Seiten mit schema.org-Daten) oder **Massenimport von chefkoch.de** (z. B. 200 Rezepte auf einmal, im Hintergrund mit Fortschrittsanzeige).
 - **Reste-Küche** – eingeben, was noch im Kühlschrank liegt, und passende Rezepte nach Abdeckung sortiert finden; fehlende Zutaten wandern auf Wunsch direkt nach Bring.
 - **KI-Rezeptanalyse** – kompletten Rezepttext einfügen; ein KI-Modell (über [OpenRouter](https://openrouter.ai/)) extrahiert automatisch Name, Beschreibung und Zutaten (mit Mengen) zum Prüfen und Speichern.
@@ -146,6 +147,11 @@ docker run -d \
 | `APP_SECRET` | Optional: Schlüssel zum Signieren der Session-Cookies (sonst aus `APP_PASSWORD` abgeleitet). |
 | `API_TOKEN` | Token für Maschinen-Zugriffe auf `/api/…` (FHEM, Skripte) – als `?token=…`, Header `X-API-Token` oder `Authorization: Bearer …`. Leer = aus. Am besten ohne `&`, `#` oder `+`, damit der Wert unverändert in eine URL passt. |
 | `HOST_PORT` | Nur `docker-compose.yml`: Port auf der NAS (Standard 8095) – im Container bleibt es 3000. |
+| `MEALIE_URL` | Basis-URL einer Mealie-Instanz. Gesetzt = Mealie ist die Rezeptquelle (siehe unten). |
+| `MEALIE_TOKEN` | API-Token aus Mealie („Manage Your API Tokens"). |
+| `MEALIE_SYNC_MINUTES` | Abgleich-Intervall in Minuten (Standard 15). |
+| `MEALIE_PUSH_RATINGS` | Bewertungen als `rating`/`lastMade` nach Mealie zurückschreiben (Standard an, `0` = aus). |
+| `MEALIE_RECIPE_URL` | Muster für den Link in die Mealie-Oberfläche (Standard `{base}/g/home/r/{slug}`). |
 | `IMPORT_DELAY_MS` | Pause zwischen den Abrufen beim Rezept-Import (Standard 250 ms – bitte nicht zu klein wählen). |
 | `IMPORT_CONCURRENCY` | Parallele Abrufe beim Massenimport (Standard 3). |
 | `IMPORT_TIMEOUT_MS` | Timeout je Abruf beim Import (Standard 20000). |
@@ -171,6 +177,42 @@ Der Würfel zieht gewichtet, nicht gleichverteilt:
 Reichen die Kandidaten nicht (kleine Sammlung), werden die Regeln
 schrittweise gelockert, statt gar nichts vorzuschlagen. Als **gekocht**
 markierte Tage bleiben beim Neuwürfeln unangetastet.
+
+## Mealie als Rezeptquelle (optional)
+
+Sind `MEALIE_URL` und `MEALIE_TOKEN` gesetzt, ist [Mealie](https://mealie.io)
+die Wahrheit für Rezepte: gepflegt wird dort, diese App **spiegelt** sie.
+
+Warum ein Spiegel und keine Durchreiche bei jedem Klick: Bewertungen und
+Wochenplan zeigen per Fremdschlüssel auf `recipes.id`, und Würfeln wie
+Reste-Suche rechnen in SQL über die Zutaten. Der Spiegel hält das intakt, die
+Oberfläche bleibt schnell, und wenn Mealie gerade nicht läuft, funktionieren
+Wochenplan und FHEM weiter.
+
+- **Abgleich** beim Start, im Intervall (`MEALIE_SYNC_MINUTES`, Standard 15) und
+  per Knopf „Jetzt abgleichen". Details werden nur für neue oder geänderte
+  Rezepte geladen (Vergleich über `updatedAt`), 500 Rezepte sind also kein Problem.
+- **Lokale Rezeptpflege ist dann gesperrt** (`409` mit Hinweis) und die
+  entsprechenden Karten sind ausgeblendet – Änderungen hier würde der nächste
+  Abgleich ohnehin überschreiben. Jede Rezeptkarte bekommt einen „In Mealie"-Knopf.
+- **Bewertungen bleiben hier** (Mealie kennt „rausgeflogen" und „nie wieder"
+  nicht), werden aber als `rating` und `lastMade` nach Mealie zurückgeschrieben –
+  best-effort, ein Fehler dort verhindert die Bewertung hier nicht.
+  Abschaltbar mit `MEALIE_PUSH_RATINGS=0`.
+- **In Mealie gelöschte Rezepte** bleiben im Spiegel stehen (daran hängen
+  Bewertungen und die Plan-Historie), werden markiert und nicht mehr gewürfelt.
+- Übernommen werden Name, Beschreibung, Zutaten (aus `food`/`unit`/`quantity`,
+  sonst der Freitext), Zubereitung, Zeiten, Portionen, Tags und Kategorien,
+  Bild und die Quell-URL (`orgURL`).
+
+```
+MEALIE_URL=http://192.168.69.10:9925
+MEALIE_TOKEN=<Token aus "Manage Your API Tokens">
+```
+
+> Der Link auf ein Rezept in Mealie folgt `MEALIE_RECIPE_URL`
+> (Standard `{base}/g/home/r/{slug}`); ältere Mealie-Versionen brauchen
+> `{base}/recipe/{slug}`.
 
 ## Rezept-Import
 
@@ -225,6 +267,7 @@ lib/normalize.js   Zutaten normalisieren und vergleichen
 lib/taste.js       Geschmacksprofil und Würfelgewichte
 lib/mealplan.js    Wochenplan, Reste-Suche, Wocheneinkauf
 lib/recipe-import.js  Chefkoch-API, schema.org-Parser, Import-Job
+lib/mealie.js      Mealie-Anbindung: Abgleich, Abbildung, Bewertungs-Rückschreibung
 public/js/*.js     Oberfläche je Tab (core, shopping, plan, recipes, fridge)
 fhem/              Fertiger FHEM-Block + Anleitung
 ```

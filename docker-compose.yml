@@ -21,6 +21,12 @@ services:
       APP_SECRET: ${APP_SECRET}
       # Token für Maschinen-Zugriffe (FHEM, Skripte) auf die /api/-Routen
       API_TOKEN: ${API_TOKEN}
+      # Mealie als Rezeptquelle (optional)
+      MEALIE_URL: ${MEALIE_URL}
+      MEALIE_TOKEN: ${MEALIE_TOKEN}
+      MEALIE_SYNC_MINUTES: ${MEALIE_SYNC_MINUTES:-15}
+      MEALIE_PUSH_RATINGS: ${MEALIE_PUSH_RATINGS:-1}
+      MEALIE_RECIPE_URL: ${MEALIE_RECIPE_URL:-}
       # Rezept-Import (optional, Standardwerte reichen normalerweise)
       IMPORT_DELAY_MS: ${IMPORT_DELAY_MS:-250}
       IMPORT_CONCURRENCY: ${IMPORT_CONCURRENCY:-3}
