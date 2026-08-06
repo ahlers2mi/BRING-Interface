@@ -100,7 +100,7 @@ export function mealieRecipeLink(slug) {
   const mealie = state.status?.mealie;
   if (!mealie?.enabled || !slug) return '';
   return String(mealie.recipeUrlPattern || '{base}/g/home/r/{slug}')
-    .replace('{base}', mealie.url)
+    .replace('{base}', mealie.publicUrl || mealie.url)
     .replace('{slug}', slug);
 }
 

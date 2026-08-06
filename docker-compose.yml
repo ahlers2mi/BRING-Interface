@@ -27,6 +27,10 @@ services:
       MEALIE_SYNC_MINUTES: ${MEALIE_SYNC_MINUTES:-15}
       MEALIE_PUSH_RATINGS: ${MEALIE_PUSH_RATINGS:-1}
       MEALIE_RECIPE_URL: ${MEALIE_RECIPE_URL:-}
+      # Adresse für Links im Browser (MEALIE_URL zeigt bei gemeinsamer Stack auf
+      # den Dienstnamen und ist von außen nicht erreichbar).
+      MEALIE_PUBLIC_URL: ${MEALIE_PUBLIC_URL:-}
+      MEALIE_BASE_URL: ${MEALIE_BASE_URL:-}
       # Rezept-Import (optional, Standardwerte reichen normalerweise)
       IMPORT_DELAY_MS: ${IMPORT_DELAY_MS:-250}
       IMPORT_CONCURRENCY: ${IMPORT_CONCURRENCY:-3}

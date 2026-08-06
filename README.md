@@ -152,6 +152,7 @@ docker run -d \
 | `MEALIE_SYNC_MINUTES` | Abgleich-Intervall in Minuten (Standard 15). |
 | `MEALIE_PUSH_RATINGS` | Bewertungen als `rating`/`lastMade` nach Mealie zurückschreiben (Standard an, `0` = aus). |
 | `MEALIE_RECIPE_URL` | Muster für den Link in die Mealie-Oberfläche (Standard `{base}/g/home/r/{slug}`). |
+| `MEALIE_PUBLIC_URL` | Adresse von Mealie **aus dem Browser** (für die Links). Fällt auf `MEALIE_BASE_URL`, dann `MEALIE_URL` zurück. |
 | `COMPOSE_PROFILES` | Nur `docker-compose.yml`: `mealie` startet Mealie als zweiten Container mit. |
 | `MEALIE_PORT`, `MEALIE_BASE_URL`, `MEALIE_VERSION`, `MEALIE_DEFAULT_EMAIL`, `PUID`, `PGID`, `TZ` | Nur für den mitgelieferten Mealie-Dienst (Port 9925, Image-Tag, erstes Konto, Zeitzone). |
 | `MEALIE_DATA_PATH` | Ordner auf der NAS für Mealies Daten (leer = benanntes Volume `mealie-data`). Muss `PUID:PGID` gehören. |
@@ -219,7 +220,7 @@ COMPOSE_PROFILES=mealie
 MEALIE_URL=http://mealie:9000          # Container-zu-Container, kein Port nötig
 MEALIE_TOKEN=                          # erst nach dem ersten Start (siehe unten)
 MEALIE_PORT=9925                       # nur für die Mealie-Oberfläche im Browser
-MEALIE_BASE_URL=http://192.168.69.10:9925
+MEALIE_BASE_URL=http://192.168.69.10:9925      # Adresse im Browser (für Links)
 MEALIE_DATA_PATH=/volume2/docker/MEALIE/data   # leer = Volume "mealie-data"
 TZ=Europe/Berlin
 PUID=1000
@@ -263,7 +264,14 @@ MEALIE_URL=http://192.168.69.10:9925
 MEALIE_TOKEN=<Token aus "Manage Your API Tokens">
 ```
 
-> Der Link auf ein Rezept in Mealie folgt `MEALIE_RECIPE_URL`
+> **Zwei Adressen, ein Unterschied:** `MEALIE_URL` benutzt der Server für die
+> API – bei gemeinsamer Stack der Dienstname `http://mealie:9000`, im Browser
+> also unerreichbar. Die Knöpfe „Mealie öffnen" und „In Mealie" nehmen deshalb
+> `MEALIE_PUBLIC_URL`, ersatzweise `MEALIE_BASE_URL` (das der Mealie-Container
+> ohnehin bekommt) und erst zuletzt `MEALIE_URL`. Bei getrennt betriebenem
+> Mealie sind beide gleich, dann genügt `MEALIE_URL`.
+>
+> Der Link auf ein Rezept folgt `MEALIE_RECIPE_URL`
 > (Standard `{base}/g/home/r/{slug}`); ältere Mealie-Versionen brauchen
 > `{base}/recipe/{slug}`.
 
