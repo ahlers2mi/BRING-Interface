@@ -41,9 +41,30 @@ Kurzer Test von der FHEM-Kommandozeile:
 > | Antwort | Bedeutung |
 > |---------|-----------|
 > | `{"week":"2026-W32",…}` | passt |
-> | `{"error":"Nicht angemeldet."}` | richtige App, aber Token falsch oder `API_TOKEN` nicht im Container gesetzt |
-> | `Cannot GET /api/fhem/plan` (HTML) | richtige App, aber noch der alte Stand ohne Wochenplan |
+> | `{"error":"Nicht angemeldet."}` | unsere App, aber der Token wurde nicht akzeptiert |
 > | irgendwas mit `messageId`/`traceID` o. Ä. | falscher Port – das ist ein anderer Dienst |
+>
+> **Achtung:** die Sperre greift *vor* dem Routing, deshalb antwortet auch eine
+> gar nicht existierende `/api/`-Adresse mit `{"error":"Nicht angemeldet."}`.
+> Aus dieser Meldung lässt sich also **nicht** ablesen, ob der Wochenplan-Stand
+> überhaupt installiert ist. Dafür im **eingeloggten Browser** (Session-Cookie
+> genügt) `…/api/fhem/plan` **ohne** `?token=` öffnen:
+>
+> - JSON → neuer Stand läuft, es hakt nur am Token
+> - `Cannot GET /api/fhem/plan` → noch der alte Stand ohne Wochenplan
+
+### Wenn der Token nicht akzeptiert wird
+
+1. Kommt die Variable im Container an?
+   `docker exec bring-interface printenv API_TOKEN`
+   (bzw. in Portainer unter „Env"). Leer = Ursache gefunden: `API_TOKEN` gehört
+   in die `.env` **und** in die `environment:`-Liste der `docker-compose.yml`.
+2. Danach `docker compose up -d` – ein `restart` übernimmt neue
+   Umgebungsvariablen nicht.
+3. Wert in der `.env` **ohne Anführungszeichen** und ohne Leerzeichen am
+   Zeilenende schreiben (`API_TOKEN=abc123`, nicht `API_TOKEN="abc123"`) –
+   beides landet sonst im Vergleich und der Token passt nie. Ein `#` im Wert
+   schneidet die Zeile ab.
 
 ## 2. Gerät anlegen
 
