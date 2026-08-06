@@ -337,6 +337,37 @@ test('FHEM-Plan liefert flache Werte für HTTPMOD', async () => {
   }
 });
 
+test('FHEM-Werte bleiben Regex-tauglich und behalten Umlaute', async () => {
+  // Rezeptname mit Umlauten und Anführungszeichen – letztere würden die
+  // HTTPMOD-Regex "key":"([^"]*)" zerreißen und müssen entschärft sein.
+  const created = await api('/api/recipes', {
+    method: 'POST',
+    body: { name: 'Gefüllte Auberginen "Oma Käthe" à la türkisch' },
+  });
+  assert.equal(created.status, 201, created.text);
+  await api(`/api/plan/${todayIso}`, {
+    method: 'PUT',
+    body: { recipe_id: created.json.id },
+  });
+
+  const res = await realFetch(`${base}/api/fhem/plan?token=${TOKEN}`);
+  const raw = await res.text();
+
+  // Genau so liest HTTPMOD den Wert aus dem Rohtext.
+  const today = /"today":"([^"]*)"/.exec(raw)?.[1];
+  assert.equal(today, "Gefüllte Auberginen 'Oma Käthe' à la türkisch");
+  assert.match(raw, /"state":"Heute: Gefüllte Auberginen 'Oma Käthe' à la türkisch"/);
+
+  // Umlaute liegen als UTF-8 in der Antwort (nicht \u-escaped, nicht kaputt).
+  assert.ok(res.headers.get('content-type')?.includes('utf-8'));
+  assert.ok(raw.includes('Gefüllte'), 'Umlaute unverändert');
+  assert.equal(raw.includes('\\u00fc'), false, 'keine \\u-Escapes');
+
+  // Aufräumen, damit die folgenden Tests ihre Erwartungen behalten.
+  await api(`/api/plan/${todayIso}`, { method: 'DELETE' });
+  await api(`/api/recipes/${created.json.id}`, { method: 'DELETE' });
+});
+
 test('FHEM kann per GET würfeln und bewerten', async () => {
   const roll = await realFetch(
     `${base}/api/fhem/roll?scope=week&token=${TOKEN}`

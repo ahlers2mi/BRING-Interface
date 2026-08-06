@@ -32,6 +32,13 @@ function safeEqual(a, b) {
 // Token aus Header (`X-API-Token`, `Authorization: Bearer …`) oder
 // Query-Parameter `?token=` – letzteres, weil FHEM/HTTPMOD damit am einfachsten
 // arbeitet.
+function presentedToken(req) {
+  const header = req.headers['x-api-token'];
+  const bearer = /^Bearer\s+(.+)$/i.exec(req.headers.authorization || '')?.[1];
+  const query = req.query?.token;
+  return [header, bearer, query].find((v) => v) || '';
+}
+
 export function tokenMatches(req) {
   if (!API_TOKEN) return false;
   const header = req.headers['x-api-token'];
@@ -41,6 +48,22 @@ export function tokenMatches(req) {
     if (candidate && safeEqual(candidate, API_TOKEN)) return true;
   }
   return false;
+}
+
+// Fehlertext für abgewiesene /api/-Anfragen. Unterscheidet die drei Fälle, weil
+// "Nicht angemeldet." bei einem Maschinen-Zugriff nicht weiterhilft: der
+// häufigste Fehler ist, dass API_TOKEN gar nicht im Container ankommt.
+export function apiAuthError(req) {
+  const token = presentedToken(req);
+  if (!token) return 'Nicht angemeldet.';
+  if (!API_TOKEN) {
+    return (
+      'Es wurde ein Token übergeben, aber im Container ist API_TOKEN nicht ' +
+      'gesetzt. Prüfen mit: docker exec <container> printenv API_TOKEN – ' +
+      'danach die Variable setzen und neu deployen (docker compose up -d).'
+    );
+  }
+  return 'Token stimmt nicht mit API_TOKEN überein.';
 }
 
 function sign(value) {
@@ -147,7 +170,7 @@ export function registerAuth(app) {
   app.use((req, res, next) => {
     if (isAuthed(req) || tokenMatches(req) || ALLOW_PATHS.has(req.path)) return next();
     if (req.path.startsWith('/api/')) {
-      return res.status(401).json({ error: 'Nicht angemeldet.' });
+      return res.status(401).json({ error: apiAuthError(req) });
     }
     return res.redirect('/login');
   });

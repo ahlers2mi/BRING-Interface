@@ -7,11 +7,15 @@ auf Knopfdruck. Grundlage ist ein **HTTPMOD**-Gerät – kein eigenes Modul nöt
 ## 1. Token setzen
 
 In der `.env` des Containers einen beliebigen, langen Wert eintragen und den
-Container neu starten:
+Container **neu erstellen** (`docker compose up -d`, nicht nur `restart` –
+neue Umgebungsvariablen kommen sonst nicht an):
 
 ```
 API_TOKEN=einLangerZufallswert
 ```
+
+Am besten ohne Sonderzeichen wie `&`, `#` oder `+`, damit der Wert unverändert
+in eine URL passt (`@` ist unproblematisch).
 
 Damit kommen Maschinen (FHEM, Skripte) an die `/api/`-Routen, ohne sich am
 Login-Formular anzumelden – auch dann, wenn `APP_PASSWORD` gesetzt ist. Der
@@ -22,8 +26,53 @@ umgeht.
 Kurzer Test von der FHEM-Kommandozeile:
 
 ```
-{ GetFileFromURL("http://192.168.69.XX:3000/api/fhem/plan?token=DEINTOKEN") }
+{ GetFileFromURL("http://192.168.69.10:8095/api/fhem/plan?token=DEINTOKEN") }
 ```
+
+> **Port beachten:** In der `docker-compose.yml` wird `${HOST_PORT:-8095}:3000`
+> gemappt – auf der NAS lauscht also standardmäßig **8095**, die 3000 gilt nur
+> innerhalb des Containers. Auf 3000 antwortet auf einer Synology oft ein
+> anderer Dienst (z. B. Grafana) mit einem eigenen `401`. Alternativ die
+> Reverse-Proxy-Adresse verwenden (`https://bring.<domain>/api/fhem/plan?token=…`),
+> HTTPMOD kann HTTPS.
+>
+> Fingerabdrücke zum Einordnen der Antwort:
+>
+> | Antwort | Bedeutung |
+> |---------|-----------|
+> | `{"week":"2026-W32",…}` | passt |
+> | `{"error":"Nicht angemeldet."}` | unsere App, aber es wurde gar kein Token mitgeschickt |
+> | `…API_TOKEN nicht gesetzt…` | Token kam an, aber im Container fehlt die Variable |
+> | `Token stimmt nicht mit API_TOKEN überein.` | Variable ist da, der Wert passt nicht |
+> | irgendwas mit `messageId`/`traceID` o. Ä. | falscher Port – das ist ein anderer Dienst |
+>
+> **Achtung:** die Sperre greift *vor* dem Routing, deshalb antwortet auch eine
+> gar nicht existierende `/api/`-Adresse mit `{"error":"Nicht angemeldet."}`.
+> Aus dieser Meldung lässt sich also **nicht** ablesen, ob der Wochenplan-Stand
+> überhaupt installiert ist. Dafür im **eingeloggten Browser** (Session-Cookie
+> genügt) `…/api/fhem/plan` **ohne** `?token=` öffnen:
+>
+> - JSON → neuer Stand läuft, es hakt nur am Token
+> - `Cannot GET /api/fhem/plan` → noch der alte Stand ohne Wochenplan
+
+### Wenn der Token nicht akzeptiert wird
+
+1. Kommt die Variable im Container an?
+   `docker exec bring-interface printenv API_TOKEN`
+   (bzw. in Portainer unter „Env"). Leer = Ursache gefunden: `API_TOKEN` gehört
+   in die `.env` **und** in die `environment:`-Liste der `docker-compose.yml`.
+   **Portainer liest keine `.env` aus dem Git-Repo** (die ist gar nicht
+   eingecheckt) – dort muss die Variable unter „Environment variables" der Stack
+   stehen, mit genau dem Namen `API_TOKEN`. Vergleichsprobe:
+   `docker exec bring-interface printenv BRING_MAIL` – kommt die an und
+   `API_TOKEN` nicht, fehlt entweder der Stack-Eintrag oder die deployte
+   `docker-compose.yml` ist älter als dieser Stand.
+2. Danach `docker compose up -d` – ein `restart` übernimmt neue
+   Umgebungsvariablen nicht.
+3. Wert in der `.env` **ohne Anführungszeichen** und ohne Leerzeichen am
+   Zeilenende schreiben (`API_TOKEN=abc123`, nicht `API_TOKEN="abc123"`) –
+   beides landet sonst im Vergleich und der Token passt nie. Ein `#` im Wert
+   schneidet die Zeile ab.
 
 ## 2. Gerät anlegen
 
@@ -37,6 +86,16 @@ Angelegt werden:
 | `HTTP.Wochenplan`       | Readings + Befehle (HTTPMOD, Abruf alle 5 Min.)    |
 | `a_wochenplan_wuerfeln` | optional: sonntags 18:00 die neue Woche würfeln     |
 | `a_wochenplan_ansage`   | optional: morgens per `send_to_all` ansagen         |
+
+### Warum Regex statt `reading..JSON`
+
+Bei der JSON-Auswertung dekodiert HTTPMOD den Text zu Perl-Zeichen; FHEM gibt
+Umlaute dann als einzelnes Byte aus und im Browser steht „Gef**?**llte
+Auberginen". Der Block liest die Werte deshalb per `reading..Regex` direkt aus
+dem Antworttext – damit bleiben die UTF-8-Bytes unverändert. Die Antwort ist
+flach aufgebaut und serverseitig von Anführungszeichen befreit, `"([^"]*)"`
+genügt also. Wer seine Installation auf `attr global encoding unicode` gestellt
+hat, kann stattdessen `reading01JSON today` usw. verwenden.
 
 ## 3. Readings
 
@@ -123,5 +182,5 @@ Alle Routen sind sowohl per GET als auch per POST erreichbar – GET, damit ein
 Beispiel für ein eigenes Notify (z. B. Bewertung über einen Taster):
 
 ```
-define n_wochenplan_lecker notify taster_kueche:short.* { GetFileFromURL("http://192.168.69.XX:3000/api/fhem/rate?date=today&rating=lecker&token=DEINTOKEN") }
+define n_wochenplan_lecker notify taster_kueche:short.* { GetFileFromURL("http://192.168.69.10:8095/api/fhem/rate?date=today&rating=lecker&token=DEINTOKEN") }
 ```

@@ -4,13 +4,21 @@
 # Einfügen über  set myCommander execute  (98_Commands.pm) – eine Zeile = ein
 # Befehl, Zeilen mit # werden ignoriert.
 #
-# VORHER ANPASSEN (zweimal suchen/ersetzen):
-#   192.168.69.XX:3000  ->  Adresse des BRING-Interface
+# VORHER ANPASSEN (jeweils global suchen/ersetzen):
+#   192.168.69.10:8095  ->  Adresse des BRING-Interface auf der NAS.
+#                           ACHTUNG: der Port ist HOST_PORT aus der
+#                           docker-compose.yml (Standard 8095) - NICHT 3000,
+#                           das ist nur der Port INNERHALB des Containers.
+#                           Auf 3000 antwortet auf der Synology oft ein
+#                           anderer Dienst (z. B. Grafana) mit eigenem 401.
+#                           Alternativ die Reverse-Proxy-Adresse, z. B.
+#                           https://bring.<deine-domain>
 #   DEINTOKEN           ->  Wert von API_TOKEN aus der .env des Containers
+#                           (danach: docker compose up -d, nicht nur restart)
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Abruf alle 5 Minuten. Die Antwort ist flaches JSON, damit reading..JSON greift.
-define HTTP.Wochenplan HTTPMOD http://192.168.69.XX:3000/api/fhem/plan?token=DEINTOKEN 300
+# Abruf alle 5 Minuten.
+define HTTP.Wochenplan HTTPMOD http://192.168.69.10:8095/api/fhem/plan?token=DEINTOKEN 300
 attr HTTP.Wochenplan alias Wochenplan
 attr HTTP.Wochenplan icon scene_dinner
 attr HTTP.Wochenplan room Küche,FHEMVIZ->Küche
@@ -19,77 +27,83 @@ attr HTTP.Wochenplan enableControlSet 1
 attr HTTP.Wochenplan timeout 15
 attr HTTP.Wochenplan showMatched 0
 
-# ── Readings aus dem JSON ────────────────────────────────────────────────────
+# ── Readings aus der Antwort ─────────────────────────────────────────────────
+# Absichtlich per Regex und NICHT per reading..JSON: bei der JSON-Auswertung
+# dekodiert HTTPMOD Umlaute zu Perl-Zeichen, die FHEM dann falsch ausgibt
+# ("Gef?llte Auberginen"). Die Regex nimmt die Bytes, wie sie kommen.
+# Die Antwort ist flach und wird serverseitig von Anfuehrungszeichen befreit,
+# deshalb genuegt "([^"]*)".
+
 attr HTTP.Wochenplan reading01Name heute
-attr HTTP.Wochenplan reading01JSON today
+attr HTTP.Wochenplan reading01Regex "today":"([^"]*)"
 attr HTTP.Wochenplan reading02Name heute_status
-attr HTTP.Wochenplan reading02JSON today_status
+attr HTTP.Wochenplan reading02Regex "today_status":"([^"]*)"
 attr HTTP.Wochenplan reading03Name heute_bewertung
-attr HTTP.Wochenplan reading03JSON today_rating
+attr HTTP.Wochenplan reading03Regex "today_rating":"([^"]*)"
 attr HTTP.Wochenplan reading04Name heute_sterne
-attr HTTP.Wochenplan reading04JSON today_stars
+attr HTTP.Wochenplan reading04Regex "today_stars":(\d+)
 attr HTTP.Wochenplan reading05Name heute_zeit
-attr HTTP.Wochenplan reading05JSON today_time
+attr HTTP.Wochenplan reading05Regex "today_time":"([^"]*)"
 attr HTTP.Wochenplan reading06Name morgen
-attr HTTP.Wochenplan reading06JSON tomorrow
+attr HTTP.Wochenplan reading06Regex "tomorrow":"([^"]*)"
 attr HTTP.Wochenplan reading07Name woche
-attr HTTP.Wochenplan reading07JSON week
+attr HTTP.Wochenplan reading07Regex "week":"([^"]*)"
 attr HTTP.Wochenplan reading08Name geplant
-attr HTTP.Wochenplan reading08JSON planned
+attr HTTP.Wochenplan reading08Regex "planned":(\d+)
 attr HTTP.Wochenplan reading09Name leere_tage
-attr HTTP.Wochenplan reading09JSON empty
+attr HTTP.Wochenplan reading09Regex "empty":(\d+)
 attr HTTP.Wochenplan reading10Name stand
-attr HTTP.Wochenplan reading10JSON updated
+attr HTTP.Wochenplan reading10Regex "updated":"([^"]*)"
 attr HTTP.Wochenplan reading11Name mo
-attr HTTP.Wochenplan reading11JSON mon
+attr HTTP.Wochenplan reading11Regex "mon":"([^"]*)"
 attr HTTP.Wochenplan reading12Name di
-attr HTTP.Wochenplan reading12JSON tue
+attr HTTP.Wochenplan reading12Regex "tue":"([^"]*)"
 attr HTTP.Wochenplan reading13Name mi
-attr HTTP.Wochenplan reading13JSON wed
+attr HTTP.Wochenplan reading13Regex "wed":"([^"]*)"
 attr HTTP.Wochenplan reading14Name do
-attr HTTP.Wochenplan reading14JSON thu
+attr HTTP.Wochenplan reading14Regex "thu":"([^"]*)"
 attr HTTP.Wochenplan reading15Name fr
-attr HTTP.Wochenplan reading15JSON fri
+attr HTTP.Wochenplan reading15Regex "fri":"([^"]*)"
 attr HTTP.Wochenplan reading16Name sa
-attr HTTP.Wochenplan reading16JSON sat
+attr HTTP.Wochenplan reading16Regex "sat":"([^"]*)"
 attr HTTP.Wochenplan reading17Name so
-attr HTTP.Wochenplan reading17JSON sun
+attr HTTP.Wochenplan reading17Regex "sun":"([^"]*)"
 attr HTTP.Wochenplan reading18Name mo_sterne
-attr HTTP.Wochenplan reading18JSON mon_stars
+attr HTTP.Wochenplan reading18Regex "mon_stars":(\d+)
 attr HTTP.Wochenplan reading19Name di_sterne
-attr HTTP.Wochenplan reading19JSON tue_stars
+attr HTTP.Wochenplan reading19Regex "tue_stars":(\d+)
 attr HTTP.Wochenplan reading20Name mi_sterne
-attr HTTP.Wochenplan reading20JSON wed_stars
+attr HTTP.Wochenplan reading20Regex "wed_stars":(\d+)
 attr HTTP.Wochenplan reading21Name do_sterne
-attr HTTP.Wochenplan reading21JSON thu_stars
+attr HTTP.Wochenplan reading21Regex "thu_stars":(\d+)
 attr HTTP.Wochenplan reading22Name fr_sterne
-attr HTTP.Wochenplan reading22JSON fri_stars
+attr HTTP.Wochenplan reading22Regex "fri_stars":(\d+)
 attr HTTP.Wochenplan reading23Name sa_sterne
-attr HTTP.Wochenplan reading23JSON sat_stars
+attr HTTP.Wochenplan reading23Regex "sat_stars":(\d+)
 attr HTTP.Wochenplan reading24Name so_sterne
-attr HTTP.Wochenplan reading24JSON sun_stars
+attr HTTP.Wochenplan reading24Regex "sun_stars":(\d+)
 
 # ── Befehle ──────────────────────────────────────────────────────────────────
 # Die Aktions-URLs antworten mit demselben JSON wie der Abruf, deshalb sind die
 # Readings nach einem set sofort aktuell (setParseResponse 1).
 attr HTTP.Wochenplan setParseResponse 1
 attr HTTP.Wochenplan set01Name wuerfeln_woche
-attr HTTP.Wochenplan set01URL http://192.168.69.XX:3000/api/fhem/roll?scope=week&token=DEINTOKEN
+attr HTTP.Wochenplan set01URL http://192.168.69.10:8095/api/fhem/roll?scope=week&token=DEINTOKEN
 attr HTTP.Wochenplan set01NoArg 1
 attr HTTP.Wochenplan set02Name wuerfeln_heute
-attr HTTP.Wochenplan set02URL http://192.168.69.XX:3000/api/fhem/roll?scope=day&date=today&token=DEINTOKEN
+attr HTTP.Wochenplan set02URL http://192.168.69.10:8095/api/fhem/roll?scope=day&date=today&token=DEINTOKEN
 attr HTTP.Wochenplan set02NoArg 1
 attr HTTP.Wochenplan set03Name wuerfeln_morgen
-attr HTTP.Wochenplan set03URL http://192.168.69.XX:3000/api/fhem/roll?scope=day&date=tomorrow&token=DEINTOKEN
+attr HTTP.Wochenplan set03URL http://192.168.69.10:8095/api/fhem/roll?scope=day&date=tomorrow&token=DEINTOKEN
 attr HTTP.Wochenplan set03NoArg 1
 attr HTTP.Wochenplan set04Name wuerfeln_leere_tage
-attr HTTP.Wochenplan set04URL http://192.168.69.XX:3000/api/fhem/roll?scope=week&onlyEmpty=1&token=DEINTOKEN
+attr HTTP.Wochenplan set04URL http://192.168.69.10:8095/api/fhem/roll?scope=week&onlyEmpty=1&token=DEINTOKEN
 attr HTTP.Wochenplan set04NoArg 1
 attr HTTP.Wochenplan set05Name bewerten
-attr HTTP.Wochenplan set05URL http://192.168.69.XX:3000/api/fhem/rate?date=today&rating=$val&token=DEINTOKEN
+attr HTTP.Wochenplan set05URL http://192.168.69.10:8095/api/fhem/rate?date=today&rating=$val&token=DEINTOKEN
 attr HTTP.Wochenplan set05Hint lecker,gut,ok,maessig,schlecht,rausgeflogen,nie_wieder
 attr HTTP.Wochenplan set06Name einkaufsliste
-attr HTTP.Wochenplan set06URL http://192.168.69.XX:3000/api/fhem/shopping?week=current&token=DEINTOKEN
+attr HTTP.Wochenplan set06URL http://192.168.69.10:8095/api/fhem/shopping?week=current&token=DEINTOKEN
 attr HTTP.Wochenplan set06NoArg 1
 
 # ── Anzeige ──────────────────────────────────────────────────────────────────

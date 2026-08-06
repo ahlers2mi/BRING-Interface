@@ -1,7 +1,12 @@
 services:
   bring-interface:
     build: .
-    image: bring-interface
+    # Absichtlich OHNE festen "image:"-Namen und mit pull_policy: build.
+    # Sonst versucht "docker compose pull" – das Portainer beim Deploy/Redeploy
+    # einer Git-Stack ausführt – das Image "bring-interface" von Docker Hub zu
+    # holen und bricht mit "pull access denied" ab. Das Image entsteht hier aus
+    # dem Dockerfile, es liegt in keiner Registry.
+    pull_policy: build
     container_name: bring-interface
     restart: unless-stopped
     ports:
@@ -14,6 +19,12 @@ services:
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-4o-mini}
       APP_PASSWORD: ${APP_PASSWORD}
       APP_SECRET: ${APP_SECRET}
+      # Token für Maschinen-Zugriffe (FHEM, Skripte) auf die /api/-Routen
+      API_TOKEN: ${API_TOKEN}
+      # Rezept-Import (optional, Standardwerte reichen normalerweise)
+      IMPORT_DELAY_MS: ${IMPORT_DELAY_MS:-250}
+      IMPORT_CONCURRENCY: ${IMPORT_CONCURRENCY:-3}
+      IMPORT_TIMEOUT_MS: ${IMPORT_TIMEOUT_MS:-20000}
       PORT: 3000
       DB_PATH: /data/recipes.db
     volumes:
