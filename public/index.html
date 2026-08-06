@@ -19,7 +19,9 @@
 
 <nav>
   <button class="active" data-tab="shopping">Einkaufsliste</button>
+  <button data-tab="plan">Wochenplan</button>
   <button data-tab="recipes">Rezepte</button>
+  <button data-tab="fridge">Reste-Küche</button>
 </nav>
 
 <main>
@@ -47,9 +49,9 @@
         ></textarea>
       </div>
 
-      <div class="form-group" style="background:var(--bg-muted,#f6f6f6);padding:0.75rem;border-radius:var(--radius);">
+      <div class="form-group box-muted">
         <label style="margin-bottom:0.5rem;">🤖 KI-Hilfe</label>
-        <p style="font-size:0.85rem;color:var(--text-muted);margin-bottom:0.5rem;">
+        <p class="hint">
           Unsauberen Text aufräumen lassen oder ein Bild der Einkaufsliste verwenden –
           Foto aufnehmen oder ein vorhandenes Bild aus Galerie/Dateien wählen.
           Die erkannten Artikel landen oben im Textfeld.
@@ -60,7 +62,7 @@
           <input type="file" id="photoInput" accept="image/*" style="display:none;" />
           <button class="btn btn-secondary btn-sm" id="analyzePhotoBtn" disabled>Bild analysieren</button>
         </div>
-        <div id="photoName" style="font-size:0.8rem;color:var(--text-muted);margin-top:0.4rem;"></div>
+        <div id="photoName" class="hint"></div>
         <div id="analyzeItemsResult"></div>
       </div>
 
@@ -76,15 +78,109 @@
 
     <div class="card">
       <h2>Aktuelle Liste</h2>
-      <div id="currentItems" style="color: var(--text-muted); font-size:0.9rem;">
+      <div id="currentItems" class="hint">
         Wähle eine Liste aus, um die aktuellen Artikel anzuzeigen.
       </div>
     </div>
 
   </div>
 
+  <!-- ─── Wochenplan Tab ─────────────────────────────────────────────────── -->
+  <div id="tab-plan" class="tab-panel">
+
+    <div class="card">
+      <div class="plan-head">
+        <div class="btn-group" style="margin:0;">
+          <button class="btn btn-secondary btn-sm" id="planPrevBtn" title="Woche zurück">←</button>
+          <button class="btn btn-secondary btn-sm" id="planTodayBtn">Diese Woche</button>
+          <button class="btn btn-secondary btn-sm" id="planNextBtn" title="Woche vor">→</button>
+        </div>
+        <div>
+          <h2 id="planWeekLabel" style="margin:0;">Wochenplan</h2>
+          <span class="hint" id="planSummary"></span>
+        </div>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-primary" id="rollWeekBtn">🎲 Ganze Woche würfeln</button>
+        <button class="btn btn-secondary" id="rollEmptyBtn">🎲 Nur leere Tage</button>
+      </div>
+
+      <div class="form-group" style="margin-top:1rem;">
+        <label for="planListSelect">Bring-Liste für den Wocheneinkauf</label>
+        <select id="planListSelect">
+          <option value="">– Liste wählen –</option>
+        </select>
+        <div class="btn-group">
+          <button class="btn btn-secondary btn-sm" id="planShoppingPreviewBtn">👀 Zutaten der Woche anzeigen</button>
+          <button class="btn btn-primary btn-sm" id="planShoppingBtn">🛒 Wocheneinkauf in Bring</button>
+        </div>
+      </div>
+
+      <div id="planResult"></div>
+    </div>
+
+    <div id="planGrid" class="plan-grid"></div>
+
+    <div class="card">
+      <h2>Wie der Würfel entscheidet</h2>
+      <p class="hint">
+        Gut bewertete Rezepte kommen häufiger, „nie wieder"-Rezepte gar nicht mehr.
+        Was in den letzten Wochen schon auf dem Tisch stand, wird seltener gewürfelt,
+        und innerhalb einer Woche wiederholt sich möglichst kein Gericht.
+        Zusätzlich zählen Zutaten und Kategorien, die bei uns gut ankommen
+        (siehe „Das mögen wir" im Tab Rezepte). Gekochte Tage bleiben beim
+        Neuwürfeln unangetastet.
+      </p>
+    </div>
+
+  </div>
+
   <!-- ─── Recipes Tab ────────────────────────────────────────────────────── -->
   <div id="tab-recipes" class="tab-panel">
+
+    <!-- Geschmacksprofil -->
+    <div class="card">
+      <h2>😋 Das mögen wir</h2>
+      <div id="tasteCard"><span class="spinner"></span></div>
+    </div>
+
+    <!-- Import -->
+    <div class="card">
+      <h2>📥 Rezepte importieren</h2>
+
+      <div class="form-group">
+        <label for="importUrl">Einzelnes Rezept per Link (Chefkoch &amp; die meisten Rezeptseiten)</label>
+        <input type="url" id="importUrl" placeholder="https://www.chefkoch.de/rezepte/…" />
+        <div class="btn-group">
+          <button class="btn btn-secondary btn-sm" id="urlImportBtn">👀 Laden &amp; prüfen</button>
+          <button class="btn btn-primary btn-sm" id="urlImportSaveBtn">💾 Direkt speichern</button>
+          <label class="check">
+            <input type="checkbox" id="urlImportAi" /> KI-Fallback erlauben
+          </label>
+        </div>
+        <div id="urlImportResult"></div>
+      </div>
+
+      <hr />
+
+      <div class="form-group">
+        <label>Massenimport von chefkoch.de</label>
+        <p class="hint">
+          Holt viele Rezepte auf einmal (Suchbegriff leer = beliebte Rezepte quer
+          durch alle Kategorien). Der Import läuft im Hintergrund weiter, wenn du
+          die Seite wechselst; Rezepte, die schon vorhanden sind, werden übersprungen.
+        </p>
+        <div class="inline-fields">
+          <input type="text" id="bulkQuery" placeholder="Suchbegriff (optional), z. B. Auflauf" />
+          <input type="number" id="bulkCount" value="200" min="1" max="1000" title="Anzahl" />
+          <button class="btn btn-primary" id="bulkImportBtn">Import starten</button>
+          <button class="btn btn-danger" id="bulkCancelBtn" style="display:none;">Abbrechen</button>
+        </div>
+        <div id="bulkImportResult"></div>
+        <div id="bulkImportStatus"></div>
+      </div>
+    </div>
 
     <!-- KI-Analyse -->
     <div class="card">
@@ -125,9 +221,20 @@
         <input type="url" id="recipeUrl" placeholder="https://… (Quelle/Webseite)" />
       </div>
 
+      <div class="inline-fields">
+        <div class="form-group" style="flex:1;">
+          <label for="recipePrepTime">Voraussichtliche Zeit</label>
+          <input type="text" id="recipePrepTime" placeholder="z.&nbsp;B. ca. 30 Min." />
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label for="recipeServings">Portionen</label>
+          <input type="text" id="recipeServings" placeholder="z.&nbsp;B. 4 Portionen" />
+        </div>
+      </div>
+
       <div class="form-group">
-        <label for="recipePrepTime">Voraussichtliche Zeit (optional)</label>
-        <input type="text" id="recipePrepTime" placeholder="z.&nbsp;B. ca. 30 Min." />
+        <label for="recipeTags">Kategorien / Tags (Komma-getrennt)</label>
+        <input type="text" id="recipeTags" placeholder="Auflauf, Vegetarisch, schnell" />
       </div>
 
       <div class="form-group">
@@ -159,25 +266,69 @@
     </div>
 
     <!-- Recipe list -->
+    <div class="card">
+      <h2>Gespeicherte Rezepte</h2>
+      <div class="inline-fields">
+        <input type="search" id="recipeSearch" placeholder="Suchen (Name, Zutat, Tag) …" />
+        <select id="recipeFilter">
+          <option value="all">Alle</option>
+          <option value="favourites">Favoriten (ab 4★)</option>
+          <option value="unrated">Noch nicht bewertet</option>
+          <option value="blocked">Gesperrt</option>
+        </select>
+      </div>
+      <div class="hint" id="recipeCount"></div>
+    </div>
+
     <div id="recipeList" class="recipe-list"></div>
-    <div id="recipeListEmpty" style="color:var(--text-muted);text-align:center;padding:2rem;display:none;">
+    <div id="recipeListEmpty" class="empty-hint" style="display:none;">
       Noch keine Rezepte gespeichert.
     </div>
+
+  </div>
+
+  <!-- ─── Reste-Küche Tab ────────────────────────────────────────────────── -->
+  <div id="tab-fridge" class="tab-panel">
+
+    <div class="card">
+      <h2>🥕 Was liegt noch im Kühlschrank?</h2>
+      <p class="hint">
+        Reste eintragen – eine Zutat pro Zeile oder mit Komma getrennt. Es wird
+        nichts gespeichert, die Eingabe gilt nur für diese Suche.
+      </p>
+      <div class="form-group">
+        <textarea id="fridgeItems" style="min-height:110px;"
+          placeholder="Zucchini&#10;Hackfleisch&#10;halbe Sahne&#10;Feta"></textarea>
+      </div>
+      <label class="check">
+        <input type="checkbox" id="fridgePantry" checked />
+        Vorräte (Salz, Öl, Mehl, Zwiebeln …) als vorhanden annehmen
+      </label>
+
+      <div class="form-group" style="margin-top:0.75rem;">
+        <label for="fridgeListSelect">Bring-Liste für fehlende Zutaten</label>
+        <select id="fridgeListSelect">
+          <option value="">– Liste wählen –</option>
+        </select>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-primary" id="fridgeSearchBtn">🔍 Rezepte suchen</button>
+        <button class="btn btn-secondary" id="fridgeClearBtn">Leeren</button>
+      </div>
+      <div id="fridgeResult"></div>
+    </div>
+
+    <div id="fridgeResults" class="recipe-list"></div>
 
   </div>
 
 </main>
 
 <!-- ─── Import-Recipe Modal ──────────────────────────────────────────────── -->
-<div id="importModal" style="
-  display:none; position:fixed; inset:0; background:rgba(0,0,0,.45);
-  z-index:100; align-items:center; justify-content:center;">
-  <div style="
-    background:white; border-radius:var(--radius); padding:1.5rem;
-    max-width:400px; width:90%; box-shadow:var(--shadow-lg);">
-    <h2 style="margin-bottom:1rem;font-size:1.1rem;">
-      Rezept in Bring-Liste importieren
-    </h2>
+<div id="importModal" class="modal">
+  <div class="modal-box">
+    <h2>Zutaten in Bring-Liste übertragen</h2>
     <div class="form-group">
       <label for="importListSelect">Bring-Liste</label>
       <select id="importListSelect">
@@ -189,6 +340,21 @@
       <button class="btn btn-secondary" id="cancelImportBtn">Abbrechen</button>
     </div>
     <div id="modalResult"></div>
+  </div>
+</div>
+
+<!-- ─── Rezept-Auswahl für einen Tag ─────────────────────────────────────── -->
+<div id="pickerModal" class="modal">
+  <div class="modal-box">
+    <h2>Rezept für <span id="pickerDate"></span></h2>
+    <div class="form-group">
+      <input type="search" id="pickerSearch" placeholder="Rezept suchen …" />
+    </div>
+    <div id="pickerList" class="picker-list"></div>
+    <div class="btn-group">
+      <button class="btn btn-secondary" id="pickerCloseBtn">Schließen</button>
+    </div>
+    <div id="pickerResult"></div>
   </div>
 </div>
 
