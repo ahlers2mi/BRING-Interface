@@ -148,6 +148,25 @@
         <a class="btn btn-secondary btn-sm" id="mealieOpenLink" href="#" target="_blank" rel="noopener noreferrer">↗ Mealie öffnen</a>
       </div>
       <div id="mealieResult"></div>
+
+      <hr />
+
+      <div class="form-group">
+        <label>Rezepte von chefkoch.de nach Mealie holen</label>
+        <p class="hint">
+          Sucht auf Chefkoch (Suchbegriff leer = beliebte Rezepte) und übergibt die
+          Treffer an Mealies eigenen Importer – der liest die Seiten aus. Danach
+          wird automatisch abgeglichen. Schon vorhandene Rezepte werden übersprungen.
+        </p>
+        <div class="inline-fields">
+          <input type="text" id="ckQuery" placeholder="Suchbegriff (optional), z. B. Auflauf" />
+          <input type="number" id="ckCount" value="20" min="1" max="500" title="Anzahl" />
+          <button class="btn btn-primary" id="ckImportBtn">Holen</button>
+          <button class="btn btn-danger" id="ckCancelBtn" style="display:none;">Abbrechen</button>
+        </div>
+        <div id="ckResult"></div>
+        <div id="ckStatus"></div>
+      </div>
     </div>
 
     <!-- Geschmacksprofil -->

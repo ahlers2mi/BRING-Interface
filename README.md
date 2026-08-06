@@ -253,9 +253,12 @@ Erste Schritte in Mealie:
 2. Oben rechts über das Profil → **Manage Your API Tokens** → Token anlegen und
    den Wert als `MEALIE_TOKEN` in die Stack-Variablen eintragen, Stack neu
    deployen.
-3. Rezepte in Mealie importieren (Mealie kann einzelne URLs und ganze
-   URL-Listen). Danach in dieser App „Jetzt abgleichen" – oder einfach den
-   nächsten automatischen Abgleich abwarten.
+3. Rezepte in Mealie importieren – dort **+ → Import from URL** für einzelne
+   Links. Für viele auf einmal gibt es in dieser App den Knopf **„Rezepte von
+   chefkoch.de nach Mealie holen"**: die Chefkoch-Suche liefert die URLs,
+   Mealies eigener Scraper liest die Seiten aus, danach wird automatisch
+   abgeglichen. Bereits vorhandene Rezepte werden übersprungen (Erkennung über
+   die Quell-URL).
 
 Getrennt betrieben sieht es so aus:
 
