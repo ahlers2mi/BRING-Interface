@@ -203,6 +203,11 @@ Wochenplan und FHEM weiter.
   nicht), werden aber als `rating` und `lastMade` nach Mealie zurückgeschrieben –
   best-effort, ein Fehler dort verhindert die Bewertung hier nicht.
   Abschaltbar mit `MEALIE_PUSH_RATINGS=0`.
+- **Verwaiste Einträge aufräumen:** die Mealie-Karte meldet, wie viele Rezepte in
+  Mealie gelöscht wurden und hier noch liegen, und räumt sie auf Knopfdruck weg –
+  standardmäßig nur die ohne Bewertungen und Plan-Einträge, auf ausdrücklichen
+  Wunsch auch die mit Historie. Einzeln findest du sie über den Listenfilter
+  **„In Mealie gelöscht"**.
 - **Löschen** geht am einfachsten über den Knopf **„In Mealie löschen"** an der
   Rezeptkarte: er löscht das Rezept per API in Mealie und räumt hier auf. Hat das
   Rezept Bewertungen oder Plan-Einträge, bleibt es als Historie stehen (markiert,

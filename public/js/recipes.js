@@ -119,7 +119,9 @@ function filteredRecipes() {
     }
     if (mode === 'unrated' && r.rating_count > 0) return false;
     if (mode === 'blocked' && !r.blocked) return false;
+    if (mode === 'missing' && !r.source_missing) return false;
     if (mode !== 'blocked' && r.blocked && mode !== 'all') return false;
+    if (mode !== 'missing' && r.source_missing && mode !== 'all') return false;
     if (!query) return true;
     const haystack = [
       r.name,
@@ -433,6 +435,7 @@ export function applyMealieMode() {
     if (el(id)) el(id).style.display = active ? 'none' : '';
   }
   if (!active) return;
+  renderOrphans();
   const link = el('mealieOpenLink');
   const mealie = state.status.mealie;
   if (link) link.href = mealie.publicUrl || mealie.url;
@@ -478,6 +481,74 @@ async function renderMealieStatus() {
     target.innerHTML = `<div class="alert alert-error">Mealie-Status nicht ladbar: ${escHtml(
       err.message
     )}</div>`;
+  }
+}
+
+// Verwaiste Spiegel-Einträge: in Mealie gelöscht, hier noch vorhanden.
+async function renderOrphans() {
+  const box = el('mealieOrphans');
+  if (!box) return;
+  try {
+    const o = await apiFetch('/api/mealie/orphans');
+    if (!o.count) {
+      box.innerHTML = '';
+      return;
+    }
+    box.innerHTML = `
+      <div class="alert alert-info">
+        <b>${o.count} Rezept(e) sind in Mealie gelöscht</b>, liegen hier aber noch:
+        ${o.without_history} ohne Historie${
+          o.with_history
+            ? `, ${o.with_history} mit Bewertungen oder Plan-Einträgen`
+            : ''
+        }.
+        Sie werden nicht mehr gewürfelt. Im Filter „In Mealie gelöscht" siehst du sie einzeln.
+        <div class="btn-group">
+          <button class="btn btn-secondary btn-sm" id="orphanCleanBtn">🧹 ${
+            o.without_history
+          } ohne Historie löschen</button>
+          ${
+            o.with_history
+              ? `<button class="btn btn-danger btn-sm" id="orphanCleanAllBtn">🗑 Alle ${o.count} löschen (auch die Historie)</button>`
+              : ''
+          }
+        </div>
+      </div>`;
+
+    const clean = async (withHistory, btn) => {
+      if (
+        withHistory &&
+        !confirm(
+          `Alle ${o.count} verwaisten Rezepte löschen – samt Bewertungen und ` +
+            'Plan-Einträgen?\nDamit geht auch der gelernte Geschmack dieser Rezepte verloren.'
+        )
+      ) {
+        return;
+      }
+      setLoading(btn, true);
+      try {
+        const res = await apiFetch(
+          `/api/mealie/orphans${withHistory ? '?withHistory=1' : ''}`,
+          { method: 'DELETE' }
+        );
+        flash(
+          'mealieResult',
+          `✓ ${res.deleted} Rezept(e) gelöscht${
+            res.kept ? `, ${res.kept} mit Historie behalten` : ''
+          }.`
+        );
+        await refreshAll();
+        renderOrphans();
+      } catch (err) {
+        flash('mealieResult', `Fehler: ${escHtml(err.message)}`, 'error');
+        setLoading(btn, false);
+      }
+    };
+
+    el('orphanCleanBtn')?.addEventListener('click', (e) => clean(false, e.currentTarget));
+    el('orphanCleanAllBtn')?.addEventListener('click', (e) => clean(true, e.currentTarget));
+  } catch {
+    box.innerHTML = '';
   }
 }
 
@@ -758,6 +829,7 @@ export async function initRecipes() {
     setLoading(btn, true);
     try {
       const s = await apiFetch('/api/mealie/sync', { method: 'POST' });
+      renderOrphans();
       flash(
         'mealieResult',
         `✓ Abgleich fertig: ${s.added} neu, ${s.updated} geändert, ${s.unchanged} unverändert` +

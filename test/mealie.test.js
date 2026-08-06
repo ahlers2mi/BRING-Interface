@@ -558,3 +558,57 @@ test('Knopf "In Mealie löschen": Rezept mit Historie bleibt als Historie stehen
   assert.equal(after.json.source_missing, true);
   assert.equal(after.json.rating_count, mitHistorie.rating_count, 'Bewertungen erhalten');
 });
+
+// ── Verwaiste aufräumen ───────────────────────────────────────────────────────
+
+test('verwaiste Rezepte lassen sich auflisten und aufräumen', async () => {
+  // Zwei Rezepte in Mealie anlegen, spiegeln, eines bewerten, dann beide in
+  // Mealie löschen -> beide verwaist, eines mit Historie.
+  for (const n of [1, 2]) {
+    recipes.set(`weg-${n}`, {
+      id: `weg-${n}`,
+      slug: `weg-${n}`,
+      name: `Wegwerf ${n}`,
+      updatedAt: '2026-08-07T10:00:00',
+      recipeInstructions: [],
+      recipeIngredient: [{ quantity: 1, unit: null, food: { name: 'Zutat' } }],
+    });
+  }
+  await api('/api/mealie/sync', { method: 'POST' });
+  const mirrored = (await api('/api/recipes')).json.filter((r) =>
+    r.name.startsWith('Wegwerf')
+  );
+  assert.equal(mirrored.length, 2);
+
+  const mitHistorie = mirrored[0];
+  await api(`/api/recipes/${mitHistorie.id}/rate`, {
+    method: 'POST',
+    body: { rating: 'gut' },
+  });
+
+  recipes.delete('weg-1');
+  recipes.delete('weg-2');
+  await api('/api/mealie/sync', { method: 'POST' });
+
+  // Vorschau: beide verwaist, eines davon mit Historie.
+  const list = await api('/api/mealie/orphans');
+  const namen = list.json.items.map((i) => i.name);
+  assert.ok(namen.includes('Wegwerf 1') && namen.includes('Wegwerf 2'), namen.join(','));
+  assert.ok(list.json.with_history >= 1);
+  assert.ok(list.json.without_history >= 1);
+
+  // Aufräumen ohne Historie: das bewertete bleibt stehen.
+  const clean = await api('/api/mealie/orphans', { method: 'DELETE' });
+  assert.equal(clean.status, 200, clean.text);
+  assert.ok(clean.json.deleted >= 1);
+  assert.equal((await api(`/api/recipes/${mitHistorie.id}`)).status, 200, 'Historie behalten');
+
+  const rest = await api('/api/mealie/orphans');
+  assert.ok(rest.json.items.every((i) => i.has_history), 'nur noch Rezepte mit Historie');
+
+  // Mit Historie: jetzt ist alles weg.
+  const all = await api('/api/mealie/orphans?withHistory=1', { method: 'DELETE' });
+  assert.ok(all.json.deleted >= 1);
+  assert.equal((await api(`/api/recipes/${mitHistorie.id}`)).status, 404);
+  assert.equal((await api('/api/mealie/orphans')).json.count, 0);
+});
