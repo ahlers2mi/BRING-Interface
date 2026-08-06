@@ -535,9 +535,18 @@ test('Knopf "In Mealie löschen": Rezept ohne Historie verschwindet ganz', async
 });
 
 test('Knopf "In Mealie löschen": Rezept mit Historie bleibt als Historie stehen', async () => {
-  const list = await api('/api/recipes');
-  const mitHistorie = list.json.find((r) => r.rating_count > 0 && r.source_slug);
-  assert.ok(mitHistorie, 'Testaufbau: bewertetes Rezept vorhanden');
+  // Historie selbst herstellen, statt sich auf einen früheren Würfelwurf zu
+  // verlassen: ein vorhandenes Mealie-Rezept einplanen und bewerten.
+  const kandidaten = (await api('/api/recipes')).json.filter(
+    (r) => r.source_slug && !r.source_missing
+  );
+  assert.ok(kandidaten.length, 'Testaufbau: Mealie-Rezept vorhanden');
+  const ziel = kandidaten[0];
+  await api(`/api/plan/${todayIso}`, { method: 'PUT', body: { recipe_id: ziel.id } });
+  await api(`/api/plan/${todayIso}/rate`, { method: 'POST', body: { rating: 'gut' } });
+
+  const mitHistorie = (await api(`/api/recipes/${ziel.id}`)).json;
+  assert.ok(mitHistorie.rating_count > 0, 'Bewertung sitzt');
 
   const res = await api(`/api/mealie/recipe/${mitHistorie.id}`, { method: 'DELETE' });
   assert.equal(res.status, 200, res.text);
