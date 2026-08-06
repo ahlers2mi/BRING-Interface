@@ -394,6 +394,28 @@ test('in Mealie gelöschte Rezepte bleiben mit Historie, werden aber nicht gewü
   await api('/api/mealie/sync', { method: 'POST' });
   const back = await api(`/api/recipes/${pfann.id}`);
   assert.equal(back.json.source_missing, false);
+
+  // Für den folgenden Löschtest wieder aus Mealie entfernen.
+  recipes.delete('pfannkuchen');
+  await api('/api/mealie/sync', { method: 'POST' });
+});
+
+test('in Mealie gelöschte Rezepte darf man hier entfernen, andere nicht', async () => {
+  const list = await api('/api/recipes');
+  const lebendig = list.json.find((r) => !r.source_missing);
+  const verschwunden = list.json.find((r) => r.source_missing);
+
+  // Ein Rezept, das es in Mealie noch gibt: hier gesperrt.
+  const gesperrt = await api(`/api/recipes/${lebendig.id}`, { method: 'DELETE' });
+  assert.equal(gesperrt.status, 409);
+  assert.match(gesperrt.json.error, /dort löschen/i);
+  assert.match(gesperrt.json.error, /Manage Data/);
+
+  // Eines, das in Mealie weg ist: darf raus (nur noch Historie).
+  assert.ok(verschwunden, 'Testaufbau: ein in Mealie gelöschtes Rezept');
+  const weg = await api(`/api/recipes/${verschwunden.id}`, { method: 'DELETE' });
+  assert.equal(weg.status, 200, weg.text);
+  assert.equal((await api(`/api/recipes/${verschwunden.id}`)).status, 404);
 });
 
 test('falscher Token liefert eine verständliche Meldung', async () => {

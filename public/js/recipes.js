@@ -242,9 +242,11 @@ function buildRecipeCard(recipe) {
         recipe.blocked ? '✅ Entsperren' : '⛔ Sperren'
       }</button>
       ${
-        mealieLink
+        mealieLink && !recipe.source_missing
           ? ''
-          : '<button class="btn btn-danger btn-sm" data-action="delete">🗑 Löschen</button>'
+          : `<button class="btn btn-danger btn-sm" data-action="delete">🗑 ${
+              recipe.source_missing ? 'Endgültig löschen' : 'Löschen'
+            }</button>`
       }
     </div>
   `;

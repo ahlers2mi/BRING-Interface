@@ -493,9 +493,21 @@ app.put('/api/recipes/:id', blockWhenMealie, (req, res) => {
   res.json(updated);
 });
 
-app.delete('/api/recipes/:id', blockWhenMealie, (req, res) => {
+// Löschen: im Mealie-Modus grundsätzlich dort – Ausnahme sind Rezepte, die es
+// in Mealie schon nicht mehr gibt. Die liegen hier nur noch wegen ihrer
+// Bewertungs- und Plan-Historie und dürfen weg, wenn man sie nicht braucht.
+app.delete('/api/recipes/:id', (req, res) => {
   const recipe = getRecipeById(Number(req.params.id));
   if (!recipe) return res.status(404).json({ error: 'Rezept nicht gefunden.' });
+  if (mealieEnabled() && recipe.source === 'mealie' && !recipe.source_missing) {
+    return res.status(409).json({
+      error:
+        'Dieses Rezept gehört zu Mealie – dort löschen (Rezept → Drei-Punkte-Menü ' +
+        '→ Delete, oder „Manage Data" für mehrere auf einmal). Nach dem nächsten ' +
+        'Abgleich verschwindet es auch hier aus dem Wochenplan.',
+      mealie: mealieConfig().publicUrl || mealieConfig().url,
+    });
+  }
   deleteRecipe(Number(req.params.id));
   res.json({ success: true });
 });
