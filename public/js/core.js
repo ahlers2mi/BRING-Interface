@@ -110,7 +110,14 @@ export function mealieActive() {
 
 // ── Bring-Listen ──────────────────────────────────────────────────────────────
 
-const LIST_SELECT_IDS = ['listSelect', 'importListSelect', 'planListSelect'];
+// Alle Auswahlfelder für Bring-Listen. Wer hier ein Feld vergisst, hat in dem
+// Tab ein leeres Dropdown – dagegen wacht test/frontend.test.js.
+const LIST_SELECT_IDS = [
+  'listSelect',
+  'importListSelect',
+  'planListSelect',
+  'fridgeListSelect',
+];
 
 export function populateListSelects() {
   for (const id of LIST_SELECT_IDS) {
