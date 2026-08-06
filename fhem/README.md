@@ -41,7 +41,9 @@ Kurzer Test von der FHEM-Kommandozeile:
 > | Antwort | Bedeutung |
 > |---------|-----------|
 > | `{"week":"2026-W32",…}` | passt |
-> | `{"error":"Nicht angemeldet."}` | unsere App, aber der Token wurde nicht akzeptiert |
+> | `{"error":"Nicht angemeldet."}` | unsere App, aber es wurde gar kein Token mitgeschickt |
+> | `…API_TOKEN nicht gesetzt…` | Token kam an, aber im Container fehlt die Variable |
+> | `Token stimmt nicht mit API_TOKEN überein.` | Variable ist da, der Wert passt nicht |
 > | irgendwas mit `messageId`/`traceID` o. Ä. | falscher Port – das ist ein anderer Dienst |
 >
 > **Achtung:** die Sperre greift *vor* dem Routing, deshalb antwortet auch eine
@@ -59,6 +61,12 @@ Kurzer Test von der FHEM-Kommandozeile:
    `docker exec bring-interface printenv API_TOKEN`
    (bzw. in Portainer unter „Env"). Leer = Ursache gefunden: `API_TOKEN` gehört
    in die `.env` **und** in die `environment:`-Liste der `docker-compose.yml`.
+   **Portainer liest keine `.env` aus dem Git-Repo** (die ist gar nicht
+   eingecheckt) – dort muss die Variable unter „Environment variables" der Stack
+   stehen, mit genau dem Namen `API_TOKEN`. Vergleichsprobe:
+   `docker exec bring-interface printenv BRING_MAIL` – kommt die an und
+   `API_TOKEN` nicht, fehlt entweder der Stack-Eintrag oder die deployte
+   `docker-compose.yml` ist älter als dieser Stand.
 2. Danach `docker compose up -d` – ein `restart` übernimmt neue
    Umgebungsvariablen nicht.
 3. Wert in der `.env` **ohne Anführungszeichen** und ohne Leerzeichen am
