@@ -74,6 +74,14 @@ import {
   startChefkochToMealieJob,
   syncFromMealie,
 } from './lib/mealie.js';
+import {
+  cookidooCheck,
+  cookidooConfig,
+  cookidooEnabled,
+  cookidooShoppingItems,
+  getCookidooState,
+  syncFromCookidoo,
+} from './lib/cookidoo.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -349,6 +357,7 @@ app.get('/api/status', async (_req, res) => {
     apiTokenEnabled,
     aiEnabled: Boolean(process.env.OPENROUTER_API_KEY),
     mealie: { ...getSyncState(), recipeUrlPattern: mealieConfig().recipeUrlPattern },
+    cookidoo: getCookidooState(),
   };
   try {
     await getBringClient();
@@ -962,6 +971,79 @@ app.post('/api/mealie/sync', async (_req, res) => {
   }
 });
 
+// ── Cookidoo (Thermomix) ──────────────────────────────────────────────────────
+
+const cookidooDeps = {
+  upsertRecipeFromSource,
+  markRecipesMissing,
+  findRecipeByExternalId,
+};
+
+app.get('/api/cookidoo/status', async (_req, res) => {
+  const state = getCookidooState();
+  if (!state.enabled) return res.json(state);
+  try {
+    const check = await cookidooCheck();
+    res.json({
+      ...state,
+      reachable: true,
+      user: check?.user?.username || '',
+      subscription: check?.subscription?.status || '',
+      subscriptionActive: Boolean(check?.subscription?.active),
+    });
+  } catch (err) {
+    res.json({ ...state, reachable: false, error: err.message });
+  }
+});
+
+// Abgleich anstoßen. Dauert länger als bei Mealie: für jedes Rezept muss die
+// Brücke einmal bei Cookidoo nachfragen, und das absichtlich nacheinander.
+app.post('/api/cookidoo/sync', async (_req, res) => {
+  if (!cookidooEnabled()) {
+    return res.status(400).json({
+      error: 'Cookidoo ist nicht konfiguriert (COOKIDOO_URL auf die Brücke setzen).',
+    });
+  }
+  try {
+    const state = await syncFromCookidoo({ deps: cookidooDeps });
+    if (state.status === 'error') return res.status(502).json(state);
+    res.json(state);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Cookidoos eigene Einkaufsliste ansehen …
+app.get('/api/cookidoo/shopping', async (req, res) => {
+  if (!cookidooEnabled()) {
+    return res.status(400).json({ error: 'Cookidoo ist nicht konfiguriert.' });
+  }
+  try {
+    res.json(await cookidooShoppingItems({ all: req.query.all === '1' }));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// … und nach Bring schieben.
+app.post('/api/cookidoo/shopping', async (req, res) => {
+  if (!cookidooEnabled()) {
+    return res.status(400).json({ error: 'Cookidoo ist nicht konfiguriert.' });
+  }
+  const { listUuid } = req.body || {};
+  if (!listUuid) return res.status(400).json({ error: 'listUuid fehlt.' });
+  try {
+    const { items, recipes } = await cookidooShoppingItems({ all: Boolean(req.body.all) });
+    if (!items.length) {
+      return res.status(400).json({ error: 'Die Cookidoo-Einkaufsliste ist leer.' });
+    }
+    const imported = await importItemsToBring(listUuid, items);
+    res.json({ imported, recipes });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /plan.svg – Wochenplan als Bild, für Dashboards die keine Webseite
 // einbetten können (FHEMVIZ zeigt `weblink image` bzw. `vizWidget image` an,
 // einen `weblink iframe` nicht). Die Fotos müssen als data:-URI eingebettet
@@ -1336,6 +1418,28 @@ if (startedDirectly) {
           }
         })
         .catch((err) => console.warn(`Mealie-Abgleich fehlgeschlagen: ${err.message}`));
+    run();
+    setInterval(run, syncMinutes * 60 * 1000).unref();
+  }
+
+  // Cookidoo genauso, nur seltener: für jedes Rezept fragt die Brücke einmal
+  // einzeln bei Cookidoo nach, das muss nicht alle 15 Minuten passieren.
+  if (cookidooEnabled()) {
+    const { url, syncMinutes } = cookidooConfig();
+    console.log(`Cookidoo über die Brücke ${url} (Abgleich alle ${syncMinutes} Min.)`);
+    const run = () =>
+      syncFromCookidoo({ deps: cookidooDeps })
+        .then((state) => {
+          if (state.status === 'error') {
+            console.warn(`Cookidoo-Abgleich fehlgeschlagen: ${state.error}`);
+          } else {
+            console.log(
+              `Cookidoo-Abgleich: ${state.added} neu, ${state.updated} geändert, ` +
+                `${state.missing} verschwunden, ${state.failed} Fehler`
+            );
+          }
+        })
+        .catch((err) => console.warn(`Cookidoo-Abgleich fehlgeschlagen: ${err.message}`));
     run();
     setInterval(run, syncMinutes * 60 * 1000).unref();
   }

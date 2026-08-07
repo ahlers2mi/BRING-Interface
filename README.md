@@ -11,6 +11,7 @@ Web Interface für Bring APP
 - **Bewertungen** – nach dem Essen „lecker / gut / ok / mies" vergeben, oder ein Rezept als **rausgeflogen** markieren (gar nicht gekocht) bzw. mit **nie wieder** dauerhaft sperren.
 - **Gelernter Geschmack** – aus den Bewertungen entsteht ein Profil beliebter und unbeliebter Zutaten und Kategorien; der Würfel bevorzugt, was ankommt, und meidet, was durchgefallen ist.
 - **Mealie-Anbindung** (optional) – [Mealie](https://mealie.io) als Rezeptquelle: Rezepte dort pflegen, hier spiegeln; Bewertungen wandern als `rating`/`lastMade` zurück, der Wochenplan in Mealies Menüplan.
+- **Cookidoo-Anbindung** (optional) – Thermomix-Rezepte aus [Cookidoo](https://cookidoo.de) im Würfeltopf (Name, Zutaten, Zeiten, Link – gekocht wird am Gerät), und Cookidoos Einkaufsliste auf Knopfdruck nach Bring.
 - **Rezept-Import** – einzelne Rezepte per Link (Chefkoch und alle Seiten mit schema.org-Daten) oder **Massenimport von chefkoch.de** (z. B. 200 Rezepte auf einmal, im Hintergrund mit Fortschrittsanzeige).
 - **Reste-Küche** – eingeben, was noch im Kühlschrank liegt, und passende Rezepte nach Abdeckung sortiert finden; fehlende Zutaten wandern auf Wunsch direkt nach Bring.
 - **KI-Rezeptanalyse** – kompletten Rezepttext einfügen; ein KI-Modell (über [OpenRouter](https://openrouter.ai/)) extrahiert automatisch Name, Beschreibung und Zutaten (mit Mengen) zum Prüfen und Speichern.
@@ -155,7 +156,15 @@ docker run -d \
 | `MEALIE_PLAN_ENTRY_TYPE` | Mahlzeit für diese Einträge: `breakfast`, `lunch`, `dinner` (Standard), `side`. |
 | `MEALIE_RECIPE_URL` | Muster für den Link in die Mealie-Oberfläche (Standard `{base}/g/home/r/{slug}`). |
 | `MEALIE_PUBLIC_URL` | Adresse von Mealie **aus dem Browser** (für die Links). Fällt auf `MEALIE_BASE_URL`, dann `MEALIE_URL` zurück. |
-| `COMPOSE_PROFILES` | Nur `docker-compose.yml`: `mealie` startet Mealie als zweiten Container mit. |
+| `COMPOSE_PROFILES` | Nur `docker-compose.yml`: `mealie` startet Mealie mit, `cookidoo` die Cookidoo-Brücke (mehrere mit Komma). |
+| `COOKIDOO_URL` | Adresse der Cookidoo-Brücke, z. B. `http://cookidoo-bridge:8099`. Gesetzt = Cookidoo ist als zweite Quelle an. |
+| `COOKIDOO_TOKEN` | Gemeinsames Geheimnis zwischen App und Brücke (frei wählbar). |
+| `COOKIDOO_EMAIL`, `COOKIDOO_PASSWORD` | Zugangsdaten des Cookidoo-Abos – bekommt nur die Brücke. |
+| `COOKIDOO_COUNTRY`, `COOKIDOO_LANGUAGE` | Land/Sprache des Abos (Standard `de` / `de-DE`). |
+| `COOKIDOO_COLLECTIONS` | Welche Sammlungen in den Würfeltopf: `custom` (Standard), `managed`, `all`. |
+| `COOKIDOO_ONLY` | Optional auf Sammlungsnamen einschränken, z. B. `Wochenplan,Lieblinge`. |
+| `COOKIDOO_SYNC_MINUTES` | Abgleich-Intervall in Minuten (Standard 180). |
+| `COOKIDOO_DATA_PATH` | Ordner für die Sitzung der Brücke (leer = Volume `cookidoo-data`). |
 | `MEALIE_PORT`, `MEALIE_BASE_URL`, `MEALIE_VERSION`, `MEALIE_DEFAULT_EMAIL`, `PUID`, `PGID`, `TZ` | Nur für den mitgelieferten Mealie-Dienst (Port 9925, Image-Tag, erstes Konto, Zeitzone). |
 | `MEALIE_DATA_PATH` | Ordner auf der NAS für Mealies Daten (leer = benanntes Volume `mealie-data`). Muss `PUID:PGID` gehören. |
 | `IMPORT_DELAY_MS` | Pause zwischen den Abrufen beim Rezept-Import (Standard 250 ms – bitte nicht zu klein wählen). |
@@ -323,6 +332,62 @@ MEALIE_TOKEN=<Token aus "Manage Your API Tokens">
 > Der Link auf ein Rezept folgt `MEALIE_RECIPE_URL`
 > (Standard `{base}/g/home/r/{slug}`); ältere Mealie-Versionen brauchen
 > `{base}/recipe/{slug}`.
+
+## Cookidoo / Thermomix (optional)
+
+Thermomix-Rezepte kommen aus **Cookidoo** in den Würfeltopf: gespiegelt werden
+Name, Zutaten mit Mengen, Zeiten, Portionen, Bild und der Link zurück nach
+Cookidoo. Damit würfelt der Wochenplan sie mit und ihre Zutaten landen im
+Bring-Wocheneinkauf. Zusätzlich lässt sich **Cookidoos eigene Einkaufsliste**
+auf Knopfdruck nach Bring schieben.
+
+> **Cookidoo hat keine offizielle Schnittstelle.** Angesprochen werden die
+> nachgebauten Endpunkte, die auch die Home-Assistant-Integration benutzt
+> (Python-Paket [`cookidoo-api`](https://github.com/miaucl/cookidoo-api)).
+> Ändert Vorwerk etwas am Login, steht der Abgleich still – die App läuft
+> weiter, die gespiegelten Rezepte bleiben. Ein aktives Abo ist Voraussetzung.
+
+Was **nicht** übernommen wird: die Schritt-für-Schritt-Anleitung. Geführtes
+Kochen gibt Cookidoo nicht heraus, das bleibt in der App bzw. am Gerät – im
+Rezept steht deshalb nur ein Verweis. Eigene Rezepte („custom") bringen ihre
+Zubereitung mit.
+
+### Einrichten
+
+Weil die Anmeldung der fragile Teil ist, läuft sie in einem eigenen kleinen
+Container (`cookidoo-bridge/`) mit der gepflegten Bibliothek; die App spricht nur
+noch JSON mit ihm. Nur die Brücke kennt die Zugangsdaten, und nach außen ist kein
+Port offen.
+
+1. In den Stack-Variablen setzen:
+
+   ```env
+   COMPOSE_PROFILES=mealie,cookidoo      # cookidoo zu den bisherigen Profilen dazu
+   COOKIDOO_URL=http://cookidoo-bridge:8099
+   COOKIDOO_TOKEN=<frei gewähltes Geheimnis>
+   COOKIDOO_EMAIL=<Cookidoo-Konto>
+   COOKIDOO_PASSWORD=<Passwort>
+   COOKIDOO_COUNTRY=de
+   COOKIDOO_LANGUAGE=de-DE
+   COOKIDOO_COLLECTIONS=custom           # eigene Listen; managed = gekaufte, all = beides
+   ```
+
+2. Stack neu bauen (`docker compose up -d --build`, in Portainer „Update the
+   stack" mit *Re-pull and redeploy* aus).
+3. Prüfen: `curl "http://<NAS>:<PORT>/api/cookidoo/status?token=<API_TOKEN>"` –
+   dort stehen Konto, Abo und der letzte Abgleich. Im Rezepte-Tab erscheint die
+   Karte **„🍲 Cookidoo (Thermomix)"** mit Knopf zum Abgleichen.
+
+Abgeglichen wird beim Start und dann alle `COOKIDOO_SYNC_MINUTES` Minuten
+(Standard 180 – seltener als bei Mealie, weil die Brücke jedes Rezept einzeln
+abfragen muss). Mit `COOKIDOO_ONLY=Wochenplan,Lieblinge` lässt sich auf
+bestimmte Sammlungen einschränken. Verschwindet ein Rezept aus den Sammlungen,
+wird es wie bei Mealie nur als fehlend markiert – Bewertungen und Plan-Historie
+bleiben.
+
+> Die Zugangsdaten liegen als Umgebungsvariablen in der Stack. Wer das nicht
+> möchte, kann das Profil weglassen: ohne `COOKIDOO_URL` ist die ganze
+> Anbindung aus.
 
 ## Rezept-Import
 

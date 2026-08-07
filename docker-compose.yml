@@ -33,6 +33,13 @@ services:
       # den Dienstnamen und ist von außen nicht erreichbar).
       MEALIE_PUBLIC_URL: ${MEALIE_PUBLIC_URL:-}
       MEALIE_BASE_URL: ${MEALIE_BASE_URL:-}
+      # Cookidoo/Thermomix über den Brücken-Dienst unten (optional).
+      # Leer = aus. Mit Profil cookidoo: COOKIDOO_URL=http://cookidoo-bridge:8099
+      COOKIDOO_URL: ${COOKIDOO_URL:-}
+      COOKIDOO_TOKEN: ${COOKIDOO_TOKEN:-}
+      COOKIDOO_COLLECTIONS: ${COOKIDOO_COLLECTIONS:-custom}
+      COOKIDOO_ONLY: ${COOKIDOO_ONLY:-}
+      COOKIDOO_SYNC_MINUTES: ${COOKIDOO_SYNC_MINUTES:-180}
       # Rezept-Import (optional, Standardwerte reichen normalerweise)
       IMPORT_DELAY_MS: ${IMPORT_DELAY_MS:-250}
       IMPORT_CONCURRENCY: ${IMPORT_CONCURRENCY:-3}
@@ -82,6 +89,31 @@ services:
         limits:
           memory: 1000M
 
+  # ── Cookidoo-Brücke (optional) ─────────────────────────────────────────────
+  # Standardmäßig AUS. Einschalten mit COMPOSE_PROFILES=mealie,cookidoo und
+  #   COOKIDOO_URL=http://cookidoo-bridge:8099
+  # Cookidoo hat keine offizielle Schnittstelle; dieser Dienst kapselt die
+  # nachgebaute Anmeldung (Python-Bibliothek cookidoo-api). Kein Port nach
+  # außen – nur die App spricht mit ihm.
+  cookidoo-bridge:
+    profiles: ["cookidoo"]
+    build: ./cookidoo-bridge
+    pull_policy: build
+    container_name: cookidoo-bridge
+    restart: unless-stopped
+    environment:
+      COOKIDOO_EMAIL: ${COOKIDOO_EMAIL}
+      COOKIDOO_PASSWORD: ${COOKIDOO_PASSWORD}
+      COOKIDOO_COUNTRY: ${COOKIDOO_COUNTRY:-de}
+      COOKIDOO_LANGUAGE: ${COOKIDOO_LANGUAGE:-de-DE}
+      # Muss zu COOKIDOO_TOKEN der App passen
+      BRIDGE_TOKEN: ${COOKIDOO_TOKEN:-}
+      TZ: ${TZ:-Europe/Berlin}
+    volumes:
+      # Sitzungs-Kekse, damit nicht jede Anfrage neu anmeldet
+      - "${COOKIDOO_DATA_PATH:-cookidoo-data}:/data"
+
 volumes:
   bring-data:
   mealie-data:
+  cookidoo-data:

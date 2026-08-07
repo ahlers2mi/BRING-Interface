@@ -1,0 +1,4 @@
+# Nachgebaute Cookidoo-Schnittstelle (dieselbe Bibliothek wie die
+# Home-Assistant-Integration). aiohttp/aiofiles/isodate kommen als Abhängigkeit
+# mit – ein Web-Framework brauchen wir dadurch nicht.
+cookidoo-api==0.17.2

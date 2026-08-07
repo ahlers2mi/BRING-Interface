@@ -117,6 +117,7 @@ const LIST_SELECT_IDS = [
   'importListSelect',
   'planListSelect',
   'fridgeListSelect',
+  'cookidooListSelect',
 ];
 
 export function populateListSelects() {
