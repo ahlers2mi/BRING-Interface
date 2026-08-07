@@ -66,7 +66,10 @@ import {
   mealieAbout,
   mealieEnabled,
   mealieConfig,
+  mealieIdOf,
   mealieRecipeUrl,
+  pushPlanDatesToMealie,
+  pushPlanEntryToMealie,
   pushRatingToMealie,
   startChefkochToMealieJob,
   syncFromMealie,
@@ -679,6 +682,27 @@ function resolveDate(value) {
   return isValidIsoDate(value) ? value : null;
 }
 
+// Einen Tag so beschreiben, wie Mealie ihn braucht.
+function planPushPayload(date) {
+  const entry = getPlanEntry(date);
+  const recipe = entry?.recipe_id ? getRecipeById(entry.recipe_id) : null;
+  return {
+    date,
+    mealieId: mealieIdOf(recipe),
+    title: recipe ? recipe.name : '',
+    note: entry?.note || '',
+  };
+}
+
+// Änderungen am Plan nach Mealie schieben. Wie beim Bewerten absichtlich ohne
+// await: der Plan steht hier schon, und ein langsames oder abgeschaltetes Mealie
+// darf das Würfeln nicht ausbremsen.
+function syncPlanToMealie(dates) {
+  if (!mealieEnabled() || !mealieConfig().pushPlan) return;
+  const unique = [...new Set((Array.isArray(dates) ? dates : [dates]).filter(Boolean))];
+  pushPlanDatesToMealie(unique.map(planPushPayload)).catch(() => {});
+}
+
 app.get('/api/plan', (req, res) => {
   const week = resolveWeek(req.query.week);
   if (!week) return res.status(400).json({ error: 'Ungültige Woche.' });
@@ -696,12 +720,14 @@ app.post('/api/plan/roll', (req, res) => {
       return res.status(400).json({ error: 'Ungültiges Datum.' });
     }
     const results = rollDays(list, { overwrite: !onlyEmpty });
+    syncPlanToMealie(list);
     return res.json({ results, plan: buildWeekView(weekOf(list[0])) });
   }
 
   const week = resolveWeek(req.body?.week);
   if (!week) return res.status(400).json({ error: 'Ungültige Woche.' });
   const results = rollWeek(week, { onlyEmpty: Boolean(onlyEmpty) });
+  syncPlanToMealie(weekDates(week));
   res.json({ results, plan: buildWeekView(week) });
 });
 
@@ -725,6 +751,7 @@ app.put('/api/plan/:date', (req, res) => {
     note: req.body.note,
     status: req.body.status || 'planned',
   });
+  syncPlanToMealie(date);
   res.json({ entry, plan: buildWeekView(weekOf(date)) });
 });
 
@@ -732,7 +759,28 @@ app.delete('/api/plan/:date', (req, res) => {
   const date = resolveDate(req.params.date);
   if (!date) return res.status(400).json({ error: 'Ungültiges Datum.' });
   deletePlanEntry(date);
+  syncPlanToMealie(date);
   res.json({ success: true, plan: buildWeekView(weekOf(date)) });
+});
+
+// POST /api/plan/mealie – body: { week? }
+// Ganze Woche von Hand abgleichen (nach einem Ausfall oder erstmalig). Hier
+// wird gewartet, damit die Oberfläche eine belastbare Zahl anzeigen kann.
+app.post('/api/plan/mealie', async (req, res) => {
+  if (!mealieEnabled()) {
+    return res.status(400).json({ error: 'Mealie ist nicht konfiguriert.' });
+  }
+  if (!mealieConfig().pushPlan) {
+    return res.status(400).json({ error: 'Menüplan-Abgleich ist abgeschaltet (MEALIE_PUSH_PLAN=0).' });
+  }
+  const week = resolveWeek(req.body?.week);
+  if (!week) return res.status(400).json({ error: 'Ungültige Woche.' });
+  try {
+    const result = await pushPlanDatesToMealie(weekDates(week).map(planPushPayload));
+    res.json({ week, ...result });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
 });
 
 // POST /api/plan/:date/rate – body: { rating } oder { kind, stars, comment }
@@ -1199,10 +1247,12 @@ function handleFhemRoll(req, res) {
       const week = resolveWeek(params.week);
       if (!week) return res.status(400).json({ error: 'Ungültige Woche.' });
       rollWeek(week, { onlyEmpty });
+      syncPlanToMealie(weekDates(week));
     } else {
       const date = resolveDate(params.date);
       if (!date) return res.status(400).json({ error: 'Ungültiges Datum.' });
       rollDays([date], { overwrite: !onlyEmpty });
+      syncPlanToMealie(date);
     }
     res.json(fhemPlanPayload());
   } catch (err) {

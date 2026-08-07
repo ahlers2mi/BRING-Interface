@@ -16,6 +16,10 @@ const TOKEN = 'mealie-token';
 
 const calls = { list: 0, detail: 0, patch: [], createUrl: [], deleted: [] };
 
+// Mealies Menüplan-Kalender
+const mealplans = [];
+let mealplanId = 0;
+
 // Zwei Rezepte, wie Mealie sie liefert: eines mit strukturierten Zutaten,
 // eines mit Freitext-Zutaten (food/unit leer).
 const recipes = new Map([
@@ -106,6 +110,47 @@ const mealie = http.createServer((req, res) => {
   };
 
   if (url.pathname === '/api/app/about') return json({ version: 'v2.0.0-test' });
+
+  // ── Menüplan (ab Mealie v2 unter /api/households) ──────────────────────────
+  const readBody = (fn) => {
+    let body = '';
+    req.on('data', (c) => (body += c));
+    req.on('end', () => fn(JSON.parse(body || '{}')));
+  };
+
+  if (url.pathname === '/api/households/mealplans') {
+    if (req.method === 'GET') {
+      const from = url.searchParams.get('start_date');
+      const to = url.searchParams.get('end_date');
+      const items = mealplans.filter(
+        (e) => (!from || e.date >= from) && (!to || e.date <= to)
+      );
+      return json({ items, page: 1, total: items.length });
+    }
+    if (req.method === 'POST') {
+      return readBody((payload) => {
+        const entry = { id: ++mealplanId, householdId: 'h1', userId: 'u1', ...payload };
+        mealplans.push(entry);
+        return json(entry, 201);
+      });
+    }
+  }
+
+  const planId = /^\/api\/households\/mealplans\/(\d+)$/.exec(url.pathname)?.[1];
+  if (planId) {
+    const index = mealplans.findIndex((e) => String(e.id) === planId);
+    if (index < 0) return json({ detail: 'not found' }, 404);
+    if (req.method === 'DELETE') {
+      const [gone] = mealplans.splice(index, 1);
+      return json(gone);
+    }
+    if (req.method === 'PUT') {
+      return readBody((payload) => {
+        mealplans[index] = { ...mealplans[index], ...payload, id: mealplans[index].id };
+        return json(mealplans[index]);
+      });
+    }
+  }
 
   if (url.pathname === '/api/recipes' && req.method === 'GET') {
     calls.list += 1;
@@ -717,4 +762,147 @@ test('liefert die Chefkoch-API auch nichts, bleibt es beim Teaser', async () => 
   } finally {
     globalThis.fetch = realFetch;
   }
+});
+
+// ── Menüplan nach Mealie ──────────────────────────────────────────────────────
+
+// Der Push läuft in den Routen absichtlich ohne await – deshalb warten.
+async function waitFor(check, what) {
+  for (let i = 0; i < 60; i += 1) {
+    if (check()) return;
+    await new Promise((r) => setTimeout(r, 40));
+  }
+  assert.fail(`Zeitüberschreitung beim Warten auf: ${what}`);
+}
+
+// Ein Rezept, das wirklich aus Mealie stammt – nur dann gibt es eine UUID zum
+// Verknüpfen. Vorherige Tests löschen Rezepte, deshalb frisch nachsehen.
+async function aMealieRecipe(skipId = null) {
+  const list = await api('/api/recipes');
+  const hit = list.json.find(
+    (r) => /^mealie:/.test(r.external_id || '') && !r.source_missing && r.id !== skipId
+  );
+  assert.ok(hit, 'Rezept aus Mealie erwartet');
+  return hit;
+}
+
+test('ein geplanter Tag landet in Mealies Menüplan', async () => {
+  mealplans.length = 0;
+  const recipe = await aMealieRecipe();
+  const res = await api(`/api/plan/${todayIso}`, {
+    method: 'PUT',
+    body: { recipe_id: recipe.id },
+  });
+  assert.equal(res.status, 200, res.text);
+
+  await waitFor(() => mealplans.length === 1, 'Eintrag in Mealie');
+  const entry = mealplans[0];
+  assert.equal(entry.date, todayIso);
+  assert.equal(entry.entryType, 'dinner');
+  // Rezept per UUID verknüpft, nicht als Freitext.
+  assert.equal(entry.recipeId, recipe.external_id.replace('mealie:', ''));
+  assert.equal(entry.title, '');
+});
+
+test('ein anderes Gericht überschreibt den Eintrag, statt einen zweiten anzulegen', async () => {
+  const before = mealplans[0].id;
+  const other = await aMealieRecipe(mealplans[0].recipeId);
+  const res = await api(`/api/plan/${todayIso}`, {
+    method: 'PUT',
+    body: { recipe_id: other.id },
+  });
+  assert.equal(res.status, 200, res.text);
+
+  const wanted = other.external_id.replace('mealie:', '');
+  await waitFor(() => mealplans[0]?.recipeId === wanted, 'aktualisierter Eintrag');
+  assert.equal(mealplans.length, 1);
+  assert.equal(mealplans[0].id, before, 'derselbe Mealie-Eintrag wird weiterverwendet');
+});
+
+test('fremde Mahlzeiten in Mealie bleiben unangetastet', async () => {
+  mealplans.length = 0;
+  mealplans.push({ id: ++mealplanId, date: todayIso, entryType: 'breakfast', title: 'Müsli' });
+
+  const res = await api('/api/plan/mealie', { method: 'POST', body: { week: 'current' } });
+  assert.equal(res.status, 200, res.text);
+  assert.equal(res.json.failed, 0);
+  assert.equal(res.json.pushed, 7, 'alle sieben Tage abgearbeitet');
+
+  const breakfast = mealplans.filter((e) => e.entryType === 'breakfast');
+  assert.equal(breakfast.length, 1, 'Frühstück darf nicht verschwinden');
+  assert.equal(breakfast[0].title, 'Müsli');
+
+  // Leere Tage bekommen keinen Eintrag – abgeglichen wird gegen den Plan.
+  const plan = await api('/api/plan?week=current');
+  const dinners = mealplans.filter((e) => e.entryType === 'dinner');
+  assert.equal(dinners.length, plan.json.planned, 'je geplanten Tag genau ein Abendessen');
+  assert.equal(new Set(dinners.map((e) => e.date)).size, dinners.length, 'keine Doppelten');
+});
+
+test('Tag leeren entfernt den Eintrag auch in Mealie', async () => {
+  const res = await api(`/api/plan/${todayIso}`, { method: 'DELETE' });
+  assert.equal(res.status, 200, res.text);
+
+  await waitFor(
+    () => !mealplans.some((e) => e.date === todayIso && e.entryType === 'dinner'),
+    'gelöschter Eintrag'
+  );
+  // Das Frühstück steht weiterhin.
+  assert.ok(mealplans.some((e) => e.date === todayIso && e.entryType === 'breakfast'));
+});
+
+test('ältere Mealie-Versionen: Rückfall auf /api/groups/mealplans', async () => {
+  const { pushPlanEntryToMealie, resetMealiePlanPath } = await import('../lib/mealie.js');
+  resetMealiePlanPath();
+  const seen = [];
+  const fakeFetch = async (input, init = {}) => {
+    const url = new URL(String(input));
+    seen.push(`${init.method || 'GET'} ${url.pathname}`);
+    if (url.pathname.startsWith('/api/households/')) {
+      return new Response(JSON.stringify({ detail: 'Not Found' }), { status: 404 });
+    }
+    if (init.method === 'POST') {
+      return new Response(JSON.stringify({ id: 7 }), { status: 201 });
+    }
+    return new Response(JSON.stringify({ items: [] }), { status: 200 });
+  };
+
+  const ok = await pushPlanEntryToMealie(
+    { date: '2026-08-10', mealieId: 'uuid-1' },
+    { fetchImpl: fakeFetch }
+  );
+  resetMealiePlanPath();
+
+  assert.equal(ok, true);
+  assert.ok(seen.includes('GET /api/households/mealplans'), 'neuer Pfad wird zuerst probiert');
+  assert.ok(seen.includes('POST /api/groups/mealplans'), 'danach der alte Pfad');
+});
+
+test('Rezept ohne Mealie-Herkunft landet als Titel im Kalender', async () => {
+  const { pushPlanEntryToMealie, resetMealiePlanPath, mealieIdOf } = await import(
+    '../lib/mealie.js'
+  );
+  assert.equal(mealieIdOf({ external_id: 'mealie:abc' }), 'abc');
+  assert.equal(mealieIdOf({ external_id: 'chefkoch:123' }), '');
+  assert.equal(mealieIdOf(null), '');
+
+  resetMealiePlanPath();
+  let posted = null;
+  const fakeFetch = async (input, init = {}) => {
+    if ((init.method || 'GET') === 'POST') {
+      posted = JSON.parse(init.body);
+      return new Response(JSON.stringify({ id: 9 }), { status: 201 });
+    }
+    return new Response(JSON.stringify({ items: [] }), { status: 200 });
+  };
+
+  await pushPlanEntryToMealie(
+    { date: '2026-08-11', title: 'Omas Grünkohl', note: 'von Hand gewählt' },
+    { fetchImpl: fakeFetch }
+  );
+  resetMealiePlanPath();
+
+  assert.equal(posted.title, 'Omas Grünkohl');
+  assert.equal(posted.recipeId, null);
+  assert.equal(posted.text, 'von Hand gewählt');
 });

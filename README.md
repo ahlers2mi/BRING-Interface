@@ -10,7 +10,7 @@ Web Interface für Bring APP
 - **Wochenplan mit Würfelfunktion** – einzelne Tage oder die ganze Woche auswürfeln lassen, Tage von Hand belegen und die Zutaten der kompletten Woche in einem Schritt nach Bring schieben.
 - **Bewertungen** – nach dem Essen „lecker / gut / ok / mies" vergeben, oder ein Rezept als **rausgeflogen** markieren (gar nicht gekocht) bzw. mit **nie wieder** dauerhaft sperren.
 - **Gelernter Geschmack** – aus den Bewertungen entsteht ein Profil beliebter und unbeliebter Zutaten und Kategorien; der Würfel bevorzugt, was ankommt, und meidet, was durchgefallen ist.
-- **Mealie-Anbindung** (optional) – [Mealie](https://mealie.io) als Rezeptquelle: Rezepte dort pflegen, hier spiegeln; Bewertungen wandern als `rating`/`lastMade` zurück.
+- **Mealie-Anbindung** (optional) – [Mealie](https://mealie.io) als Rezeptquelle: Rezepte dort pflegen, hier spiegeln; Bewertungen wandern als `rating`/`lastMade` zurück, der Wochenplan in Mealies Menüplan.
 - **Rezept-Import** – einzelne Rezepte per Link (Chefkoch und alle Seiten mit schema.org-Daten) oder **Massenimport von chefkoch.de** (z. B. 200 Rezepte auf einmal, im Hintergrund mit Fortschrittsanzeige).
 - **Reste-Küche** – eingeben, was noch im Kühlschrank liegt, und passende Rezepte nach Abdeckung sortiert finden; fehlende Zutaten wandern auf Wunsch direkt nach Bring.
 - **KI-Rezeptanalyse** – kompletten Rezepttext einfügen; ein KI-Modell (über [OpenRouter](https://openrouter.ai/)) extrahiert automatisch Name, Beschreibung und Zutaten (mit Mengen) zum Prüfen und Speichern.
@@ -151,6 +151,8 @@ docker run -d \
 | `MEALIE_TOKEN` | API-Token aus Mealie („Manage Your API Tokens"). |
 | `MEALIE_SYNC_MINUTES` | Abgleich-Intervall in Minuten (Standard 15). |
 | `MEALIE_PUSH_RATINGS` | Bewertungen als `rating`/`lastMade` nach Mealie zurückschreiben (Standard an, `0` = aus). |
+| `MEALIE_PUSH_PLAN` | Wochenplan in Mealies Menüplan schreiben (Standard an, `0` = aus). |
+| `MEALIE_PLAN_ENTRY_TYPE` | Mahlzeit für diese Einträge: `breakfast`, `lunch`, `dinner` (Standard), `side`. |
 | `MEALIE_RECIPE_URL` | Muster für den Link in die Mealie-Oberfläche (Standard `{base}/g/home/r/{slug}`). |
 | `MEALIE_PUBLIC_URL` | Adresse von Mealie **aus dem Browser** (für die Links). Fällt auf `MEALIE_BASE_URL`, dann `MEALIE_URL` zurück. |
 | `COMPOSE_PROFILES` | Nur `docker-compose.yml`: `mealie` startet Mealie als zweiten Container mit. |
@@ -227,6 +229,16 @@ Wochenplan und FHEM weiter.
   nicht), werden aber als `rating` und `lastMade` nach Mealie zurückgeschrieben –
   best-effort, ein Fehler dort verhindert die Bewertung hier nicht.
   Abschaltbar mit `MEALIE_PUSH_RATINGS=0`.
+- **Der Wochenplan wandert in Mealies Menüplan-Kalender**, einseitig: gewürfelt
+  wird hier (Gewichte, Bewertungen und Wiederholungsdämpfung kennt Mealie nicht),
+  jede Änderung – würfeln, Rezept von Hand setzen, Tag leeren, auch über die
+  FHEM-Route – schreibt den Tag dort nach. Was in Mealie von Hand eingetragen
+  wird, kommt **nicht** zurück; sonst bräuchte es eine Regel, wer bei
+  gleichzeitiger Änderung gewinnt. Einträge mit anderer Mahlzeit (Frühstück,
+  Mittag) bleiben unangetastet, unsere Tage liegen unter
+  `MEALIE_PLAN_ENTRY_TYPE` (Standard `dinner`). War Mealie beim Würfeln nicht
+  erreichbar, holt der Knopf **„📅 Woche nach Mealie"** im Wochenplan-Tab den
+  Abgleich nach. Abschaltbar mit `MEALIE_PUSH_PLAN=0`.
 - **Verwaiste Einträge aufräumen:** die Mealie-Karte meldet, wie viele Rezepte in
   Mealie gelöscht wurden und hier noch liegen, und räumt sie auf Knopfdruck weg –
   standardmäßig nur die ohne Bewertungen und Plan-Einträge, auf ausdrücklichen

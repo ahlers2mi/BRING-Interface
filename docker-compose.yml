@@ -26,6 +26,8 @@ services:
       MEALIE_TOKEN: ${MEALIE_TOKEN}
       MEALIE_SYNC_MINUTES: ${MEALIE_SYNC_MINUTES:-15}
       MEALIE_PUSH_RATINGS: ${MEALIE_PUSH_RATINGS:-1}
+      MEALIE_PUSH_PLAN: ${MEALIE_PUSH_PLAN:-1}
+      MEALIE_PLAN_ENTRY_TYPE: ${MEALIE_PLAN_ENTRY_TYPE:-dinner}
       MEALIE_RECIPE_URL: ${MEALIE_RECIPE_URL:-}
       # Adresse für Links im Browser (MEALIE_URL zeigt bei gemeinsamer Stack auf
       # den Dienstnamen und ist von außen nicht erreichbar).
