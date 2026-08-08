@@ -18,11 +18,28 @@ import { applyCookidooMode, initCookidoo } from './cookidoo.js';
 
 // ── Status ────────────────────────────────────────────────────────────────────
 
+// „v1.4.0 · Stand 08.08. 11:07" – daran erkennt man, ob im Container wirklich
+// der neue Stand läuft. Genau das war beim Bauen schon mehrfach die Frage.
+function renderVersion(status) {
+  const badge = el('versionBadge');
+  if (!badge) return;
+  const stand = status.builtAt
+    ? new Date(status.builtAt).toLocaleString('de-DE', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '';
+  badge.textContent = `v${status.version || '?'}${stand ? ` · ${stand}` : ''}`;
+}
+
 async function loadStatus() {
   const badge = el('statusBadge');
   try {
     const status = await apiFetch('/api/status');
     state.status = status;
+    renderVersion(status);
     if (status.authEnabled) el('logoutLink').style.display = '';
     if (status.loggedIn) {
       badge.textContent = `✓ ${status.mail}`;

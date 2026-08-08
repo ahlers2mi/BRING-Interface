@@ -101,11 +101,17 @@ Zwei Fallen beim Aktualisieren:
   sudo docker compose -p <stackname> --project-directory "$S" --env-file "$S/stack.env" up -d --build
   ```
 
-Woran man erkennt, dass wirklich der neue Stand läuft:
+Woran man erkennt, dass wirklich der neue Stand läuft: **in der Kopfzeile der App
+steht Version und Stand** (`v1.4.0 · 08.08., 11:19`) – die Version aus der
+`package.json`, der Zeitstempel von der `server.js` im Image. Steht dort ein
+alter Stand, hat der Build den neuen Commit nicht gesehen. Auf der
+Wandtablet-Seite steht die Version unten klein.
+
+Per Kommandozeile geht es auch:
 
 ```bash
+curl -s http://<NAS>:<PORT>/api/status | grep -o '"version":"[^"]*"'
 docker exec bring-interface printenv API_TOKEN     # Token da?
-docker exec bring-interface grep -c api/fhem server.js   # > 0 = Wochenplan drin
 ```
 
 ```bash

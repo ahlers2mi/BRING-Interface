@@ -713,3 +713,12 @@ details.log pre {
 @media (max-width: 520px) {
   .item-row .item-amount { flex-basis: 5.5rem; }
 }
+
+/* Version/Stand in der Kopfzeile – bewusst unauffällig, aber immer sichtbar. */
+.status-badge.version {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.72rem;
+  opacity: 0.85;
+}

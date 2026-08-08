@@ -219,6 +219,18 @@ function busy(btn, on) {
 
 // ── Aktionen ──────────────────────────────────────────────────────────────────
 
+// Version/Stand auch hier – am Wandtablet merkt man am schnellsten, wenn ein
+// alter Stand läuft.
+async function showVersion() {
+  try {
+    const status = await api('/api/status');
+    const node = document.getElementById('version');
+    if (node) node.textContent = `v${status.version || '?'}`;
+  } catch {
+    /* nicht wichtig genug für eine Meldung */
+  }
+}
+
 async function load(target = week) {
   try {
     view = await api(`/api/plan?week=${encodeURIComponent(target)}`);
@@ -300,6 +312,7 @@ el('shoppingBtn').addEventListener('click', async (e) => {
 
 tick();
 setInterval(tick, 10000);
+showVersion();
 load('current');
 // Regelmäßig nachladen, damit das Tablet nicht auf gestern stehen bleibt.
 setInterval(() => load(week), REFRESH_MS);

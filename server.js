@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import Bring from 'bring-shopping';
@@ -89,6 +90,30 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
+
+// ── Version / Stand ───────────────────────────────────────────────────────────
+//
+// Zwei Angaben, weil beide für sich lügen können: die Version aus package.json
+// sagt, welcher Funktionsstand gemeint ist, der Zeitstempel von server.js sagt,
+// wann der Code wirklich in das Image gekommen ist. Genau das ist die Frage,
+// wenn im Container noch ein alter Stand läuft.
+const BUILD = (() => {
+  let version = 'unbekannt';
+  try {
+    version = JSON.parse(
+      fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8')
+    ).version;
+  } catch {
+    /* ohne package.json bleibt es bei "unbekannt" */
+  }
+  let builtAt = '';
+  try {
+    builtAt = fs.statSync(path.join(__dirname, 'server.js')).mtime.toISOString();
+  } catch {
+    /* egal */
+  }
+  return { version, builtAt };
+})();
 const PORT = process.env.PORT || 3000;
 
 app.set('trust proxy', true); // korrekte HTTPS-Erkennung hinter Reverse Proxy
@@ -357,6 +382,8 @@ app.put('/api/preferences', (req, res) => {
 
 app.get('/api/status', async (_req, res) => {
   const base = {
+    version: BUILD.version,
+    builtAt: BUILD.builtAt,
     authEnabled,
     apiTokenEnabled,
     aiEnabled: Boolean(process.env.OPENROUTER_API_KEY),
