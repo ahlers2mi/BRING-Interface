@@ -204,12 +204,21 @@ async def collections(request: web.Request) -> dict:
     pages = max(1, min(20, int(request.query.get("pages", "3"))))
     result: list[dict] = []
 
+    seen: set[str] = set()
+
     async def collect(fn: str, label: str) -> None:
         for page in range(pages):
             items = await client.call(fn, page)
             if not items:
                 break
-            for coll in items:
+            fresh = [coll for coll in items if coll.id not in seen]
+            # Cookidoo liefert die Sammlungen auch dann komplett, wenn man eine
+            # zweite Seite anfragt – ohne diesen Abbruch stünde alles doppelt
+            # und dreifach in der Liste.
+            if not fresh:
+                break
+            for coll in fresh:
+                seen.add(coll.id)
                 result.append(
                     {
                         "id": coll.id,

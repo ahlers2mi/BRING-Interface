@@ -109,21 +109,43 @@ function formPayload() {
 
 // ── Liste ─────────────────────────────────────────────────────────────────────
 
+// Woher ein Rezept ursprünglich kommt. `source` ist der Weg zu uns (fast alles
+// läuft über Mealie) – interessant ist aber der Anbieter dahinter.
+export function providerOf(recipe) {
+  if (recipe.source === 'cookidoo') return 'cookidoo';
+  if (/chefkoch\.de/i.test(recipe.source_url || '')) return 'chefkoch';
+  return 'other';
+}
+
+export const PROVIDER_LABEL = {
+  cookidoo: '🍲 Cookidoo',
+  chefkoch: '🥄 Chefkoch',
+  other: 'eigene Quelle',
+};
+
+const PROVIDER_MODES = new Set(['chefkoch', 'cookidoo', 'other']);
+
 function filteredRecipes() {
   const query = (el('recipeSearch')?.value || '').trim().toLowerCase();
   const mode = el('recipeFilter')?.value || 'all';
 
   return state.recipes.filter((r) => {
-    if (mode === 'favourites' && !(r.rating_count > 0 && Number(r.avg_stars) >= 4)) {
-      return false;
+    // Anbieter-Filter zeigt alles dieser Herkunft – auch Gesperrtes und
+    // Unvollständiges, sonst sucht man sich zu Tode.
+    if (PROVIDER_MODES.has(mode)) {
+      if (providerOf(r) !== mode) return false;
+    } else {
+      if (mode === 'favourites' && !(r.rating_count > 0 && Number(r.avg_stars) >= 4)) {
+        return false;
+      }
+      if (mode === 'unrated' && r.rating_count > 0) return false;
+      if (mode === 'blocked' && !r.blocked) return false;
+      if (mode === 'missing' && !r.source_missing) return false;
+      if (mode === 'incomplete' && !r.incomplete) return false;
+      if (mode !== 'blocked' && r.blocked && mode !== 'all') return false;
+      if (mode !== 'missing' && r.source_missing && mode !== 'all') return false;
+      if (mode !== 'incomplete' && r.incomplete && mode !== 'all') return false;
     }
-    if (mode === 'unrated' && r.rating_count > 0) return false;
-    if (mode === 'blocked' && !r.blocked) return false;
-    if (mode === 'missing' && !r.source_missing) return false;
-    if (mode === 'incomplete' && !r.incomplete) return false;
-    if (mode !== 'blocked' && r.blocked && mode !== 'all') return false;
-    if (mode !== 'missing' && r.source_missing && mode !== 'all') return false;
-    if (mode !== 'incomplete' && r.incomplete && mode !== 'all') return false;
     if (!query) return true;
     const haystack = [
       r.name,
@@ -212,7 +234,9 @@ function buildRecipeCard(recipe) {
   }
   if (recipe.source_url) {
     meta.push(
-      `🔗 <a href="${escHtml(recipe.source_url)}" target="_blank" rel="noopener noreferrer">Quelle</a>`
+      `🔗 <a href="${escHtml(recipe.source_url)}" target="_blank" rel="noopener noreferrer">${
+        PROVIDER_LABEL[providerOf(recipe)] || 'Quelle'
+      }</a>`
     );
   }
 

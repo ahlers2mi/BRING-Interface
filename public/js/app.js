@@ -77,6 +77,12 @@ function initTabs() {
       el(`tab-${btn.dataset.tab}`).classList.add('active');
       if (btn.dataset.tab === 'plan') loadPlan();
       if (btn.dataset.tab === 'recipes') loadTaste();
+      // Beim Öffnen des Quellen-Tabs den Zustand von Mealie und Cookidoo frisch
+      // holen – dort steht, wann zuletzt abgeglichen wurde.
+      if (btn.dataset.tab === 'import') {
+        applyMealieMode();
+        applyCookidooMode();
+      }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     });
   });
