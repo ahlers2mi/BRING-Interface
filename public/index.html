@@ -128,6 +128,19 @@
       </div>
 
       <div class="form-group" style="margin-top:1rem;">
+        <label for="householdServings">Für wie viele wird eingekauft?</label>
+        <div class="inline-fields">
+          <input type="number" id="householdServings" min="0" max="20" step="0.5"
+            style="max-width:7rem;" />
+          <span class="hint">
+            Portionen. Rezepte stehen meist auf 4 – die Mengen werden beim
+            Übertragen nach Bring umgerechnet. 0 = Mengen unverändert lassen.
+          </span>
+        </div>
+        <div id="servingsResult"></div>
+      </div>
+
+      <div class="form-group">
         <label for="planListSelect">Bring-Liste für den Wocheneinkauf</label>
         <select id="planListSelect">
           <option value="">– Liste wählen –</option>
@@ -153,8 +166,10 @@
         Was in den letzten Wochen schon auf dem Tisch stand, wird seltener gewürfelt,
         und innerhalb einer Woche wiederholt sich möglichst kein Gericht.
         Zusätzlich zählen Zutaten und Kategorien, die bei uns gut ankommen
-        (siehe „Das mögen wir" im Tab Rezepte). Gekochte Tage bleiben beim
-        Neuwürfeln unangetastet.
+        (siehe „Das mögen wir" im Tab Rezepte). Unter der Woche kommen kurze
+        Rezepte deutlich häufiger, am Wochenende dürfen es die aufwendigen sein –
+        Rezepte ohne Zeitangabe werden dabei nicht benachteiligt.
+        Gekochte Tage und Reste-Tage (🍲) bleiben beim Neuwürfeln unangetastet.
       </p>
     </div>
 

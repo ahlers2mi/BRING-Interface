@@ -35,11 +35,13 @@ import {
 import {
   buildWeekView,
   fridgeSearch,
+  householdServings,
   rollDays,
   rollWeek,
   tasteSummary,
   weekShoppingItems,
 } from './lib/mealplan.js';
+import { scaleFactor, scaleIngredients } from './lib/scale.js';
 import {
   isValidIsoDate,
   todayIso,
@@ -369,15 +371,31 @@ function parseItems(text) {
 
 // ── Einstellungen (zuletzt benutzte Liste merken) ──────────────────────────────
 
+function preferences() {
+  return {
+    lastListUuid: getSetting('lastListUuid'),
+    // Für wie viele Portionen eingekauft wird. 0/leer = Mengen unverändert
+    // übernehmen, wie es vorher war.
+    householdServings: householdServings(),
+  };
+}
+
 app.get('/api/preferences', (_req, res) => {
-  res.json({ lastListUuid: getSetting('lastListUuid') });
+  res.json(preferences());
 });
 
 app.put('/api/preferences', (req, res) => {
   if (typeof req.body.lastListUuid === 'string') {
     setSetting('lastListUuid', req.body.lastListUuid);
   }
-  res.json({ lastListUuid: getSetting('lastListUuid') });
+  if (req.body.householdServings !== undefined) {
+    const value = Number(req.body.householdServings);
+    if (!Number.isFinite(value) || value < 0 || value > 20) {
+      return res.status(400).json({ error: 'Portionen müssen zwischen 0 und 20 liegen.' });
+    }
+    setSetting('householdServings', String(value));
+  }
+  res.json(preferences());
 });
 
 app.get('/api/status', async (_req, res) => {
@@ -596,14 +614,19 @@ app.post('/api/recipes/:id/import', async (req, res) => {
     const { listUuid } = req.body;
     if (!listUuid) return res.status(400).json({ error: 'listUuid fehlt.' });
 
+    // Mengen auf die Haushaltsgröße umrechnen (Rezepte stehen meist auf 4
+    // Portionen). Ohne Portionsangabe am Rezept bleibt alles, wie es ist.
+    const factor = scaleFactor(recipe.servings, householdServings());
+    const zutaten = scaleIngredients(realIngredients(recipe.ingredients), factor);
+
     const client = await getBringClient();
     const imported = [];
-    for (const ing of recipe.ingredients) {
+    for (const ing of zutaten) {
       await client.saveItem(listUuid, ing.name, ing.amount || '');
       imported.push(ing.name);
     }
     setSetting('lastListUuid', listUuid);
-    res.json({ imported });
+    res.json({ imported, scaled: Boolean(factor) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -866,6 +889,58 @@ app.post('/api/plan/mealie', async (req, res) => {
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
+});
+
+// POST /api/plan/:date/move – body: { to: 'tomorrow' | 'YYYY-MM-DD' }
+// Heute wird es doch nichts: das Gericht auf einen anderen Tag schieben, statt
+// es neu zu würfeln und zu verlieren.
+app.post('/api/plan/:date/move', (req, res) => {
+  const from = resolveDate(req.params.date);
+  const to = resolveDate(req.body?.to || 'tomorrow');
+  if (!from || !to) return res.status(400).json({ error: 'Ungültiges Datum.' });
+  if (from === to) return res.status(400).json({ error: 'Quelle und Ziel sind derselbe Tag.' });
+
+  const entry = getPlanEntry(from);
+  if (!entry?.recipe_id) {
+    return res.status(400).json({ error: 'Für diesen Tag ist nichts eingeplant.' });
+  }
+  const target = getPlanEntry(to);
+  if (target?.status === 'cooked') {
+    return res.status(400).json({ error: 'Der Zieltag ist schon gekocht.' });
+  }
+
+  setPlanEntry({
+    date: to,
+    recipe_id: entry.recipe_id,
+    note: entry.note,
+    status: 'planned',
+    origin: entry.origin || 'app',
+  });
+  deletePlanEntry(from);
+  syncPlanToMealie([from, to]);
+  res.json({ from, to, plan: buildWeekView(weekOf(to)) });
+});
+
+// POST /api/plan/:date/status – body: { status: planned|cooked|skipped|leftovers }
+// „leftovers" ist der Reste-Tag: da ist noch was da, der Würfel lässt ihn in Ruhe.
+const PLAN_STATUS = new Set(['planned', 'cooked', 'skipped', 'leftovers']);
+
+app.post('/api/plan/:date/status', (req, res) => {
+  const date = resolveDate(req.params.date);
+  if (!date) return res.status(400).json({ error: 'Ungültiges Datum.' });
+  const status = String(req.body?.status || '');
+  if (!PLAN_STATUS.has(status)) {
+    return res.status(400).json({ error: `Unbekannter Status: ${status}` });
+  }
+
+  const entry = getPlanEntry(date);
+  if (!entry) {
+    // Reste ohne Rezept sind erlaubt – „heute gibt es den Rest von gestern".
+    setPlanEntry({ date, recipe_id: null, note: 'Reste', status });
+  } else {
+    updatePlanStatus(date, status);
+  }
+  res.json({ plan: buildWeekView(weekOf(date)) });
 });
 
 // POST /api/plan/:date/rate – body: { rating } oder { kind, stars, comment }

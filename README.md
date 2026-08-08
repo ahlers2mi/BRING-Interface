@@ -8,7 +8,9 @@ Web Interface für Bring APP
 - **Bring-Liste bearbeiten** – die aktuelle Liste direkt in der App: Artikel hinzufügen, Mengen ändern, abhaken (wie in der Bring-App) oder ganz entfernen; zuletzt Gekauftes per Tipp zurück auf die Liste.
 - **KI-Hilfe für die Einkaufsliste** – unsauberen Freitext aufräumen lassen oder ein **Foto** der Einkaufsliste hochladen; die KI (über OpenRouter) erkennt die Artikel automatisch.
 - **Rezeptverwaltung** – Rezepte mit Zutaten, Tags, Portionen, Link, Zubereitung und voraussichtlicher Zeit speichern und per Klick in eine Bring-Liste importieren.
-- **Wochenplan mit Würfelfunktion** – einzelne Tage oder die ganze Woche auswürfeln lassen, Tage von Hand belegen und die Zutaten der kompletten Woche in einem Schritt nach Bring schieben.
+- **Wochenplan mit Würfelfunktion** – einzelne Tage oder die ganze Woche auswürfeln lassen, Tage von Hand belegen, auf einen anderen Tag verschieben und die Zutaten der kompletten Woche in einem Schritt nach Bring schieben.
+- **Aufwand zählt mit** – unter der Woche kommen kurze Rezepte deutlich häufiger, am Wochenende die aufwendigen; Tage mit **Resten** lässt der Würfel in Ruhe.
+- **Mengen für den Haushalt** – Rezepte stehen meist auf 4 Portionen; einmal eintragen, für wie viele gekocht wird, und die Mengen wandern umgerechnet nach Bring.
 - **Bewertungen** – nach dem Essen „lecker / gut / ok / mies" vergeben, oder ein Rezept als **rausgeflogen** markieren (gar nicht gekocht) bzw. mit **nie wieder** dauerhaft sperren.
 - **Gelernter Geschmack** – aus den Bewertungen entsteht ein Profil beliebter und unbeliebter Zutaten und Kategorien; der Würfel bevorzugt, was ankommt, und meidet, was durchgefallen ist.
 - **Mealie-Anbindung** (optional) – [Mealie](https://mealie.io) als Rezeptquelle: Rezepte dort pflegen, hier spiegeln; Bewertungen wandern als `rating`/`lastMade` zurück, der Wochenplan wird mit Mealies Menüplan abgeglichen (beide Richtungen).
@@ -157,6 +159,7 @@ docker run -d \
 | `APP_SECRET` | Optional: Schlüssel zum Signieren der Session-Cookies (sonst aus `APP_PASSWORD` abgeleitet). |
 | `API_TOKEN` | Token für Maschinen-Zugriffe auf `/api/…` (FHEM, Skripte) – als `?token=…`, Header `X-API-Token` oder `Authorization: Bearer …`. Leer = aus. Am besten ohne `&`, `#` oder `+`, damit der Wert unverändert in eine URL passt. |
 | `HOST_PORT` | Nur `docker-compose.yml`: Port auf der NAS (Standard 8095) – im Container bleibt es 3000. |
+| `PLAN_QUICK_MINUTES` | Ab wann ein Rezept werktags als „dauert lange" gilt (Standard 40). |
 | `MEALIE_URL` | Basis-URL einer Mealie-Instanz. Gesetzt = Mealie ist die Rezeptquelle (siehe unten). |
 | `MEALIE_TOKEN` | API-Token aus Mealie („Manage Your API Tokens"). |
 | `MEALIE_SYNC_MINUTES` | Abgleich-Intervall in Minuten (Standard 15). |
@@ -257,6 +260,7 @@ erreichbar ist.
 Der Würfel zieht gewichtet, nicht gleichverteilt:
 
 - **eigene Bewertung**: 5★ ist rund 20× wahrscheinlicher als 1★, „nie wieder" fällt ganz heraus
+- **Aufwand**: werktags zählen kurze Rezepte (bis `PLAN_QUICK_MINUTES`, Standard 40 Min.) voll, längere nur zu 40 % bzw. 15 %; am Wochenende bekommen die langen einen Bonus. Ohne Zeitangabe am Rezept wird **nicht** abgewertet – die Quelle weiß es dann eben nicht, und das Rezept dafür auszusortieren wäre die schlechtere Wette
 - **rausgeflogen** (nicht gekocht) dämpft ein Rezept stark, löscht es aber nicht
 - **Geschmacksprofil**: Zutaten und Kategorien, die in anderen Rezepten gut/schlecht bewertet wurden, wirken mit (±)
 - **Abwechslung**: was in den letzten 7/14/28 Tagen gekocht wurde, kommt seltener; innerhalb einer Woche möglichst kein Gericht doppelt

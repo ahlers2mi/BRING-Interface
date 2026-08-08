@@ -584,3 +584,101 @@ test('Status nennt Version und Stand – daran erkennt man den laufenden Build',
   // Zeitstempel der server.js im Image: sagt, wann der Code hineingekommen ist.
   assert.match(res.json.builtAt, /^\d{4}-\d{2}-\d{2}T/);
 });
+
+// ── Aufwand, Portionen, Verschieben ───────────────────────────────────────────
+
+test('werktags bevorzugt der Würfel kurze Rezepte, am Wochenende die langen', async () => {
+  const { effortFactor } = await import('../lib/mealplan.js');
+  const schnell = { prep_time: '25 Min.' };
+  const lang = { prep_time: '2 Stunden' };
+  const dienstag = '2026-08-11';
+  const samstag = '2026-08-15';
+
+  assert.equal(effortFactor(schnell, dienstag), 1);
+  assert.ok(effortFactor(lang, dienstag) < 0.5, 'werktags wird lang abgewertet');
+  assert.ok(
+    effortFactor(lang, samstag) > effortFactor(lang, dienstag),
+    'am Wochenende darf es dauern'
+  );
+  // Ohne Zeitangabe wird nicht bestraft.
+  assert.equal(effortFactor({ prep_time: '' }, dienstag), 1);
+});
+
+test('Haushaltsgröße lässt sich speichern und wird geprüft', async () => {
+  const gesetzt = await api('/api/preferences', {
+    method: 'PUT',
+    body: { householdServings: 2.5 },
+  });
+  assert.equal(gesetzt.json.householdServings, 2.5);
+  assert.equal((await api('/api/preferences')).json.householdServings, 2.5);
+
+  const unsinn = await api('/api/preferences', {
+    method: 'PUT',
+    body: { householdServings: 99 },
+  });
+  assert.equal(unsinn.status, 400);
+});
+
+test('der Wocheneinkauf rechnet die Mengen auf die Haushaltsgröße um', async () => {
+  const recipe = (
+    await api('/api/recipes', {
+      method: 'POST',
+      body: {
+        name: 'Rechenauflauf',
+        servings: '4 Portionen',
+        prep_time: '30 Min.',
+        ingredients: [{ name: 'Kartoffeln', amount: '600 g' }],
+      },
+    })
+  ).json;
+
+  const morgen = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  await api(`/api/plan/${morgen}`, { method: 'PUT', body: { recipe_id: recipe.id } });
+
+  const liste = await api('/api/plan/shopping?all=1');
+  const kartoffeln = liste.json.items.find((i) => /Kartoffeln/i.test(i.name));
+  assert.ok(kartoffeln, 'Kartoffeln erwartet');
+  // 600 g für 4 Portionen -> 2,5 Portionen -> 380 g (auf Zehner gerundet)
+  assert.match(kartoffeln.amount, /380 g/);
+});
+
+test('ein Tag lässt sich verschieben statt neu zu würfeln', async () => {
+  const heute = new Date().toISOString().slice(0, 10);
+  const morgen = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const recipe = (await api('/api/recipes')).json[0];
+
+  await api(`/api/plan/${heute}`, { method: 'PUT', body: { recipe_id: recipe.id } });
+  await api(`/api/plan/${morgen}`, { method: 'DELETE' });
+
+  const res = await api(`/api/plan/${heute}/move`, { method: 'POST', body: { to: morgen } });
+  assert.equal(res.status, 200, res.text);
+
+  const plan = res.json.plan;
+  assert.equal(plan.days.find((d) => d.date === heute).recipe, null, 'Quelle ist leer');
+  assert.equal(plan.days.find((d) => d.date === morgen).recipe.id, recipe.id);
+});
+
+test('ein Reste-Tag wird nicht überwürfelt', async () => {
+  const morgen = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const markiert = await api(`/api/plan/${morgen}/status`, {
+    method: 'POST',
+    body: { status: 'leftovers' },
+  });
+  assert.equal(markiert.status, 200, markiert.text);
+  assert.equal(markiert.json.plan.days.find((d) => d.date === morgen).status, 'leftovers');
+
+  const vorher = markiert.json.plan.days.find((d) => d.date === morgen).recipe?.id ?? null;
+  const gewuerfelt = await api('/api/plan/roll', { method: 'POST', body: { date: morgen } });
+  const nachher = gewuerfelt.json.plan.days.find((d) => d.date === morgen);
+  assert.equal(nachher.status, 'leftovers', 'der Status bleibt');
+  assert.equal(nachher.recipe?.id ?? null, vorher, 'und das Gericht auch');
+});
+
+test('unbekannte Status werden abgelehnt', async () => {
+  const heute = new Date().toISOString().slice(0, 10);
+  const res = await api(`/api/plan/${heute}/status`, {
+    method: 'POST',
+    body: { status: 'irgendwas' },
+  });
+  assert.equal(res.status, 400);
+});

@@ -67,10 +67,23 @@ async function loadBringLists() {
   }
 }
 
+// Einstellungen getrennt von den Bring-Listen laden: hakt Bring (kein Konto,
+// Dienst gerade weg), soll die Haushaltsgröße trotzdem im Feld stehen.
+async function loadPreferences() {
+  try {
+    state.preferences = await apiFetch('/api/preferences');
+    if (el('householdServings')) {
+      el('householdServings').value = state.preferences.householdServings || '';
+    }
+  } catch (err) {
+    console.error('Einstellungen nicht ladbar:', err.message);
+  }
+}
+
 // Zuletzt benutzte Bring-Liste überall vorwählen (geräteübergreifend, aus der DB).
 async function applyLastList() {
   try {
-    const { lastListUuid } = await apiFetch('/api/preferences');
+    const { lastListUuid } = state.preferences || (await apiFetch('/api/preferences'));
     // Noch nie eine Liste benutzt? Dann die erste vorwählen – sonst steht die
     // Bearbeitungsansicht leer da und man weiß nicht, dass sie eine braucht.
     if (!lastListUuid) {
@@ -131,6 +144,7 @@ async function init() {
   await loadStatus();
   applyMealieMode(); // Rezeptpflege ausblenden, wenn Mealie die Quelle ist
   applyCookidooMode();
+  await loadPreferences();
   await loadBringLists();
   await initRecipes();
   await refreshRecipes();
