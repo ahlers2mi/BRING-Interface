@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BRING-Interface</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/icon-192.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
   <meta name="theme-color" content="#f97316" />
   <link rel="stylesheet" href="/css/style.css" />
 </head>
@@ -133,7 +135,7 @@
           <button class="btn btn-secondary btn-sm" id="planShoppingPreviewBtn">👀 Zutaten der Woche anzeigen</button>
           <button class="btn btn-primary btn-sm" id="planShoppingBtn">🛒 Wocheneinkauf in Bring</button>
           <button class="btn btn-secondary btn-sm" id="planMealieBtn" hidden>
-            📅 Woche nach Mealie
+            📅 Mit Mealie abgleichen
           </button>
         </div>
       </div>
@@ -270,25 +272,36 @@
       <div id="addUrlResult"></div>
 
       <details class="instructions">
-        <summary>Vom iPhone aus über „Teilen" hinzufügen</summary>
+        <summary>Vom Handy aus über „Teilen" hinzufügen</summary>
         <div>
           <p class="hint">
-            iOS lässt keine Webseite ins Teilen-Menü – ein <b>Kurzbefehl</b> schon.
-            Einmalig anlegen (App „Kurzbefehle" → neuer Kurzbefehl):
+            <b>Android:</b> die Seite einmal als App installieren (Chrome-Menü →
+            „App installieren" bzw. „Zum Startbildschirm"). Danach steht
+            <b>BRING-Interface</b> im Teilen-Menü – Rezeptseite teilen, fertig.
+            Dafür muss die App über <b>https</b> aufgerufen werden (die
+            Reverse-Proxy-Adresse), über <code>http://…:3555</code> lässt Chrome
+            das nicht zu.
+          </p>
+          <p class="hint">
+            <b>iPhone:</b> iOS lässt keine Webseite ins Teilen-Menü – ein
+            <b>Kurzbefehl</b> schon. In der App „Kurzbefehle":
           </p>
           <ol class="hint">
-            <li>Im Kurzbefehl-Menü <b>„In Teilen-Menü anzeigen"</b> einschalten,
-              als Eingabetyp <b>URLs</b> und Safari-Webseiten wählen.</li>
-            <li>Aktion <b>„Inhalte von URL abrufen"</b> einfügen, Adresse:
-              <code id="addUrlShortcut">…</code> – und dort statt
-              <code>URL_HIER</code> die Variable <b>Kurzbefehlseingabe</b> einsetzen.</li>
-            <li>Aktion <b>„Ergebnis anzeigen"</b> anhängen, damit die Rückmeldung
-              kommt. Kurzbefehl z. B. „Rezept merken" nennen.</li>
+            <li>Neuer Kurzbefehl, umbenennen (z. B. „Rezept senden"), unter „i"
+              den Schalter <b>„Im Share-Sheet anzeigen"</b> einschalten.</li>
+            <li>Bei „Diesen Kurzbefehl empfangen von …" alle Haken entfernen und
+              nur <b>URLs</b> anhaken.</li>
+            <li>Aktion <b>„URL codieren"</b> hinzufügen (arbeitet auf der
+              Kurzbefehleingabe) – ohne die stolpert die Adresse über
+              Sonderzeichen im Link.</li>
+            <li>Aktion <b>„URL"</b> (blaue Weltkugel) einfügen und den Text
+              zusammensetzen:<br />
+              <code id="addUrlShortcut">…</code><br />
+              wobei an der Stelle <code>URL_HIER</code> die Variable
+              <b>Codierte URL</b> eingesetzt wird.</li>
+            <li>Aktion <b>„Inhalte von URL abrufen"</b> anhängen (Methode GET),
+              dazu <b>„Ergebnis anzeigen"</b> für die Rückmeldung.</li>
           </ol>
-          <p class="hint">
-            Danach: im Safari auf der Rezeptseite auf Teilen tippen und
-            „Rezept merken" wählen.
-          </p>
         </div>
       </details>
     </div>
@@ -513,6 +526,18 @@
   </div>
 </div>
 
+<script>
+  // Service Worker nur registrieren, wenn der Kontext sicher ist (HTTPS oder
+  // localhost) – nur dann ist die Seite installierbar und kann sich unter
+  // Android ins Teilen-Menü eintragen.
+  if ('serviceWorker' in navigator && window.isSecureContext) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(() => {
+        /* ohne Service Worker läuft alles weiter, nur eben ohne Teilen-Menü */
+      });
+    });
+  }
+</script>
 <script src="/js/app.js" type="module"></script>
 </body>
 </html>

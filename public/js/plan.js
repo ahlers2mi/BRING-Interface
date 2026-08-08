@@ -50,8 +50,8 @@ function renderPlan(plan) {
     `KW ${plan.week.slice(-2)} (${deDate(plan.from)} – ${deDate(plan.to)})`;
   el('planWeekLabel').dataset.from = plan.from;
   el('planSummary').textContent = `${plan.planned} von 7 Tagen geplant`;
-  // Der Abgleich läuft beim Würfeln automatisch – der Knopf ist für den Fall,
-  // dass Mealie gerade nicht erreichbar war.
+  // Der Abgleich läuft beim Würfeln und alle paar Minuten automatisch – der
+  // Knopf holt ihn sofort, wenn jemand gerade in Mealie geplant hat.
   el('planMealieBtn').hidden = !mealieActive();
 
   const grid = el('planGrid');
@@ -320,13 +320,13 @@ export function initPlan() {
         method: 'POST',
         body: JSON.stringify({ week: currentWeek }),
       });
-      flash(
-        'planResult',
-        res.failed
-          ? `${res.pushed} Tage nach Mealie übertragen, ${res.failed} fehlgeschlagen (siehe Container-Log).`
-          : `✓ ${res.pushed} Tage in Mealies Menüplan geschrieben.`,
-        res.failed ? 'error' : 'success'
-      );
+      if (res.plan) renderPlan(res.plan);
+      const parts = [];
+      if (res.pulled) parts.push(`${res.pulled} aus Mealie übernommen`);
+      if (res.cleared) parts.push(`${res.cleared} entfernt (in Mealie gelöscht)`);
+      parts.push(`${res.pushed} Tage nach Mealie geschrieben`);
+      if (res.failed) parts.push(`${res.failed} fehlgeschlagen (siehe Container-Log)`);
+      flash('planResult', `✓ ${parts.join(', ')}.`, res.failed ? 'error' : 'success');
     } catch (err) {
       flash('planResult', `Fehler: ${escHtml(err.message)}`, 'error');
     } finally {

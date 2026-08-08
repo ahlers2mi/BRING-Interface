@@ -1073,3 +1073,178 @@ test('Link hinzufügen: ohne brauchbare Adresse eine klare Absage', async () => 
   assert.equal(res.status, 400);
   assert.match(res.json.error, /http/);
 });
+
+// ── Menüplan aus Mealie holen ─────────────────────────────────────────────────
+
+// Wochentage der laufenden Woche (Montag zuerst), wie sie der Server rechnet.
+function weekDatesOf(iso) {
+  const d = new Date(`${iso}T00:00:00Z`);
+  const monday = new Date(d);
+  monday.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return Array.from({ length: 7 }, (_, i) => {
+    const day = new Date(monday);
+    day.setUTCDate(monday.getUTCDate() + i);
+    return day.toISOString().slice(0, 10);
+  });
+}
+
+const week = weekDatesOf(todayIso);
+
+test('was in Mealie geplant wurde, gilt auch bei uns', async () => {
+  // Frau plant Montag in Mealie – bei uns steht dort etwas anderes.
+  const [montag] = week;
+  const auberginen = (await api('/api/recipes')).json.find(
+    (r) => r.source_slug === 'auberginen-auflauf'
+  );
+  const anderes = (await api('/api/recipes')).json.find(
+    (r) => r.id !== auberginen.id && /^mealie:/.test(r.external_id || '') && !r.source_missing
+  );
+  await api(`/api/plan/${montag}`, { method: 'PUT', body: { recipe_id: anderes.id } });
+
+  mealplans.length = 0;
+  mealplans.push({
+    id: ++mealplanId,
+    date: montag,
+    entryType: 'dinner',
+    title: '',
+    recipeId: auberginen.external_id.replace('mealie:', ''),
+  });
+
+  const res = await api('/api/plan/mealie', { method: 'POST', body: { week: 'current' } });
+  assert.equal(res.status, 200, res.text);
+  assert.ok(res.json.pulled >= 1, JSON.stringify(res.json));
+
+  const day = res.json.plan.days.find((d) => d.date === montag);
+  assert.equal(day.recipe.id, auberginen.id, 'Mealie gewinnt');
+  assert.equal(day.note, 'aus Mealie');
+});
+
+test('in Mealie gelöschte Tage verschwinden auch hier – selbst gewürfelte bleiben', async () => {
+  const [montag, dienstag] = week;
+  // Dienstag würfeln wir selbst; Mealie kennt ihn nicht.
+  await api('/api/plan/roll', { method: 'POST', body: { date: dienstag } });
+  const eigenes = (await api('/api/plan?week=current')).json.days.find(
+    (d) => d.date === dienstag
+  ).recipe;
+  assert.ok(eigenes, 'für Dienstag sollte etwas gewürfelt sein');
+
+  // Frau streicht den Montag in Mealie.
+  mealplans.length = 0;
+
+  const res = await api('/api/plan/mealie', { method: 'POST', body: { week: 'current' } });
+  assert.equal(res.status, 200, res.text);
+  assert.equal(res.json.cleared, 1);
+
+  const days = res.json.plan.days;
+  assert.equal(days.find((d) => d.date === montag).recipe, null, 'aus Mealie gelöscht');
+  assert.equal(
+    days.find((d) => d.date === dienstag).recipe?.id,
+    eigenes.id,
+    'selbst gewürfelt bleibt stehen'
+  );
+  // … und wandert im selben Lauf nach Mealie.
+  assert.ok(mealplans.some((e) => e.date === dienstag && e.entryType === 'dinner'));
+});
+
+test('gekochte Tage rührt der Abgleich nicht an', async () => {
+  const [, dienstag] = week;
+  await api(`/api/plan/${dienstag}/rate`, { method: 'POST', body: { rating: 'lecker' } });
+  const gekocht = (await api('/api/plan?week=current')).json.days.find(
+    (d) => d.date === dienstag
+  );
+  assert.equal(gekocht.status, 'cooked');
+
+  // Mealie hätte an dem Tag gern etwas anderes – zu spät, ist schon gegessen.
+  mealplans.length = 0;
+  mealplans.push({
+    id: ++mealplanId,
+    date: dienstag,
+    entryType: 'dinner',
+    recipeId: '11111111-1111-1111-1111-111111111111',
+  });
+
+  const res = await api('/api/plan/mealie', { method: 'POST', body: { week: 'current' } });
+  const day = res.json.plan.days.find((d) => d.date === dienstag);
+  assert.equal(day.recipe.id, gekocht.recipe.id, 'gekochter Tag bleibt');
+  assert.equal(day.status, 'cooked');
+});
+
+test('ein in Mealie geplantes, hier noch unbekanntes Rezept wird nachgeladen', async () => {
+  const [, , mittwoch] = week;
+  recipes.set('ganz-neu', {
+    id: 'neu-1',
+    slug: 'ganz-neu',
+    name: 'Frisch in Mealie angelegt',
+    updatedAt: '2026-08-08T12:00:00',
+    recipeInstructions: [{ text: 'Kochen.' }],
+    recipeIngredient: [
+      { quantity: 1, unit: null, food: { name: 'Neugier' }, note: '', display: '1 Neugier' },
+    ],
+  });
+  mealplans.length = 0;
+  mealplans.push({
+    id: ++mealplanId,
+    date: mittwoch,
+    entryType: 'dinner',
+    recipeId: 'neu-1',
+    recipe: { slug: 'ganz-neu', name: 'Frisch in Mealie angelegt' },
+  });
+
+  const res = await api('/api/plan/mealie', { method: 'POST', body: { week: 'current' } });
+  const day = res.json.plan.days.find((d) => d.date === mittwoch);
+  assert.equal(day.recipe.name, 'Frisch in Mealie angelegt');
+  // Ohne den Nachzug stünde das Rezept erst nach dem nächsten vollen Abgleich da.
+  const list = (await api('/api/recipes')).json;
+  assert.ok(list.some((r) => r.source_slug === 'ganz-neu'));
+});
+
+// ── Teilen-Menü (Android) ─────────────────────────────────────────────────────
+
+test('den Link findet die Teilen-Route auch mitten im Text', async () => {
+  const { urlFromShare } = await import('../server.js');
+  assert.equal(
+    urlFromShare({ url: 'https://www.chefkoch.de/rezepte/1/A.html' }),
+    'https://www.chefkoch.de/rezepte/1/A.html'
+  );
+  // Android-Apps packen die Adresse oft in einen Satz.
+  assert.equal(
+    urlFromShare({ text: 'Schau mal: https://www.chefkoch.de/rezepte/2/B.html' }),
+    'https://www.chefkoch.de/rezepte/2/B.html'
+  );
+  // Satzzeichen am Ende gehören nicht zur Adresse.
+  assert.equal(
+    urlFromShare({ text: 'Lecker (https://example.org/rezept).' }),
+    'https://example.org/rezept'
+  );
+  assert.equal(urlFromShare({ title: 'nur ein Titel' }), '');
+  assert.equal(urlFromShare({}), '');
+});
+
+test('geteilter Link landet im Bestand und die Seite sagt es', async () => {
+  const res = await fetch(
+    `${base}/share?text=${encodeURIComponent('Kochen: https://www.chefkoch.de/rezepte/777777/Geteilt.html')}`
+  );
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type') || '', /html/);
+  const html = await res.text();
+  assert.match(html, /Gespeichert/);
+  assert.match(html, /Chefkoch-Rezept 777777/);
+  assert.match(html, /In Mealie ansehen/);
+
+  const list = (await api('/api/recipes')).json;
+  assert.ok(list.some((r) => r.source_slug === 'chefkoch-777777'));
+});
+
+test('zweimal geteilt heißt nicht zweimal gespeichert', async () => {
+  const res = await fetch(
+    `${base}/share?url=${encodeURIComponent('https://www.chefkoch.de/rezepte/777777/Nochmal.html')}`
+  );
+  assert.equal(res.status, 200);
+  assert.match(await res.text(), /Kennen wir schon/);
+});
+
+test('ohne Adresse im Geteilten kommt ein Hinweis, kein Absturz', async () => {
+  const res = await fetch(`${base}/share?title=${encodeURIComponent('Nur Text')}`);
+  assert.equal(res.status, 400);
+  assert.match(await res.text(), /Kein Link dabei/);
+});

@@ -11,9 +11,9 @@ Web Interface für Bring APP
 - **Wochenplan mit Würfelfunktion** – einzelne Tage oder die ganze Woche auswürfeln lassen, Tage von Hand belegen und die Zutaten der kompletten Woche in einem Schritt nach Bring schieben.
 - **Bewertungen** – nach dem Essen „lecker / gut / ok / mies" vergeben, oder ein Rezept als **rausgeflogen** markieren (gar nicht gekocht) bzw. mit **nie wieder** dauerhaft sperren.
 - **Gelernter Geschmack** – aus den Bewertungen entsteht ein Profil beliebter und unbeliebter Zutaten und Kategorien; der Würfel bevorzugt, was ankommt, und meidet, was durchgefallen ist.
-- **Mealie-Anbindung** (optional) – [Mealie](https://mealie.io) als Rezeptquelle: Rezepte dort pflegen, hier spiegeln; Bewertungen wandern als `rating`/`lastMade` zurück, der Wochenplan in Mealies Menüplan.
+- **Mealie-Anbindung** (optional) – [Mealie](https://mealie.io) als Rezeptquelle: Rezepte dort pflegen, hier spiegeln; Bewertungen wandern als `rating`/`lastMade` zurück, der Wochenplan wird mit Mealies Menüplan abgeglichen (beide Richtungen).
 - **Cookidoo-Anbindung** (optional) – Thermomix-Rezepte aus [Cookidoo](https://cookidoo.de) im Würfeltopf (Name, Zutaten, Zeiten, Link – gekocht wird am Gerät), und Cookidoos Einkaufsliste auf Knopfdruck nach Bring.
-- **Rezept per Link** – Adresse einwerfen und speichern, auch mit Mealie als Quelle; per **iOS-Kurzbefehl** geht das direkt aus dem Teilen-Menü des iPhones.
+- **Rezept per Link, auch vom Handy** – Adresse einwerfen und speichern, auch mit Mealie als Quelle. Unter **Android** trägt sich die installierte Web-App selbst ins Teilen-Menü ein, unter **iOS** geht es über einen Kurzbefehl.
 - **Rezept-Import** – einzelne Rezepte per Link (Chefkoch und alle Seiten mit schema.org-Daten) oder **Massenimport von chefkoch.de** (z. B. 200 Rezepte auf einmal, im Hintergrund mit Fortschrittsanzeige).
 - **Eigener Tab „Import & Quellen"** – Mealie, Cookidoo, Chefkoch-Import und KI-Analyse liegen zusammen; der Rezepte-Tab bleibt Liste und Geschmacksprofil. Die Rezeptliste lässt sich nach Herkunft filtern (Chefkoch, Cookidoo, eigene).
 - **Reste-Küche** – eingeben, was noch im Kühlschrank liegt, und passende Rezepte nach Abdeckung sortiert finden; fehlende Zutaten wandern auf Wunsch direkt nach Bring.
@@ -156,6 +156,7 @@ docker run -d \
 | `MEALIE_SYNC_MINUTES` | Abgleich-Intervall in Minuten (Standard 15). |
 | `MEALIE_PUSH_RATINGS` | Bewertungen als `rating`/`lastMade` nach Mealie zurückschreiben (Standard an, `0` = aus). |
 | `MEALIE_PUSH_PLAN` | Wochenplan in Mealies Menüplan schreiben (Standard an, `0` = aus). |
+| `MEALIE_PULL_PLAN` | Menüplan aus Mealie übernehmen – Mealie gewinnt (Standard an, `0` = aus). |
 | `MEALIE_PLAN_ENTRY_TYPE` | Mahlzeit für diese Einträge: `breakfast`, `lunch`, `dinner` (Standard), `side`. |
 | `MEALIE_RECIPE_URL` | Muster für den Link in die Mealie-Oberfläche (Standard `{base}/g/home/r/{slug}`). |
 | `MEALIE_PUBLIC_URL` | Adresse von Mealie **aus dem Browser** (für die Links). Fällt auf `MEALIE_BASE_URL`, dann `MEALIE_URL` zurück. |
@@ -181,6 +182,41 @@ Die App hat **keine** eingebaute Mehrbenutzer-Verwaltung. Für den Zugriff von a
 1. **`APP_PASSWORD` setzen** – schützt die gesamte App mit einem gemeinsamen Passwort (Session-Cookie, 30 Tage, Brute-Force-Bremse).
 2. **HTTPS ist Pflicht** – ein Passwort über reines HTTP wäre im Klartext im Netz. Stelle der App einen **Reverse Proxy mit TLS** voran (z. B. Synology-Reverse-Proxy mit Let's Encrypt) und gib nach außen **nur Port 443** frei, nicht den Container-Port.
 3. **Noch sicherer:** gar nicht öffentlich exponieren, sondern per **VPN** (z. B. WireGuard auf der UniFi UDR) zugreifen.
+
+## Vom Handy aus teilen
+
+Eine Rezeptseite im Browser gefunden? Dann muss man sie nicht abtippen.
+
+### Android: die App installiert sich ins Teilen-Menü
+
+Die App bringt ein Web-App-Manifest samt `share_target` mit. Einmal über
+**Chrome-Menü → „App installieren"** installieren, danach steht
+**BRING-Interface** im Teilen-Menü jeder Seite; der Link landet auf `/share`,
+wird gespeichert und die Seite meldet, was daraus geworden ist.
+
+Zwei Voraussetzungen: der Aufruf muss über **https** laufen (also die
+Reverse-Proxy-Adresse – über `http://<NAS>:3555` verweigert Chrome die
+Installation), und die App muss einmal installiert sein. Der Service Worker
+(`public/sw.js`) ist genau dafür da und speichert **nichts** zwischen.
+
+### iPhone: Kurzbefehl
+
+iOS erlaubt Webseiten keinen Eintrag im Teilen-Menü (die Web-Share-Target-API
+gibt es dort nicht). Ein Kurzbefehl kann es:
+
+1. Kurzbefehle-App → neuer Kurzbefehl, umbenennen (z. B. „Rezept senden"),
+   unter **„i"** den Schalter **„Im Share-Sheet anzeigen"** einschalten.
+2. Bei „Diesen Kurzbefehl empfangen von …" alle Haken entfernen, nur **URLs**
+   anhaken.
+3. Aktion **„URL codieren"** (auf der Kurzbefehleingabe) – ohne die stolpert die
+   Adresse über Sonderzeichen im geteilten Link.
+4. Aktion **„URL"** (blaue Weltkugel) mit
+   `https://<adresse>/api/recipes/add?url=` + Variable **Codierte URL** +
+   `&token=<API_TOKEN>`.
+5. Aktion **„Inhalte von URL abrufen"** (Methode GET) und **„Ergebnis anzeigen"**.
+
+Die passende Adresse steht auch in der App im Tab *Import & Quellen* unter
+„🔗 Rezept per Link hinzufügen".
 
 ## Wandtablet-Ansicht
 
@@ -245,16 +281,21 @@ Wochenplan und FHEM weiter.
   nicht), werden aber als `rating` und `lastMade` nach Mealie zurückgeschrieben –
   best-effort, ein Fehler dort verhindert die Bewertung hier nicht.
   Abschaltbar mit `MEALIE_PUSH_RATINGS=0`.
-- **Der Wochenplan wandert in Mealies Menüplan-Kalender**, einseitig: gewürfelt
-  wird hier (Gewichte, Bewertungen und Wiederholungsdämpfung kennt Mealie nicht),
-  jede Änderung – würfeln, Rezept von Hand setzen, Tag leeren, auch über die
-  FHEM-Route – schreibt den Tag dort nach. Was in Mealie von Hand eingetragen
-  wird, kommt **nicht** zurück; sonst bräuchte es eine Regel, wer bei
-  gleichzeitiger Änderung gewinnt. Einträge mit anderer Mahlzeit (Frühstück,
-  Mittag) bleiben unangetastet, unsere Tage liegen unter
-  `MEALIE_PLAN_ENTRY_TYPE` (Standard `dinner`). War Mealie beim Würfeln nicht
-  erreichbar, holt der Knopf **„📅 Woche nach Mealie"** im Wochenplan-Tab den
-  Abgleich nach. Abschaltbar mit `MEALIE_PUSH_PLAN=0`.
+- **Der Wochenplan wird mit Mealies Menüplan abgeglichen – in beide Richtungen.**
+  Die Regel lautet **Mealie gewinnt**: wer dort einen Tag einträgt, hat sich etwas
+  dabei gedacht, der Würfel füllt nur die Lücken. Praktisch heißt das:
+  - Was in Mealie steht, wird übernommen (Notiz „aus Mealie"). Ein dort geplantes
+    Rezept, das hier noch fehlt, wird sofort nachgespiegelt.
+  - Was in Mealie **gelöscht** wird, verschwindet auch hier – aber nur, wenn der
+    Eintrag von dort kam (`meal_plan.origin`). Selbst gewürfelte Tage bleiben.
+  - Alles Übrige – würfeln, Rezept von Hand setzen, Tag leeren, auch über die
+    FHEM-Route – wandert nach Mealie.
+  - **Gekochte Tage rührt der Abgleich nicht an**, das ist Historie.
+  Einträge mit anderer Mahlzeit (Frühstück, Mittag) bleiben unangetastet, unsere
+  Tage liegen unter `MEALIE_PLAN_ENTRY_TYPE` (Standard `dinner`). Der Abgleich
+  läuft bei jeder Änderung sowie zusammen mit dem Rezept-Abgleich für diese und
+  die nächste Woche; der Knopf **„📅 Mit Mealie abgleichen"** im Wochenplan-Tab
+  holt ihn sofort. Abschaltbar mit `MEALIE_PUSH_PLAN=0` bzw. `MEALIE_PULL_PLAN=0`.
 - **Angerissene Rezepte** (Chefkoch PLUS) erkennt die App am Platzhalter
   „-- additional ingredients not fully disclosed --": sie zählen als
   **unvollständig**, werden **nicht gewürfelt**, der Platzhalter landet nicht auf

@@ -71,6 +71,7 @@ import {
   mealieConfig,
   mealieIdOf,
   mealieRecipeUrl,
+  pullPlanFromMealie,
   pushPlanDatesToMealie,
   pushPlanEntryToMealie,
   pushRatingToMealie,
@@ -794,21 +795,47 @@ app.delete('/api/plan/:date', (req, res) => {
   res.json({ success: true, plan: buildWeekView(weekOf(date)) });
 });
 
+// Beide Richtungen für eine Woche: erst holen, dann schieben.
+//
+// Reihenfolge ist wichtig – **Mealie gewinnt**. Wer dort plant, hat sich etwas
+// dabei gedacht; unser Würfel füllt die Lücken, und die wandern anschließend
+// nach Mealie.
+const planPullDeps = {
+  getPlanEntry,
+  setPlanEntry,
+  deletePlanEntry,
+  findRecipeByExternalId,
+  findRecipeByName,
+  upsertRecipeFromSource,
+};
+
+async function reconcilePlanWeek(week) {
+  const dates = weekDates(week);
+  const pulled = await pullPlanFromMealie({ dates, deps: planPullDeps });
+  const pushed = mealieConfig().pushPlan
+    ? await pushPlanDatesToMealie(dates.map(planPushPayload))
+    : { pushed: 0, failed: 0 };
+  return { week, ...pulled, ...pushed };
+}
+
 // POST /api/plan/mealie – body: { week? }
 // Ganze Woche von Hand abgleichen (nach einem Ausfall oder erstmalig). Hier
 // wird gewartet, damit die Oberfläche eine belastbare Zahl anzeigen kann.
 app.post('/api/plan/mealie', async (req, res) => {
+  const cfg = mealieConfig();
   if (!mealieEnabled()) {
     return res.status(400).json({ error: 'Mealie ist nicht konfiguriert.' });
   }
-  if (!mealieConfig().pushPlan) {
-    return res.status(400).json({ error: 'Menüplan-Abgleich ist abgeschaltet (MEALIE_PUSH_PLAN=0).' });
+  if (!cfg.pushPlan && !cfg.pullPlan) {
+    return res
+      .status(400)
+      .json({ error: 'Menüplan-Abgleich ist abgeschaltet (MEALIE_PUSH_PLAN/MEALIE_PULL_PLAN).' });
   }
   const week = resolveWeek(req.body?.week);
   if (!week) return res.status(400).json({ error: 'Ungültige Woche.' });
   try {
-    const result = await pushPlanDatesToMealie(weekDates(week).map(planPushPayload));
-    res.json({ week, ...result });
+    const result = await reconcilePlanWeek(week);
+    res.json({ ...result, plan: buildWeekView(week) });
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
@@ -924,6 +951,79 @@ app.post('/api/recipes/import/url', blockWhenMealie, async (req, res) => {
     res.json({ recipe, saved: false });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Teilen-Ziel für Android (Web Share Target) ─────────────────────────────────
+//
+// Android kann eine installierte Web-App ins Teilen-Menü aufnehmen; das Ziel
+// steht in `public/manifest.webmanifest`. Hier landet also der Link, den jemand
+// aus Chrome heraus geteilt hat – und weil man beim Teilen eine Rückmeldung
+// sehen will, antwortet diese Route als Seite, nicht als JSON.
+//
+// Was geteilt wird, ist von der App abhängig: manche füllen `url`, viele packen
+// die Adresse mitten in `text` ("Schau mal: https://…"). Deshalb suchen wir in
+// allen drei Feldern nach dem ersten Link.
+export function urlFromShare({ url, text, title } = {}) {
+  for (const candidate of [url, text, title]) {
+    const found = /https?:\/\/[^\s"'<>]+/.exec(String(candidate || ''));
+    if (found) return found[0].replace(/[).,]+$/, '');
+  }
+  return '';
+}
+
+function sharePage({ heading, message, link }) {
+  const esc = (value) =>
+    String(value ?? '').replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+  return `<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${esc(heading)}</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <main>
+    <div class="card">
+      <h2>${esc(heading)}</h2>
+      <p>${esc(message)}</p>
+      <div class="btn-group">
+        ${link ? `<a class="btn btn-secondary" href="${esc(link)}">↗ In Mealie ansehen</a>` : ''}
+        <a class="btn btn-primary" href="/">Zur App</a>
+      </div>
+    </div>
+  </main>
+</body>
+</html>`;
+}
+
+app.get('/share', async (req, res) => {
+  const url = urlFromShare(req.query);
+  if (!url) {
+    return res.status(400).type('html').send(
+      sharePage({
+        heading: 'Kein Link dabei',
+        message:
+          'In dem Geteilten war keine Web-Adresse zu finden. Teile bitte die ' +
+          'Rezeptseite selbst (in Chrome: Teilen → BRING-Interface).',
+      })
+    );
+  }
+  try {
+    const { status, body } = await addRecipeByUrl(url);
+    res.status(status === 201 ? 200 : status).type('html').send(
+      sharePage({
+        heading: body.error ? 'Hat nicht geklappt' : body.duplicate ? 'Kennen wir schon' : 'Gespeichert',
+        message: body.error || body.message || '',
+        link: body.link,
+      })
+    );
+  } catch (err) {
+    res.status(502).type('html').send(
+      sharePage({ heading: 'Hat nicht geklappt', message: err.message })
+    );
   }
 });
 
@@ -1561,7 +1661,22 @@ if (startedDirectly) {
             );
           }
         })
-        .catch((err) => console.warn(`Mealie-Abgleich fehlgeschlagen: ${err.message}`));
+        .catch((err) => console.warn(`Mealie-Abgleich fehlgeschlagen: ${err.message}`))
+        // Danach der Menüplan: was in Mealie geplant wurde, gilt auch hier.
+        // Diese und die nächste Woche reichen – ältere Tage sind Geschichte.
+        .then(async () => {
+          if (!mealieConfig().pullPlan) return;
+          const thisWeek = weekOf(todayIso());
+          for (const week of [thisWeek, shiftWeek(thisWeek, 1)]) {
+            const r = await reconcilePlanWeek(week);
+            if (r.pulled || r.cleared) {
+              console.log(
+                `Menüplan ${week}: ${r.pulled} aus Mealie übernommen, ${r.cleared} entfernt`
+              );
+            }
+          }
+        })
+        .catch((err) => console.warn(`Menüplan-Abgleich fehlgeschlagen: ${err.message}`));
     run();
     setInterval(run, syncMinutes * 60 * 1000).unref();
   }
