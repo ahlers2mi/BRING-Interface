@@ -753,3 +753,45 @@ test('Vorlauf steht am Rezept und in den FHEM-Readings', async () => {
   ).json;
   assert.equal(ohne.prep_hint, '');
 });
+
+test('die FHEM-Readings tragen absolute Bild-Adressen samt Token', async () => {
+  const heute = new Date().toISOString().slice(0, 10);
+  const recipe = (
+    await api('/api/recipes', {
+      method: 'POST',
+      body: {
+        name: 'Bildrezept',
+        image_url: '/api/mealie/image/abc',
+        ingredients: [{ name: 'Zutat' }],
+      },
+    })
+  ).json;
+  await api(`/api/plan/${heute}`, { method: 'PUT', body: { recipe_id: recipe.id } });
+
+  // Über den Helfer, nicht über globalThis.fetch – das ist in dieser Datei
+  // für die Import-Tests umgebogen.
+  const payload = (await api(`/api/fhem/plan?token=${TOKEN}`)).json;
+  // Relativ gespeichert, absolut ausgeliefert – FHEMVIZ läuft unter einer
+  // anderen Adresse und käme mit einem Pfad nicht weiter.
+  assert.match(payload.today_img, /^http:\/\/127\.0\.0\.1:\d+\/api\/mealie\/image\/abc\?token=/);
+  const tagKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+  assert.ok(tagKeys.every((k) => `${k}_img` in payload), 'je Tag ein Bild-Reading');
+});
+
+test('absolute Bild-Adressen (Cookidoo) bleiben unverändert', async () => {
+  const heute = new Date().toISOString().slice(0, 10);
+  const recipe = (
+    await api('/api/recipes', {
+      method: 'POST',
+      body: {
+        name: 'Thermomix-Rezept',
+        image_url: 'https://assets.tmecosys.com/bild.jpg',
+        ingredients: [{ name: 'Zutat' }],
+      },
+    })
+  ).json;
+  await api(`/api/plan/${heute}`, { method: 'PUT', body: { recipe_id: recipe.id } });
+
+  const payload = (await api(`/api/fhem/plan?token=${TOKEN}`)).json;
+  assert.equal(payload.today_img, 'https://assets.tmecosys.com/bild.jpg');
+});

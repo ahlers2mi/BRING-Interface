@@ -109,6 +109,24 @@ attr HTTP.Wochenplan set06NoArg 1
 # Abgleich mit Mealies Menuplan von Hand anstossen. Noetig ist das nicht - die
 # App gleicht sich alle paar Minuten selbst ab -, aber vor einer Ansage zu
 # fester Uhrzeit will man nicht auf das naechste Intervall warten.
+# Bilder je Tag - fuer die FHEMVIZ-Kachel "mealplan". Die Adressen sind
+# absolut und tragen den Token, weil FHEMVIZ im Browser unter einer anderen
+# Adresse laeuft als diese App.
+attr HTTP.Wochenplan reading27Name mo_bild
+attr HTTP.Wochenplan reading27Regex "mon_img":"([^"]*)"
+attr HTTP.Wochenplan reading28Name di_bild
+attr HTTP.Wochenplan reading28Regex "tue_img":"([^"]*)"
+attr HTTP.Wochenplan reading29Name mi_bild
+attr HTTP.Wochenplan reading29Regex "wed_img":"([^"]*)"
+attr HTTP.Wochenplan reading30Name do_bild
+attr HTTP.Wochenplan reading30Regex "thu_img":"([^"]*)"
+attr HTTP.Wochenplan reading31Name fr_bild
+attr HTTP.Wochenplan reading31Regex "fri_img":"([^"]*)"
+attr HTTP.Wochenplan reading32Name sa_bild
+attr HTTP.Wochenplan reading32Regex "sat_img":"([^"]*)"
+attr HTTP.Wochenplan reading33Name so_bild
+attr HTTP.Wochenplan reading33Regex "sun_img":"([^"]*)"
+
 # Vorlauf: was man am Vorabend noch anfangen muss (auftauen, einweichen).
 attr HTTP.Wochenplan reading25Name heute_vorbereitung
 attr HTTP.Wochenplan reading25Regex "today_prep":"([^"]*)"

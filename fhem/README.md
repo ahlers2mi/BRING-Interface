@@ -248,6 +248,25 @@ attr wl_wochenplan room Küche,FHEMVIZ->Küche
 > wird geladen, bekommt aber keine Kachel). Für das Dashboard gibt es deshalb
 > den Bild-Weg, siehe unten. Im klassischen FHEMWEB funktioniert der Rahmen.
 
+### Als bedienbare Kachel in FHEMVIZ (Widget `mealplan`)
+
+Ab FHEMVIZ v0.34.48 gibt es ein eigenes Widget: heute groß mit Foto, darunter
+die restlichen Tage als Streifen mit Vorschaubild, Sternen und Status – und
+Knöpfe zum Würfeln, Bewerten und für den Wocheneinkauf **direkt in der Kachel**.
+
+```
+attr HTTP.Wochenplan vizWidget mealplan
+attr HTTP.Wochenplan vizSize 2x2
+```
+
+Gelesen werden `mo`…`so`, `<tag>_sterne`, `<tag>_bild` und
+`morgen_vorbereitung`; die Bild-Readings legt der Block oben an. Fehlt eines,
+entfällt genau dieser Teil. Die Knöpfe erscheinen nur, wenn das Gerät den
+passenden `set`-Befehl anbietet.
+
+Der Unterschied zur Bild-Kachel unten: `/plan.svg` **zeigt** nur, das Widget
+lässt sich **bedienen**.
+
 ### Als Bild-Kachel in FHEMVIZ
 
 FHEMVIZ kennt ein Bild-Widget (`vizWidget image`) – so hängt auch das
@@ -289,6 +308,13 @@ Alle Routen sind sowohl per GET als auch per POST erreichbar – GET, damit ein
 | `/api/fhem/shopping?week=current` | Zutaten der Woche in die zuletzt benutzte Bring-Liste (`&list=<uuid>` für eine andere) |
 | `/api/fhem/sync?week=current` | Menüplan mit Mealie abgleichen (erst holen, dann schieben) und die Readings zurückgeben |
 | `/api/fhem/weather?temp=8.5` | Außentemperatur melden – der Würfel bevorzugt damit bei Kälte Eintopf, bei Hitze Salat |
+
+Die Antwort von `/api/fhem/plan` enthält je Tag zusätzlich `<tag>_img` mit einer
+**absoluten** Bild-Adresse samt Token (`mon_img`, `tue_img` …). Absolut deshalb,
+weil FHEMVIZ im Browser unter einer anderen Adresse läuft als diese App – ein
+Pfad wie `/api/mealie/image/…` ginge dort ins Leere. Die Adresse baut sich aus
+`PUBLIC_URL` oder, wenn das nicht gesetzt ist, aus der Adresse, unter der die
+Anfrage hereinkam.
 
 Beispiel für ein eigenes Notify (z. B. Bewertung über einen Taster):
 

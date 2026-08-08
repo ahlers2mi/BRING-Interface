@@ -162,6 +162,7 @@ docker run -d \
 | `API_TOKEN` | Token für Maschinen-Zugriffe auf `/api/…` (FHEM, Skripte) – als `?token=…`, Header `X-API-Token` oder `Authorization: Bearer …`. Leer = aus. Am besten ohne `&`, `#` oder `+`, damit der Wert unverändert in eine URL passt. |
 | `HOST_PORT` | Nur `docker-compose.yml`: Port auf der NAS (Standard 8095) – im Container bleibt es 3000. |
 | `PLAN_QUICK_MINUTES` | Ab wann ein Rezept werktags als „dauert lange" gilt (Standard 40). |
+| `PUBLIC_URL` | Adresse, unter der die App im Browser erreichbar ist – für absolute Bild-Adressen in den FHEM-Readings. Leer = die Adresse der jeweiligen Anfrage. |
 | `PLAN_COLD_C`, `PLAN_WARM_C` | Schwellen für die Wetter-Neigung in °C (Standard 10 und 24). |
 | `PLAN_WEATHER_HOURS` | Wie lange ein gemeldeter Messwert als aktuell gilt (Standard 6 Stunden). |
 | `MEALIE_URL` | Basis-URL einer Mealie-Instanz. Gesetzt = Mealie ist die Rezeptquelle (siehe unten). |
