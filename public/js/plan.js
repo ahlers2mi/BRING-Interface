@@ -27,6 +27,7 @@ const STATUS_LABEL = {
   planned: '',
   cooked: '✓ gekocht',
   skipped: '🗑 nicht gekocht',
+  leftovers: '🍲 Reste',
   empty: '',
 };
 
@@ -88,6 +89,10 @@ function buildDayCard(day) {
     meta.push('noch nicht bewertet');
   }
   if (recipe?.last_cooked) meta.push(`zuletzt ${escHtml(deDate(recipe.last_cooked))}`);
+  // Vorlauf: gehört an den Vortag gedacht, deshalb auffällig.
+  const prep = recipe?.prep_hint
+    ? `<div class="hint prep-hint">⏰ Vorher: ${escHtml(recipe.prep_hint)}</div>`
+    : '';
 
   node.innerHTML = `
     <div class="plan-day-head">
@@ -113,6 +118,7 @@ function buildDayCard(day) {
                }
              </div>
              <div class="meta">${meta.join(' &nbsp;·&nbsp; ')}</div>
+             ${prep}
              ${day.note ? `<div class="hint">🎲 ${escHtml(day.note)}</div>` : ''}
              ${ratingText ? `<div class="hint">${ratingText}</div>` : ''}`
           : '<div class="plan-empty">– nichts geplant –</div>'
@@ -124,9 +130,12 @@ function buildDayCard(day) {
       ${
         recipe
           ? `<button class="btn btn-secondary btn-sm" data-act="cart" title="Zutaten in Bring">🛒</button>
+             <button class="btn btn-secondary btn-sm" data-act="move" title="Auf morgen verschieben">→</button>
              <button class="btn btn-danger btn-sm" data-act="clear" title="Tag leeren">✕</button>`
           : ''
       }
+      <button class="btn btn-secondary btn-sm" data-act="leftovers"
+        title="Reste vom Vortag – der Würfel lässt den Tag in Ruhe">🍲</button>
     </div>
     ${
       recipe
@@ -161,6 +170,38 @@ function buildDayCard(day) {
       renderPlan(res.plan);
     } catch (err) {
       flash('planResult', `Fehler: ${escHtml(err.message)}`, 'error');
+    }
+  });
+
+  // Heute wird es doch nichts: einen Tag weiterschieben, statt neu zu würfeln.
+  node.querySelector('[data-act="move"]')?.addEventListener('click', async (e) => {
+    setLoading(e.currentTarget, true);
+    try {
+      const morgen = new Date(`${day.date}T12:00:00Z`);
+      morgen.setUTCDate(morgen.getUTCDate() + 1);
+      const res = await apiFetch(`/api/plan/${day.date}/move`, {
+        method: 'POST',
+        body: JSON.stringify({ to: morgen.toISOString().slice(0, 10) }),
+      });
+      renderPlan(res.plan);
+      flash('planResult', `✓ auf ${escHtml(deDate(res.to))} verschoben.`);
+    } catch (err) {
+      flash('planResult', `Fehler: ${escHtml(err.message)}`, 'error');
+      setLoading(e.currentTarget, false);
+    }
+  });
+
+  node.querySelector('[data-act="leftovers"]').addEventListener('click', async (e) => {
+    setLoading(e.currentTarget, true);
+    try {
+      const res = await apiFetch(`/api/plan/${day.date}/status`, {
+        method: 'POST',
+        body: JSON.stringify({ status: day.status === 'leftovers' ? 'planned' : 'leftovers' }),
+      });
+      renderPlan(res.plan);
+    } catch (err) {
+      flash('planResult', `Fehler: ${escHtml(err.message)}`, 'error');
+      setLoading(e.currentTarget, false);
     }
   });
 
@@ -309,6 +350,25 @@ export function initPlan() {
       flash('planResult', `Fehler: ${escHtml(err.message)}`, 'error');
     } finally {
       setLoading(btn, false);
+    }
+  });
+
+  // Haushaltsgröße: beim Verlassen des Feldes speichern.
+  on('householdServings', 'change', async (e) => {
+    try {
+      const res = await apiFetch('/api/preferences', {
+        method: 'PUT',
+        body: JSON.stringify({ householdServings: Number(e.currentTarget.value) }),
+      });
+      state.preferences = { ...(state.preferences || {}), ...res };
+      flash(
+        'servingsResult',
+        res.householdServings
+          ? `✓ Mengen werden auf ${res.householdServings} Portionen umgerechnet.`
+          : '✓ Mengen bleiben unverändert.'
+      );
+    } catch (err) {
+      flash('servingsResult', `Fehler: ${escHtml(err.message)}`, 'error');
     }
   });
 

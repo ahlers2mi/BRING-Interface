@@ -584,3 +584,214 @@ test('Status nennt Version und Stand – daran erkennt man den laufenden Build',
   // Zeitstempel der server.js im Image: sagt, wann der Code hineingekommen ist.
   assert.match(res.json.builtAt, /^\d{4}-\d{2}-\d{2}T/);
 });
+
+// ── Aufwand, Portionen, Verschieben ───────────────────────────────────────────
+
+test('werktags bevorzugt der Würfel kurze Rezepte, am Wochenende die langen', async () => {
+  const { effortFactor } = await import('../lib/mealplan.js');
+  const schnell = { prep_time: '25 Min.' };
+  const lang = { prep_time: '2 Stunden' };
+  const dienstag = '2026-08-11';
+  const samstag = '2026-08-15';
+
+  assert.equal(effortFactor(schnell, dienstag), 1);
+  assert.ok(effortFactor(lang, dienstag) < 0.5, 'werktags wird lang abgewertet');
+  assert.ok(
+    effortFactor(lang, samstag) > effortFactor(lang, dienstag),
+    'am Wochenende darf es dauern'
+  );
+  // Ohne Zeitangabe wird nicht bestraft.
+  assert.equal(effortFactor({ prep_time: '' }, dienstag), 1);
+});
+
+test('Haushaltsgröße lässt sich speichern und wird geprüft', async () => {
+  const gesetzt = await api('/api/preferences', {
+    method: 'PUT',
+    body: { householdServings: 2.5 },
+  });
+  assert.equal(gesetzt.json.householdServings, 2.5);
+  assert.equal((await api('/api/preferences')).json.householdServings, 2.5);
+
+  const unsinn = await api('/api/preferences', {
+    method: 'PUT',
+    body: { householdServings: 99 },
+  });
+  assert.equal(unsinn.status, 400);
+});
+
+test('der Wocheneinkauf rechnet die Mengen auf die Haushaltsgröße um', async () => {
+  const recipe = (
+    await api('/api/recipes', {
+      method: 'POST',
+      body: {
+        name: 'Rechenauflauf',
+        servings: '4 Portionen',
+        prep_time: '30 Min.',
+        ingredients: [{ name: 'Kartoffeln', amount: '600 g' }],
+      },
+    })
+  ).json;
+
+  const morgen = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  await api(`/api/plan/${morgen}`, { method: 'PUT', body: { recipe_id: recipe.id } });
+
+  const liste = await api('/api/plan/shopping?all=1');
+  const kartoffeln = liste.json.items.find((i) => /Kartoffeln/i.test(i.name));
+  assert.ok(kartoffeln, 'Kartoffeln erwartet');
+  // 600 g für 4 Portionen -> 2,5 Portionen -> 380 g (auf Zehner gerundet)
+  assert.match(kartoffeln.amount, /380 g/);
+});
+
+test('ein Tag lässt sich verschieben statt neu zu würfeln', async () => {
+  const heute = new Date().toISOString().slice(0, 10);
+  const morgen = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const recipe = (await api('/api/recipes')).json[0];
+
+  await api(`/api/plan/${heute}`, { method: 'PUT', body: { recipe_id: recipe.id } });
+  await api(`/api/plan/${morgen}`, { method: 'DELETE' });
+
+  const res = await api(`/api/plan/${heute}/move`, { method: 'POST', body: { to: morgen } });
+  assert.equal(res.status, 200, res.text);
+
+  const plan = res.json.plan;
+  assert.equal(plan.days.find((d) => d.date === heute).recipe, null, 'Quelle ist leer');
+  assert.equal(plan.days.find((d) => d.date === morgen).recipe.id, recipe.id);
+});
+
+test('ein Reste-Tag wird nicht überwürfelt', async () => {
+  const morgen = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const markiert = await api(`/api/plan/${morgen}/status`, {
+    method: 'POST',
+    body: { status: 'leftovers' },
+  });
+  assert.equal(markiert.status, 200, markiert.text);
+  assert.equal(markiert.json.plan.days.find((d) => d.date === morgen).status, 'leftovers');
+
+  const vorher = markiert.json.plan.days.find((d) => d.date === morgen).recipe?.id ?? null;
+  const gewuerfelt = await api('/api/plan/roll', { method: 'POST', body: { date: morgen } });
+  const nachher = gewuerfelt.json.plan.days.find((d) => d.date === morgen);
+  assert.equal(nachher.status, 'leftovers', 'der Status bleibt');
+  assert.equal(nachher.recipe?.id ?? null, vorher, 'und das Gericht auch');
+});
+
+test('unbekannte Status werden abgelehnt', async () => {
+  const heute = new Date().toISOString().slice(0, 10);
+  const res = await api(`/api/plan/${heute}/status`, {
+    method: 'POST',
+    body: { status: 'irgendwas' },
+  });
+  assert.equal(res.status, 400);
+});
+
+// ── Wetter und Vorlauf ────────────────────────────────────────────────────────
+
+test('das Wetter kommt von FHEM und wird für heute und morgen benutzt', async () => {
+  const { climateBias, weatherFactor, dishTemperament } = await import('../lib/climate.js');
+
+  // Gemessen: gilt nur für heute/morgen und nur, solange der Wert frisch ist.
+  const jetzt = '2026-04-15T18:00:00.000Z';
+  const frisch = { temp: 4, measuredAt: '2026-04-15T17:30:00.000Z', now: jetzt };
+  assert.equal(climateBias('2026-04-15', frisch), 'kalt');
+  assert.equal(climateBias('2026-04-16', frisch), 'kalt');
+  // Übermorgen sagt ein Messwert nichts – und April ist weder noch.
+  assert.equal(climateBias('2026-04-17', frisch), null);
+  // Alter Messwert zählt nicht.
+  assert.equal(
+    climateBias('2026-04-15', { temp: 4, measuredAt: '2026-04-14T06:00:00.000Z', now: jetzt }),
+    null
+  );
+  // Ohne Messwert entscheidet der Monat des geplanten Tages.
+  assert.equal(climateBias('2027-01-20'), 'kalt');
+  assert.equal(climateBias('2026-07-20'), 'warm');
+
+  assert.equal(dishTemperament({ name: 'Kürbissuppe', tags: [] }), 'winter');
+  assert.equal(dishTemperament({ name: 'Nudelsalat', tags: [] }), 'sommer');
+  assert.equal(dishTemperament({ name: 'Spaghetti', tags: [] }), null);
+
+  assert.ok(weatherFactor({ name: 'Kürbissuppe' }, 'kalt') > 1);
+  assert.ok(weatherFactor({ name: 'Kürbissuppe' }, 'warm') < 1);
+  assert.equal(weatherFactor({ name: 'Spaghetti' }, 'kalt'), 1, 'neutrale Gerichte bleiben');
+  assert.equal(weatherFactor({ name: 'Kürbissuppe' }, null), 1, 'ohne Wetter keine Wichtung');
+});
+
+test('FHEM meldet die Temperatur, unplausible Werte werden abgelehnt', async () => {
+  const ok = await api('/api/fhem/weather?temp=3.5');
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal(ok.json.temp, 3.5);
+  assert.equal(ok.json.bias, 'kalt');
+
+  // Komma statt Punkt kommt aus FHEM durchaus vor.
+  assert.equal((await api('/api/fhem/weather?temp=26,5')).json.bias, 'warm');
+  assert.equal((await api('/api/fhem/weather?temp=abc')).status, 400);
+  assert.equal((await api('/api/fhem/weather?temp=999')).status, 400);
+});
+
+test('Vorlauf steht am Rezept und in den FHEM-Readings', async () => {
+  const heute = new Date().toISOString().slice(0, 10);
+  const recipe = (
+    await api('/api/recipes', {
+      method: 'POST',
+      body: {
+        name: 'Gulasch aus der Truhe',
+        instructions: 'Das Fleisch am Vortag auftauen lassen. Dann schmoren.',
+        ingredients: [{ name: 'Rindfleisch', amount: '500 g' }],
+      },
+    })
+  ).json;
+  assert.match(recipe.prep_hint, /auftauen/);
+
+  await api(`/api/plan/${heute}`, { method: 'PUT', body: { recipe_id: recipe.id } });
+  const fhem = await api('/api/fhem/plan');
+  assert.match(fhem.json.today_prep, /auftauen/);
+
+  // Ein Rezept ohne Vorlauf bekommt auch keinen Hinweis.
+  const ohne = (
+    await api('/api/recipes', {
+      method: 'POST',
+      body: { name: 'Butterbrot', instructions: 'Brot streichen.', ingredients: [] },
+    })
+  ).json;
+  assert.equal(ohne.prep_hint, '');
+});
+
+test('die FHEM-Readings tragen absolute Bild-Adressen samt Token', async () => {
+  const heute = new Date().toISOString().slice(0, 10);
+  const recipe = (
+    await api('/api/recipes', {
+      method: 'POST',
+      body: {
+        name: 'Bildrezept',
+        image_url: '/api/mealie/image/abc',
+        ingredients: [{ name: 'Zutat' }],
+      },
+    })
+  ).json;
+  await api(`/api/plan/${heute}`, { method: 'PUT', body: { recipe_id: recipe.id } });
+
+  // Über den Helfer, nicht über globalThis.fetch – das ist in dieser Datei
+  // für die Import-Tests umgebogen.
+  const payload = (await api(`/api/fhem/plan?token=${TOKEN}`)).json;
+  // Relativ gespeichert, absolut ausgeliefert – FHEMVIZ läuft unter einer
+  // anderen Adresse und käme mit einem Pfad nicht weiter.
+  assert.match(payload.today_img, /^http:\/\/127\.0\.0\.1:\d+\/api\/mealie\/image\/abc\?token=/);
+  const tagKeys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+  assert.ok(tagKeys.every((k) => `${k}_img` in payload), 'je Tag ein Bild-Reading');
+});
+
+test('absolute Bild-Adressen (Cookidoo) bleiben unverändert', async () => {
+  const heute = new Date().toISOString().slice(0, 10);
+  const recipe = (
+    await api('/api/recipes', {
+      method: 'POST',
+      body: {
+        name: 'Thermomix-Rezept',
+        image_url: 'https://assets.tmecosys.com/bild.jpg',
+        ingredients: [{ name: 'Zutat' }],
+      },
+    })
+  ).json;
+  await api(`/api/plan/${heute}`, { method: 'PUT', body: { recipe_id: recipe.id } });
+
+  const payload = (await api(`/api/fhem/plan?token=${TOKEN}`)).json;
+  assert.equal(payload.today_img, 'https://assets.tmecosys.com/bild.jpg');
+});

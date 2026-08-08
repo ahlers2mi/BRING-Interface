@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { todayIso } from './lib/week.js';
-import { isIncompleteRecipe } from './lib/normalize.js';
+import { isIncompleteRecipe, prepHint } from './lib/normalize.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dbPath = process.env.DB_PATH || path.join(__dirname, 'recipes.db');
@@ -198,11 +198,15 @@ function ratingStats() {
 
 function decorate(recipe, stats) {
   const s = stats?.get(recipe.id) || {};
+  const tags = tagsToArray(recipe.tags);
   return {
     ...recipe,
     blocked: Boolean(recipe.blocked),
     source_missing: Boolean(recipe.source_missing),
-    tags: tagsToArray(recipe.tags),
+    tags,
+    // Braucht das Gericht Vorlauf (auftauen, einweichen)? Steht nirgends als
+    // Feld, aber fast immer im Text.
+    prep_hint: prepHint({ ...recipe, tags }),
     rating_count: s.rating_count || 0,
     avg_stars: s.avg_stars ?? null,
     rejected_count: s.rejected_count || 0,

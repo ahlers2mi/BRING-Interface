@@ -34,12 +34,16 @@ import {
 } from './database.js';
 import {
   buildWeekView,
+  currentWeather,
   fridgeSearch,
+  householdServings,
   rollDays,
   rollWeek,
   tasteSummary,
   weekShoppingItems,
 } from './lib/mealplan.js';
+import { scaleFactor, scaleIngredients } from './lib/scale.js';
+import { climateBias } from './lib/climate.js';
 import {
   isValidIsoDate,
   todayIso,
@@ -369,15 +373,31 @@ function parseItems(text) {
 
 // ── Einstellungen (zuletzt benutzte Liste merken) ──────────────────────────────
 
+function preferences() {
+  return {
+    lastListUuid: getSetting('lastListUuid'),
+    // Für wie viele Portionen eingekauft wird. 0/leer = Mengen unverändert
+    // übernehmen, wie es vorher war.
+    householdServings: householdServings(),
+  };
+}
+
 app.get('/api/preferences', (_req, res) => {
-  res.json({ lastListUuid: getSetting('lastListUuid') });
+  res.json(preferences());
 });
 
 app.put('/api/preferences', (req, res) => {
   if (typeof req.body.lastListUuid === 'string') {
     setSetting('lastListUuid', req.body.lastListUuid);
   }
-  res.json({ lastListUuid: getSetting('lastListUuid') });
+  if (req.body.householdServings !== undefined) {
+    const value = Number(req.body.householdServings);
+    if (!Number.isFinite(value) || value < 0 || value > 20) {
+      return res.status(400).json({ error: 'Portionen müssen zwischen 0 und 20 liegen.' });
+    }
+    setSetting('householdServings', String(value));
+  }
+  res.json(preferences());
 });
 
 app.get('/api/status', async (_req, res) => {
@@ -596,14 +616,19 @@ app.post('/api/recipes/:id/import', async (req, res) => {
     const { listUuid } = req.body;
     if (!listUuid) return res.status(400).json({ error: 'listUuid fehlt.' });
 
+    // Mengen auf die Haushaltsgröße umrechnen (Rezepte stehen meist auf 4
+    // Portionen). Ohne Portionsangabe am Rezept bleibt alles, wie es ist.
+    const factor = scaleFactor(recipe.servings, householdServings());
+    const zutaten = scaleIngredients(realIngredients(recipe.ingredients), factor);
+
     const client = await getBringClient();
     const imported = [];
-    for (const ing of recipe.ingredients) {
+    for (const ing of zutaten) {
       await client.saveItem(listUuid, ing.name, ing.amount || '');
       imported.push(ing.name);
     }
     setSetting('lastListUuid', listUuid);
-    res.json({ imported });
+    res.json({ imported, scaled: Boolean(factor) });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -866,6 +891,58 @@ app.post('/api/plan/mealie', async (req, res) => {
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
+});
+
+// POST /api/plan/:date/move – body: { to: 'tomorrow' | 'YYYY-MM-DD' }
+// Heute wird es doch nichts: das Gericht auf einen anderen Tag schieben, statt
+// es neu zu würfeln und zu verlieren.
+app.post('/api/plan/:date/move', (req, res) => {
+  const from = resolveDate(req.params.date);
+  const to = resolveDate(req.body?.to || 'tomorrow');
+  if (!from || !to) return res.status(400).json({ error: 'Ungültiges Datum.' });
+  if (from === to) return res.status(400).json({ error: 'Quelle und Ziel sind derselbe Tag.' });
+
+  const entry = getPlanEntry(from);
+  if (!entry?.recipe_id) {
+    return res.status(400).json({ error: 'Für diesen Tag ist nichts eingeplant.' });
+  }
+  const target = getPlanEntry(to);
+  if (target?.status === 'cooked') {
+    return res.status(400).json({ error: 'Der Zieltag ist schon gekocht.' });
+  }
+
+  setPlanEntry({
+    date: to,
+    recipe_id: entry.recipe_id,
+    note: entry.note,
+    status: 'planned',
+    origin: entry.origin || 'app',
+  });
+  deletePlanEntry(from);
+  syncPlanToMealie([from, to]);
+  res.json({ from, to, plan: buildWeekView(weekOf(to)) });
+});
+
+// POST /api/plan/:date/status – body: { status: planned|cooked|skipped|leftovers }
+// „leftovers" ist der Reste-Tag: da ist noch was da, der Würfel lässt ihn in Ruhe.
+const PLAN_STATUS = new Set(['planned', 'cooked', 'skipped', 'leftovers']);
+
+app.post('/api/plan/:date/status', (req, res) => {
+  const date = resolveDate(req.params.date);
+  if (!date) return res.status(400).json({ error: 'Ungültiges Datum.' });
+  const status = String(req.body?.status || '');
+  if (!PLAN_STATUS.has(status)) {
+    return res.status(400).json({ error: `Unbekannter Status: ${status}` });
+  }
+
+  const entry = getPlanEntry(date);
+  if (!entry) {
+    // Reste ohne Rezept sind erlaubt – „heute gibt es den Rest von gestern".
+    setPlanEntry({ date, recipe_id: null, note: 'Reste', status });
+  } else {
+    updatePlanStatus(date, status);
+  }
+  res.json({ plan: buildWeekView(weekOf(date)) });
 });
 
 // POST /api/plan/:date/rate – body: { rating } oder { kind, stars, comment }
@@ -1547,7 +1624,31 @@ function fhemValue(value) {
     .trim();
 }
 
-function fhemPlanPayload() {
+// Absolute Adresse für Bilder in den Readings. FHEMVIZ läuft im Browser unter
+// einer anderen Adresse als diese App – ein relativer Pfad ginge dort ins Leere.
+// Ohne PUBLIC_URL nehmen wir die Adresse, unter der die Anfrage hereinkam
+// (hinter dem Reverse Proxy dank `trust proxy` die öffentliche).
+function publicBase(req) {
+  const configured = String(process.env.PUBLIC_URL || '').trim().replace(/\/+$/, '');
+  if (configured) return configured;
+  if (!req) return '';
+  return `${req.protocol}://${req.get('host')}`;
+}
+
+function fhemImageUrl(recipe, base, token) {
+  const raw = String(recipe?.image_url || '');
+  if (!raw) return '';
+  if (/^https?:\/\//i.test(raw)) return raw; // Cookidoo liefert absolute Adressen
+  if (!base) return '';
+  // Unser Bild-Proxy liegt hinter der Anmeldung – der Token muss mit, sonst
+  // zeigt die Kachel nur einen kaputten Platzhalter.
+  const sep = raw.includes('?') ? '&' : '?';
+  return token ? `${base}${raw}${sep}token=${encodeURIComponent(token)}` : `${base}${raw}`;
+}
+
+function fhemPlanPayload(req = null) {
+  const base = publicBase(req);
+  const token = String(req?.query?.token || '');
   const week = weekOf(todayIso());
   const view = buildWeekView(week);
   const today = view.days.find((d) => d.isToday) || null;
@@ -1572,6 +1673,11 @@ function fhemPlanPayload() {
       : '',
     today_stars: today?.rating?.stars || 0,
     tomorrow: tomorrow?.recipe?.name || '',
+    // Vorlauf: was man heute Abend noch anfangen muss, damit es morgen klappt.
+    today_prep: today?.recipe?.prep_hint || '',
+    tomorrow_prep: tomorrow?.recipe?.prep_hint || '',
+    today_img: fhemImageUrl(today?.recipe, base, token),
+    tomorrow_img: fhemImageUrl(tomorrow?.recipe, base, token),
     recipe_count: taste.recipe_count,
     rated_count: taste.rated_count,
     updated: new Date().toISOString().replace('T', ' ').slice(0, 19),
@@ -1580,14 +1686,15 @@ function fhemPlanPayload() {
     payload[day.key] = day.recipe?.name || '';
     payload[`${day.key}_status`] = day.status;
     payload[`${day.key}_stars`] = day.rating?.stars || 0;
+    payload[`${day.key}_img`] = fhemImageUrl(day.recipe, base, token);
   }
   payload.state = payload.today ? `Heute: ${payload.today}` : 'Heute: nichts geplant';
   for (const [key, value] of Object.entries(payload)) payload[key] = fhemValue(value);
   return payload;
 }
 
-app.get('/api/fhem/plan', (_req, res) => {
-  res.json(fhemPlanPayload());
+app.get('/api/fhem/plan', (req, res) => {
+  res.json(fhemPlanPayload(req));
 });
 
 // Würfeln: ?scope=week|day (day + ?date=today|tomorrow|YYYY-MM-DD), ?onlyEmpty=1
@@ -1607,7 +1714,7 @@ function handleFhemRoll(req, res) {
       rollDays([date], { overwrite: !onlyEmpty });
       syncPlanToMealie(date);
     }
-    res.json(fhemPlanPayload());
+    res.json(fhemPlanPayload(req));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1628,7 +1735,7 @@ async function handleFhemSync(req, res) {
   }
   try {
     await reconcilePlanWeek(week);
-    res.json(fhemPlanPayload());
+    res.json(fhemPlanPayload(req));
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
@@ -1636,6 +1743,24 @@ async function handleFhemSync(req, res) {
 
 app.get('/api/fhem/sync', handleFhemSync);
 app.post('/api/fhem/sync', handleFhemSync);
+
+// Außentemperatur von FHEM entgegennehmen: ?temp=8.5
+// Der Würfel bevorzugt damit bei Kälte Eintopf und bei Hitze Salat – aber nur
+// für heute und morgen, weiter voraus sagt ein Messwert nichts (dann zählt der
+// Monat).
+function handleFhemWeather(req, res) {
+  const params = { ...req.query, ...(req.body || {}) };
+  const temp = Number(String(params.temp ?? params.temperature ?? '').replace(',', '.'));
+  if (!Number.isFinite(temp) || temp < -50 || temp > 60) {
+    return res.status(400).json({ error: 'temp fehlt oder ist unplausibel.' });
+  }
+  setSetting('weatherTemp', String(temp));
+  setSetting('weatherAt', new Date().toISOString());
+  res.json({ temp, bias: climateBias(todayIso(), currentWeather()) || 'neutral' });
+}
+
+app.get('/api/fhem/weather', handleFhemWeather);
+app.post('/api/fhem/weather', handleFhemWeather);
 
 // Bewerten: ?rating=lecker|gut|ok|maessig|schlecht|rausgeflogen|nie_wieder&date=today
 function handleFhemRate(req, res) {
@@ -1654,7 +1779,7 @@ function handleFhemRate(req, res) {
     resolved,
     comment: params.comment,
   });
-  res.json(fhemPlanPayload());
+  res.json(fhemPlanPayload(req));
 }
 
 app.get('/api/fhem/rate', handleFhemRate);

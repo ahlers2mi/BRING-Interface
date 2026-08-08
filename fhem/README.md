@@ -163,6 +163,37 @@ defmod a_wochenplan_abgleich at *06:00:00 set HTTP.Wochenplan abgleichen
 attr a_wochenplan_abgleich room Küche
 ```
 
+### Wetter und Vorlauf
+
+Zwei Kleinigkeiten, für die FHEM mehr weiß als die App:
+
+**Außentemperatur.** Schickt FHEM sie regelmäßig, bevorzugt der Würfel bei Kälte
+Suppe, Eintopf und Auflauf und bei Hitze Salat und Gegrilltes. Der Messwert gilt
+für **heute und morgen**; für Tage weiter voraus entscheidet der Monat (Dezember
+bis Februar kalt, Juni bis August warm), denn ein aktueller Messwert sagt über
+Freitag nichts. Es ist eine Neigung, kein Filter – der Auflauf im Juli bleibt
+möglich, er kommt nur seltener.
+
+```
+define a_wochenplan_wetter at +*01:00:00 { GetFileFromURL("http://192.168.69.10:8095/api/fhem/weather?temp=".ReadingsVal("<dein Sensor>","temperature",15)."&token=DEINTOKEN") }
+```
+
+**Vorlauf.** Die App liest aus Zubereitung und Tags heraus, ob etwas am Vortag
+anzufangen ist (auftauen, einweichen, marinieren, Teig gehen lassen) und stellt
+es als `today_prep` / `tomorrow_prep` bereit. Damit lohnt eine Erinnerung am
+Abend – sie meldet sich nur, wenn wirklich etwas zu tun ist:
+
+```
+attr HTTP.Wochenplan reading26Name morgen_vorbereitung
+attr HTTP.Wochenplan reading26Regex "tomorrow_prep":"([^"]*)"
+
+define a_wochenplan_vorbereitung at *20:00:00 { my $v = ReadingsVal("HTTP.Wochenplan","morgen_vorbereitung","");; my $m = ReadingsVal("HTTP.Wochenplan","morgen","");; if ($v ne "") { send_to_all("S", "Morgen gibt es $m - heute noch $v", "Wochenplan") } }
+```
+
+> Im `Commands`-Block muss ein literales Semikolon **`;;`** heißen – jede Zeile
+> ist dort ein eigener Befehl. Im FHEMWEB-DEF-Editor schreibt man stattdessen
+> ganz normal mit einfachem `;`.
+
 ## 5. FHEMVIZ
 
 Das Gerät liegt im Raum `FHEMVIZ->Küche`, wird also von `myViz`
@@ -217,6 +248,25 @@ attr wl_wochenplan room Küche,FHEMVIZ->Küche
 > wird geladen, bekommt aber keine Kachel). Für das Dashboard gibt es deshalb
 > den Bild-Weg, siehe unten. Im klassischen FHEMWEB funktioniert der Rahmen.
 
+### Als bedienbare Kachel in FHEMVIZ (Widget `mealplan`)
+
+Ab FHEMVIZ v0.34.48 gibt es ein eigenes Widget: heute groß mit Foto, darunter
+die restlichen Tage als Streifen mit Vorschaubild, Sternen und Status – und
+Knöpfe zum Würfeln, Bewerten und für den Wocheneinkauf **direkt in der Kachel**.
+
+```
+attr HTTP.Wochenplan vizWidget mealplan
+attr HTTP.Wochenplan vizSize 2x2
+```
+
+Gelesen werden `mo`…`so`, `<tag>_sterne`, `<tag>_bild` und
+`morgen_vorbereitung`; die Bild-Readings legt der Block oben an. Fehlt eines,
+entfällt genau dieser Teil. Die Knöpfe erscheinen nur, wenn das Gerät den
+passenden `set`-Befehl anbietet.
+
+Der Unterschied zur Bild-Kachel unten: `/plan.svg` **zeigt** nur, das Widget
+lässt sich **bedienen**.
+
 ### Als Bild-Kachel in FHEMVIZ
 
 FHEMVIZ kennt ein Bild-Widget (`vizWidget image`) – so hängt auch das
@@ -257,6 +307,14 @@ Alle Routen sind sowohl per GET als auch per POST erreichbar – GET, damit ein
 | `/api/fhem/rate?date=today&rating=lecker` | Tag bewerten |
 | `/api/fhem/shopping?week=current` | Zutaten der Woche in die zuletzt benutzte Bring-Liste (`&list=<uuid>` für eine andere) |
 | `/api/fhem/sync?week=current` | Menüplan mit Mealie abgleichen (erst holen, dann schieben) und die Readings zurückgeben |
+| `/api/fhem/weather?temp=8.5` | Außentemperatur melden – der Würfel bevorzugt damit bei Kälte Eintopf, bei Hitze Salat |
+
+Die Antwort von `/api/fhem/plan` enthält je Tag zusätzlich `<tag>_img` mit einer
+**absoluten** Bild-Adresse samt Token (`mon_img`, `tue_img` …). Absolut deshalb,
+weil FHEMVIZ im Browser unter einer anderen Adresse läuft als diese App – ein
+Pfad wie `/api/mealie/image/…` ginge dort ins Leere. Die Adresse baut sich aus
+`PUBLIC_URL` oder, wenn das nicht gesetzt ist, aus der Adresse, unter der die
+Anfrage hereinkam.
 
 Beispiel für ein eigenes Notify (z. B. Bewertung über einen Taster):
 
