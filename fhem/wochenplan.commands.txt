@@ -106,6 +106,13 @@ attr HTTP.Wochenplan set06Name einkaufsliste
 attr HTTP.Wochenplan set06URL http://192.168.69.10:8095/api/fhem/shopping?week=current&token=DEINTOKEN
 attr HTTP.Wochenplan set06NoArg 1
 
+# Abgleich mit Mealies Menuplan von Hand anstossen. Noetig ist das nicht - die
+# App gleicht sich alle paar Minuten selbst ab -, aber vor einer Ansage zu
+# fester Uhrzeit will man nicht auf das naechste Intervall warten.
+attr HTTP.Wochenplan set07Name abgleichen
+attr HTTP.Wochenplan set07URL http://192.168.69.10:8095/api/fhem/sync?week=current&token=DEINTOKEN
+attr HTTP.Wochenplan set07NoArg 1
+
 # ── Anzeige ──────────────────────────────────────────────────────────────────
 attr HTTP.Wochenplan stateFormat Heute: heute
 attr HTTP.Wochenplan webCmd wuerfeln_heute:wuerfeln_woche:bewerten
@@ -123,8 +130,15 @@ define a_wochenplan_wuerfeln at *18:00:00 { if ((localtime)[6] == 0) { fhem("set
 attr a_wochenplan_wuerfeln alias Wochenplan sonntags würfeln
 attr a_wochenplan_wuerfeln room Küche
 
+# ── Optional: morgens einmal mit Mealie abgleichen ───────────────────────────
+# Nur sinnvoll, wenn gleich darauf eine Ansage kommt - sonst reicht der
+# automatische Abgleich der App.
+define a_wochenplan_abgleich at *06:00:00 set HTTP.Wochenplan abgleichen
+attr a_wochenplan_abgleich alias Wochenplan mit Mealie abgleichen
+attr a_wochenplan_abgleich room Küche
+
 # ── Optional: morgens ansagen, was es heute gibt ─────────────────────────────
 # send_to_all ist die vorhandene Hausfunktion (siehe andere Notifys).
-define a_wochenplan_ansage at *07:30:00 { my $e = ReadingsVal("HTTP.Wochenplan","heute",""); if ($e ne "") { send_to_all("S", "Heute gibt es: $e", "Wochenplan") } }
+define a_wochenplan_ansage at *07:30:00 { my $e = ReadingsVal("HTTP.Wochenplan","heute","");; if ($e ne "") { send_to_all("S", "Heute gibt es: $e", "Wochenplan") } }
 attr a_wochenplan_ansage alias Wochenplan Ansage
 attr a_wochenplan_ansage room Küche

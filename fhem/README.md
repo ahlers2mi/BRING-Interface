@@ -124,6 +124,7 @@ set HTTP.Wochenplan wuerfeln_leere_tage     # nur die freien Tage füllen
 set HTTP.Wochenplan bewerten lecker         # lecker|gut|ok|maessig|schlecht|
                                             # rausgeflogen|nie_wieder
 set HTTP.Wochenplan einkaufsliste           # Zutaten der Woche nach Bring
+set HTTP.Wochenplan abgleichen              # Menüplan mit Mealie abgleichen
 ```
 
 `rausgeflogen` heißt „gar nicht gekocht" – das Rezept bleibt in der Sammlung,
@@ -136,6 +137,31 @@ Die Aktions-URLs antworten mit demselben JSON wie der normale Abruf; dank
 > stattdessen je Bewertung ein eigenes No-Arg-`set` anlegen, z. B.
 > `set07Name bewerten_lecker` + `set07URL …/api/fhem/rate?date=today&rating=lecker&token=…`
 > + `set07NoArg 1`.
+
+### Abgleich mit Mealie
+
+Einen eigenen Job braucht FHEM dafür **nicht**: die App gleicht sich alle paar
+Minuten selbst mit Mealies Menüplan ab, und das Gerät liest seine Werte laut
+Define ohnehin alle 300 Sekunden neu. Wer in Mealie plant, sieht es hier also
+spätestens nach ein paar Minuten.
+
+Nur wenn eine Ausgabe zu einer festen Uhrzeit garantiert frisch sein soll (etwa
+eine Ansage morgens), lohnt ein Anstoß auf Knopfdruck. Dafür gibt es
+`set abgleichen` – die Route holt zuerst aus Mealie, schiebt dann unsere Tage
+dorthin und antwortet mit denselben Readings wie der normale Abruf:
+
+```
+attr HTTP.Wochenplan set07Name abgleichen
+attr HTTP.Wochenplan set07NoArg 1
+attr HTTP.Wochenplan set07URL http://192.168.69.10:3555/api/fhem/sync?week=current&token=DEINTOKEN
+```
+
+Dazu passend ein `at`, das morgens einmal abgleicht:
+
+```
+defmod a_wochenplan_abgleich at *06:00:00 set HTTP.Wochenplan abgleichen
+attr a_wochenplan_abgleich room Küche
+```
 
 ## 5. FHEMVIZ
 
@@ -230,6 +256,7 @@ Alle Routen sind sowohl per GET als auch per POST erreichbar – GET, damit ein
 | `/api/fhem/roll?scope=day&date=today` | einen Tag würfeln (`today`, `tomorrow` oder `YYYY-MM-DD`) |
 | `/api/fhem/rate?date=today&rating=lecker` | Tag bewerten |
 | `/api/fhem/shopping?week=current` | Zutaten der Woche in die zuletzt benutzte Bring-Liste (`&list=<uuid>` für eine andere) |
+| `/api/fhem/sync?week=current` | Menüplan mit Mealie abgleichen (erst holen, dann schieben) und die Readings zurückgeben |
 
 Beispiel für ein eigenes Notify (z. B. Bewertung über einen Taster):
 
