@@ -46,25 +46,108 @@ function fileToResizedDataUrl(file, maxDim = 1280, quality = 0.8) {
   });
 }
 
+let currentListUuid = null;
+
+// Eine Zeile der Liste: abhaken, Menge ändern, löschen.
+function buildItemRow(item) {
+  const row = document.createElement('div');
+  row.className = 'item-row';
+  row.innerHTML = `
+    <button class="btn btn-secondary btn-sm" data-act="done" title="Abhaken">✓</button>
+    <span class="item-name">${escHtml(item.name)}</span>
+    <input type="text" class="item-amount" value="${escHtml(item.specification || '')}"
+      placeholder="Menge" />
+    <button class="btn btn-danger btn-sm" data-act="del" title="Von der Liste nehmen">🗑</button>
+  `;
+
+  const call = async (btn, path, options) => {
+    setLoading(btn, true);
+    try {
+      await apiFetch(path, options);
+      await loadCurrentItems(currentListUuid);
+    } catch (err) {
+      flash('itemsResult', `Fehler: ${escHtml(err.message)}`, 'error');
+      setLoading(btn, false);
+    }
+  };
+
+  const name = encodeURIComponent(item.name);
+  row.querySelector('[data-act="done"]').addEventListener('click', (e) =>
+    call(e.currentTarget, `/api/lists/${currentListUuid}/items/${name}/done`, { method: 'POST' })
+  );
+  row.querySelector('[data-act="del"]').addEventListener('click', (e) =>
+    call(e.currentTarget, `/api/lists/${currentListUuid}/items/${name}`, { method: 'DELETE' })
+  );
+
+  // Menge: speichern beim Verlassen des Feldes, aber nur wenn sie sich geändert
+  // hat – sonst schickt jedes Antippen eine Anfrage an Bring.
+  const amount = row.querySelector('.item-amount');
+  const before = amount.value;
+  const save = async () => {
+    if (amount.value === before) return;
+    amount.disabled = true;
+    try {
+      await apiFetch(`/api/lists/${currentListUuid}/items`, {
+        method: 'POST',
+        body: JSON.stringify({ items: [{ name: item.name, amount: amount.value.trim() }] }),
+      });
+      flash('itemsResult', `✓ ${escHtml(item.name)}: Menge gespeichert.`);
+      await loadCurrentItems(currentListUuid);
+    } catch (err) {
+      flash('itemsResult', `Fehler: ${escHtml(err.message)}`, 'error');
+      amount.disabled = false;
+    }
+  };
+  amount.addEventListener('blur', save);
+  amount.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') amount.blur();
+  });
+
+  return row;
+}
+
 export async function loadCurrentItems(listUuid) {
   const target = el('currentItems');
   if (!target) return;
+  currentListUuid = listUuid;
   target.innerHTML = '<span class="spinner"></span>';
   try {
     const data = await apiFetch(`/api/lists/${listUuid}/items`);
     const items = data.purchase ?? [];
+    target.innerHTML = '';
     if (items.length === 0) {
       target.innerHTML = '<em style="color:var(--text-muted)">Liste ist leer.</em>';
-      return;
+    } else {
+      for (const item of items) target.appendChild(buildItemRow(item));
     }
-    target.innerHTML = items
-      .map(
-        (i) =>
-          `<span class="ingredient-tag">${escHtml(i.name)}${
-            i.specification ? ' – ' + escHtml(i.specification) : ''
-          }</span>`
-      )
-      .join('');
+
+    // „Zuletzt gekauft": ein Tipp setzt den Artikel wieder auf die Liste.
+    const recent = (data.recently ?? data.recent ?? []).slice(0, 40);
+    const box = el('recentBox');
+    const recentEl = el('recentItems');
+    if (box && recentEl) {
+      box.style.display = recent.length ? '' : 'none';
+      recentEl.innerHTML = '';
+      for (const item of recent) {
+        const chip = document.createElement('button');
+        chip.className = 'ingredient-tag is-clickable';
+        chip.textContent = item.name;
+        chip.addEventListener('click', async () => {
+          chip.disabled = true;
+          try {
+            await apiFetch(`/api/lists/${listUuid}/items`, {
+              method: 'POST',
+              body: JSON.stringify({ items: [{ name: item.name, amount: item.specification || '' }] }),
+            });
+            await loadCurrentItems(listUuid);
+          } catch (err) {
+            flash('itemsResult', `Fehler: ${escHtml(err.message)}`, 'error');
+            chip.disabled = false;
+          }
+        });
+        recentEl.appendChild(chip);
+      }
+    }
   } catch (err) {
     target.innerHTML = `<span style="color:var(--danger)">Fehler: ${escHtml(
       err.message
@@ -73,6 +156,36 @@ export async function loadCurrentItems(listUuid) {
 }
 
 export function initShopping() {
+  on('addItemBtn', 'click', async (e) => {
+    const listUuid = el('listSelect').value;
+    if (!listUuid) return flash('itemsResult', 'Bitte zuerst eine Bring-Liste auswählen.', 'error');
+    const name = el('newItemName').value.trim();
+    if (!name) return flash('itemsResult', 'Bitte einen Artikel eingeben.', 'error');
+    const btn = e.currentTarget;
+    setLoading(btn, true);
+    try {
+      await apiFetch(`/api/lists/${listUuid}/items`, {
+        method: 'POST',
+        body: JSON.stringify({ items: [{ name, amount: el('newItemAmount').value.trim() }] }),
+      });
+      el('newItemName').value = '';
+      el('newItemAmount').value = '';
+      flash('itemsResult', `✓ ${escHtml(name)} steht auf der Liste.`);
+      await loadCurrentItems(listUuid);
+    } catch (err) {
+      flash('itemsResult', `Fehler: ${escHtml(err.message)}`, 'error');
+    } finally {
+      setLoading(btn, false);
+    }
+  });
+
+  on('newItemName', 'keydown', (e) => {
+    if (e.key === 'Enter') el('addItemBtn').click();
+  });
+  on('newItemAmount', 'keydown', (e) => {
+    if (e.key === 'Enter') el('addItemBtn').click();
+  });
+
   on('importBtn', 'click', async () => {
     const btn = el('importBtn');
     const resultEl = el('importResult');
