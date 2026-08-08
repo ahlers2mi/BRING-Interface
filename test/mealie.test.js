@@ -1030,3 +1030,46 @@ test('Anreichern einzeln: ohne Chefkoch-Quelle gibt es eine klare Absage', async
   assert.equal(res.status, 400);
   assert.match(res.json.error, /Chefkoch/);
 });
+
+// ── Ein Rezept per Link (auch vom Handy) ──────────────────────────────────────
+
+test('Link hinzufügen: Mealie importiert, der Spiegel zieht sofort nach', async () => {
+  const before = (await api('/api/recipes')).json.length;
+  const res = await api('/api/recipes/add', {
+    method: 'POST',
+    body: { url: 'https://www.chefkoch.de/rezepte/555555/Neu.html' },
+  });
+  assert.equal(res.status, 201, res.text);
+  assert.equal(res.json.target, 'mealie');
+  assert.equal(res.json.name, 'Chefkoch-Rezept 555555');
+  assert.match(res.json.link, /\/g\/home\/r\/chefkoch-555555/);
+
+  // Ohne zusätzlichen Abgleich schon in der Liste – sonst wartet man 15 Minuten.
+  const list = (await api('/api/recipes')).json;
+  assert.equal(list.length, before + 1);
+  assert.ok(list.some((r) => r.source_slug === 'chefkoch-555555'));
+});
+
+test('Link hinzufügen: dasselbe Rezept ein zweites Mal wird erkannt', async () => {
+  const res = await api('/api/recipes/add', {
+    method: 'POST',
+    body: { url: 'https://www.chefkoch.de/rezepte/555555/Anderer-Titel.html' },
+  });
+  assert.equal(res.status, 200, res.text);
+  assert.equal(res.json.duplicate, true);
+  assert.match(res.json.message, /Kennen wir schon/);
+});
+
+test('Link hinzufügen geht auch per GET – dafür der iOS-Kurzbefehl', async () => {
+  const url = encodeURIComponent('https://www.chefkoch.de/rezepte/666666/Kurzbefehl.html');
+  const res = await api(`/api/recipes/add?url=${url}`);
+  assert.equal(res.status, 201, res.text);
+  assert.equal(res.json.ok, true);
+  assert.match(res.json.message, /In Mealie angelegt/);
+});
+
+test('Link hinzufügen: ohne brauchbare Adresse eine klare Absage', async () => {
+  const res = await api('/api/recipes/add', { method: 'POST', body: { url: 'kein-link' } });
+  assert.equal(res.status, 400);
+  assert.match(res.json.error, /http/);
+});

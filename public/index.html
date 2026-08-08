@@ -239,6 +239,43 @@
   <!-- ─── Import / Quellen Tab ───────────────────────────────────────────── -->
   <div id="tab-import" class="tab-panel">
 
+    <!-- Ein Rezept per Link – funktioniert auch, wenn Mealie die Quelle ist -->
+    <div class="card">
+      <h2>🔗 Rezept per Link hinzufügen</h2>
+      <p class="hint" id="addUrlHint">
+        Adresse einer Rezeptseite einfügen – das Rezept wird ausgelesen und
+        gespeichert. Schon vorhandene Rezepte werden erkannt.
+      </p>
+      <div class="inline-fields">
+        <input type="url" id="addUrl" placeholder="https://www.chefkoch.de/rezepte/…" />
+        <button class="btn btn-primary" id="addUrlBtn">➕ Hinzufügen</button>
+      </div>
+      <div id="addUrlResult"></div>
+
+      <details class="instructions">
+        <summary>Vom iPhone aus über „Teilen" hinzufügen</summary>
+        <div>
+          <p class="hint">
+            iOS lässt keine Webseite ins Teilen-Menü – ein <b>Kurzbefehl</b> schon.
+            Einmalig anlegen (App „Kurzbefehle" → neuer Kurzbefehl):
+          </p>
+          <ol class="hint">
+            <li>Im Kurzbefehl-Menü <b>„In Teilen-Menü anzeigen"</b> einschalten,
+              als Eingabetyp <b>URLs</b> und Safari-Webseiten wählen.</li>
+            <li>Aktion <b>„Inhalte von URL abrufen"</b> einfügen, Adresse:
+              <code id="addUrlShortcut">…</code> – und dort statt
+              <code>URL_HIER</code> die Variable <b>Kurzbefehlseingabe</b> einsetzen.</li>
+            <li>Aktion <b>„Ergebnis anzeigen"</b> anhängen, damit die Rückmeldung
+              kommt. Kurzbefehl z. B. „Rezept merken" nennen.</li>
+          </ol>
+          <p class="hint">
+            Danach: im Safari auf der Rezeptseite auf Teilen tippen und
+            „Rezept merken" wählen.
+          </p>
+        </div>
+      </details>
+    </div>
+
     <!-- Cookidoo/Thermomix als zweite Quelle (nur sichtbar, wenn konfiguriert) -->
     <div class="card" id="cookidooCard" style="display:none;">
       <h2>🍲 Cookidoo (Thermomix)</h2>

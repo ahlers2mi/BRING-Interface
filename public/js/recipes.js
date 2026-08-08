@@ -712,7 +712,37 @@ function startPolling() {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
+// Adresse für den iOS-Kurzbefehl – mit Token, falls die App eins verlangt.
+function renderShortcutUrl() {
+  const node = el('addUrlShortcut');
+  if (!node) return;
+  const base = `${location.origin}/api/recipes/add?url=URL_HIER`;
+  node.textContent = state.status?.apiTokenEnabled ? `${base}&token=DEIN_API_TOKEN` : base;
+}
+
 export async function initRecipes() {
+  renderShortcutUrl();
+
+  on('addUrlBtn', 'click', async (e) => {
+    const url = el('addUrl').value.trim();
+    if (!url) return flash('addUrlResult', 'Bitte eine Adresse einfügen.', 'error');
+    const btn = e.currentTarget;
+    setLoading(btn, true);
+    try {
+      const res = await apiFetch('/api/recipes/add', {
+        method: 'POST',
+        body: JSON.stringify({ url }),
+      });
+      flash('addUrlResult', escHtml(res.message), res.duplicate ? 'info' : 'success');
+      if (!res.duplicate) el('addUrl').value = '';
+      await refreshAll();
+    } catch (err) {
+      flash('addUrlResult', `Fehler: ${escHtml(err.message)}`, 'error');
+    } finally {
+      setLoading(btn, false);
+    }
+  });
+
   on('addIngredientBtn', 'click', () => {
     el('ingredientRows').appendChild(createIngredientRow());
   });

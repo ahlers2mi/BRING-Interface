@@ -60,7 +60,9 @@ import {
   cancelChefkochJob,
   deleteRecipeInMealie,
   fetchMealieImage,
+  fetchRecipeDetail,
   getChefkochJob,
+  importUrlToMealie,
   mapMealieRecipe,
   repairThinMealieRecipe,
   getSyncState,
@@ -507,6 +509,12 @@ app.post('/api/recipes', blockWhenMealie, (req, res) => {
   res.status(201).json(recipe);
 });
 
+// Muss VOR '/api/recipes/:id' stehen, sonst hält Express "add" für eine id.
+// (Die Handler stehen weiter unten beim übrigen Import – Funktionsdeklarationen
+// sind zu diesem Zeitpunkt schon bekannt.)
+app.get('/api/recipes/add', handleAddUrl);
+app.post('/api/recipes/add', handleAddUrl);
+
 app.get('/api/recipes/:id', (req, res) => {
   const recipe = getRecipeById(Number(req.params.id));
   if (!recipe) return res.status(404).json({ error: 'Rezept nicht gefunden.' });
@@ -905,6 +913,73 @@ app.post('/api/recipes/import/url', blockWhenMealie, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ── Ein Rezept per Link, egal woher ───────────────────────────────────────────
+//
+// Absichtlich **ohne** `blockWhenMealie` und mit GET-Variante: das ist der Weg
+// fürs Handy (iOS-Kurzbefehl im Teilen-Menü). Läuft Mealie, übernimmt dessen
+// Importer und der Spiegel wird sofort nachgezogen; sonst der eigene Importer.
+async function addRecipeByUrl(url) {
+  if (!/^https?:\/\//i.test(url)) {
+    return { status: 400, body: { error: 'Bitte eine vollständige http(s)-Adresse angeben.' } };
+  }
+
+  // Schon da? Bei Chefkoch ist die Rezept-Nummer eindeutig, sonst die ganze URL.
+  const key = /chefkoch\.de\/rezepte\/(\d+)\//.exec(url)?.[0] || url.split('?')[0];
+  const known = findRecipeBySourceUrlPart(key);
+  if (known) {
+    return {
+      status: 200,
+      body: { ok: true, duplicate: true, name: known.name, message: `Kennen wir schon: ${known.name}` },
+    };
+  }
+
+  if (mealieEnabled()) {
+    const slug = await importUrlToMealie(url);
+    if (!slug) throw new Error('Mealie hat kein Rezept angelegt.');
+    // Nicht auf den nächsten Abgleich warten – der läuft nur alle paar Minuten.
+    const detail = await fetchRecipeDetail(slug);
+    const mapped = mapMealieRecipe(detail, mealieConfig().url);
+    const saved = mapped ? upsertRecipeFromSource(mapped) : null;
+    return {
+      status: 201,
+      body: {
+        ok: true,
+        target: 'mealie',
+        name: saved?.name || detail?.name || '',
+        link: mealieRecipeUrl(slug),
+        message: `In Mealie angelegt: ${saved?.name || detail?.name || slug}`,
+      },
+    };
+  }
+
+  const recipe = await fetchRecipeFromUrl(url);
+  if (!recipe || !recipe.name) {
+    return {
+      status: 422,
+      body: {
+        error:
+          'Auf der Seite wurden keine strukturierten Rezeptdaten gefunden. ' +
+          'Text kopieren und die KI-Analyse benutzen.',
+      },
+    };
+  }
+  const created = createRecipe(recipe);
+  return {
+    status: 201,
+    body: { ok: true, target: 'lokal', name: created.name, message: `Gespeichert: ${created.name}` },
+  };
+}
+
+async function handleAddUrl(req, res) {
+  const url = String(req.query?.url || req.body?.url || '').trim();
+  try {
+    const { status, body } = await addRecipeByUrl(url);
+    res.status(status).json(body);
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+}
 
 // POST /api/recipes/import/chefkoch – body: { query?, count? }
 // Startet den Massenimport im Hintergrund (Fortschritt via /status).
