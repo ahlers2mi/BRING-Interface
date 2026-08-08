@@ -86,6 +86,8 @@ test('Rezepte anlegen und mit Zutaten laden', async () => {
       name: 'Zucchini-Auflauf',
       tags: ['Vegetarisch', 'Auflauf'],
       prep_time: 'ca. 45 Min.',
+      servings: '4 Portionen',
+      image_url: 'https://example.invalid/zucchini.jpg',
       ingredients: [
         { name: 'Zucchini', amount: '2' },
         { name: 'Feta', amount: '200 g' },
@@ -311,6 +313,22 @@ test('Reste-Suche findet passende Rezepte und listet Fehlendes', async () => {
     (await api('/api/fridge/search', { method: 'POST', body: { items: [] } })).status,
     400
   );
+});
+
+test('Reste-Treffer bringen Bild, Portionen und Mealie-Felder mit', async () => {
+  // Die Karte der Reste-Küche zeichnet dasselbe wie die Rezeptliste; fehlt hier
+  // ein Feld, bleibt dort still die Bildkachel oder der Mealie-Knopf weg.
+  const res = await api('/api/fridge/search', {
+    method: 'POST',
+    body: { items: ['Zucchini'] },
+  });
+  const r = res.json.results.find((x) => x.recipe.name === 'Zucchini-Auflauf')?.recipe;
+  assert.ok(r, 'Zucchini-Auflauf nicht gefunden');
+  assert.equal(r.image_url, 'https://example.invalid/zucchini.jpg');
+  assert.equal(r.servings, '4 Portionen');
+  for (const key of ['source', 'source_slug', 'times_cooked', 'incomplete']) {
+    assert.ok(key in r, `Feld ${key} fehlt im Treffer`);
+  }
 });
 
 // ── Geschmacksprofil ──────────────────────────────────────────────────────────

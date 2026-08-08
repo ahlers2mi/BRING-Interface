@@ -95,6 +95,34 @@ export function tagChips(tags) {
   return tags.map((t) => `<span class="chip">${escHtml(t)}</span>`).join('');
 }
 
+// Woher ein Rezept ursprünglich kommt. `source` ist der Weg zu uns (fast alles
+// läuft über Mealie) – interessant ist aber der Anbieter dahinter.
+export function providerOf(recipe) {
+  if (recipe.source === 'cookidoo') return 'cookidoo';
+  if (/chefkoch\.de/i.test(recipe.source_url || '')) return 'chefkoch';
+  return 'other';
+}
+
+export const PROVIDER_LABEL = {
+  cookidoo: '🍲 Cookidoo',
+  chefkoch: '🥄 Chefkoch',
+  other: 'eigene Quelle',
+};
+
+// Bildkachel für eine Rezeptkarte. Mealie-Bilder laufen über unseren Server
+// (/api/mealie/image/<id>); im Browser ist die Sitzung als Cookie da, deshalb
+// genügt die Adresse so, wie sie aus der Datenbank kommt – anders als auf der
+// Plan-Seite, die mit Token in der Adresse arbeitet.
+export function recipeThumb(recipe, cls = 'recipe-thumb') {
+  const url = String(recipe?.image_url || '').trim();
+  if (!url) return `<div class="${cls} empty" aria-hidden="true"></div>`;
+  // In url() darf kein ' stehen bleiben, sonst bricht die Deklaration auf.
+  const safe = url.replace(/'/g, '%27');
+  return `<div class="${cls}" role="img" aria-label="Foto: ${escHtml(
+    recipe.name || ''
+  )}" style="background-image:url('${escHtml(safe)}')"></div>`;
+}
+
 // Adresse eines Rezepts in der Mealie-Oberfläche (Muster kommt aus /api/status).
 export function mealieRecipeLink(slug) {
   const mealie = state.status?.mealie;

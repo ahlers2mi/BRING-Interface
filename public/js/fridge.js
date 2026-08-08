@@ -4,11 +4,16 @@
 
 import {
   apiFetch,
+  deDate,
   el,
   escHtml,
   flash,
+  mealieRecipeLink,
   on,
+  PROVIDER_LABEL,
+  providerOf,
   ratingBadge,
+  recipeThumb,
   setLoading,
 } from './core.js';
 import { loadPlan } from './plan.js';
@@ -23,13 +28,46 @@ function coverageBar(coverage) {
 }
 
 function buildResultCard(item) {
-  const node = document.createElement('div');
-  node.className = 'recipe-item';
   const r = item.recipe;
+  const node = document.createElement('div');
+  node.className = `recipe-item${r.incomplete ? ' is-blocked' : ''}`;
+  const mealieLink = r.source === 'mealie' ? mealieRecipeLink(r.source_slug) : '';
+
+  // Dieselben Angaben wie in der Rezeptliste – beim Restekochen will man
+  // Kochzeit, Portionen und "hatten wir zuletzt am …" genauso sehen.
+  const meta = [];
+  if (r.prep_time) meta.push(`⏱ ${escHtml(r.prep_time)}`);
+  if (r.servings) meta.push(`🍽 ${escHtml(r.servings)}`);
+  if (r.times_cooked) {
+    meta.push(
+      `👨‍🍳 ${r.times_cooked}× gekocht${
+        r.last_cooked ? ` (zuletzt ${escHtml(deDate(r.last_cooked))})` : ''
+      }`
+    );
+  }
+  if (r.incomplete) {
+    meta.push('⚠️ unvollständig (Anriss hinter der PLUS-Schranke)');
+  }
+  if (r.source_url) {
+    meta.push(
+      `🔗 <a href="${escHtml(r.source_url)}" target="_blank" rel="noopener noreferrer">${
+        PROVIDER_LABEL[providerOf(r)] || 'Quelle'
+      }</a>`
+    );
+  }
+
+  const instructions = r.instructions
+    ? `<details class="instructions">
+         <summary>Zubereitung anzeigen</summary>
+         <div>${escHtml(r.instructions)}</div>
+       </details>`
+    : '';
 
   node.innerHTML = `
+    ${recipeThumb(r)}
     <div class="recipe-info">
       <h3>${escHtml(r.name)} ${ratingBadge(r)}</h3>
+      ${meta.length ? `<div class="meta">${meta.join(' &nbsp;·&nbsp; ')}</div>` : ''}
       ${coverageBar(item.coverage)}
       <div class="ingredient-tags">
         ${item.matched
@@ -55,10 +93,11 @@ function buildResultCard(item) {
           : `<div class="hint">${item.missing.length} Zutat(en) fehlen noch.</div>`
       }
       ${
-        r.prep_time
-          ? `<div class="meta">⏱ ${escHtml(r.prep_time)}</div>`
+        r.prep_hint
+          ? `<div class="hint prep-hint">⏰ Vorher: ${escHtml(r.prep_hint)}</div>`
           : ''
       }
+      ${instructions}
     </div>
     <div class="recipe-actions">
       ${
@@ -67,6 +106,13 @@ function buildResultCard(item) {
           : ''
       }
       <button class="btn btn-secondary btn-sm" data-act="today">📅 Heute kochen</button>
+      ${
+        mealieLink
+          ? `<a class="btn btn-secondary btn-sm" href="${escHtml(
+              mealieLink
+            )}" target="_blank" rel="noopener noreferrer">✏️ In Mealie</a>`
+          : ''
+      }
       ${
         r.source_url
           ? `<a class="btn btn-secondary btn-sm" href="${escHtml(

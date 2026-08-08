@@ -537,6 +537,32 @@ ul.plain li { padding: 0.1rem 0; }
 
 .recipe-item.is-blocked { opacity: 0.6; }
 
+/* Vorschaubild links in Rezeptliste und Reste-Küche. Feste Breite, damit die
+   Karten untereinander eine Kante bilden – auch wenn ein Bild fehlt. */
+.recipe-thumb {
+  width: 5.5rem;
+  height: 5.5rem;
+  flex-shrink: 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--border) center / cover no-repeat;
+}
+
+.recipe-thumb.empty {
+  position: relative;
+  background-image: none;
+}
+
+.recipe-thumb.empty::after {
+  content: '🍽';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 1.6rem;
+  opacity: 0.4;
+}
+
 .recipe-item p {
   white-space: normal;
   overflow: visible;
@@ -683,6 +709,11 @@ details.log pre {
   .status-badge { font-size: 0.68rem; padding: 0.15rem 0.5rem; }
   nav button { padding: 0.7rem 0.6rem; font-size: 0.82rem; }
   .recipe-item { flex-direction: column; }
+  /* Untereinander wirkt ein breites Band besser als eine kleine Kachel.
+     Ohne Bild bringt der Platzhalter hier nichts – die Karten stehen
+     ohnehin untereinander, es gibt keine Kante auszurichten. */
+  .recipe-thumb { width: 100%; height: 8rem; }
+  .recipe-thumb.empty { display: none; }
   .recipe-actions { flex-direction: row; flex-wrap: wrap; }
   .taste-grid { grid-template-columns: 1fr; }
   .plan-grid { grid-template-columns: 1fr; }
