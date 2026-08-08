@@ -1248,3 +1248,31 @@ test('ohne Adresse im Geteilten kommt ein Hinweis, kein Absturz', async () => {
   assert.equal(res.status, 400);
   assert.match(await res.text(), /Kein Link dabei/);
 });
+
+test('FHEM kann den Menüplan-Abgleich anstoßen und bekommt die Readings zurück', async () => {
+  const [montag] = week;
+  const auberginen = (await api('/api/recipes')).json.find(
+    (r) => r.source_slug === 'auberginen-auflauf'
+  );
+  mealplans.length = 0;
+  mealplans.push({
+    id: ++mealplanId,
+    date: montag,
+    entryType: 'dinner',
+    recipeId: auberginen.external_id.replace('mealie:', ''),
+  });
+
+  // GET, damit HTTPMOD es als set-URL benutzen kann.
+  const res = await api('/api/fhem/sync');
+  assert.equal(res.status, 200, res.text);
+  // Antwort ist derselbe flache Satz Readings wie bei /api/fhem/plan.
+  assert.equal(res.json.week, (await api('/api/fhem/plan')).json.week);
+  assert.ok('today' in res.json && 'mon' in res.json);
+
+  const plan = await api('/api/plan?week=current');
+  assert.equal(
+    plan.json.days.find((d) => d.date === montag).recipe.id,
+    auberginen.id,
+    'der Abgleich hat Mealies Eintrag übernommen'
+  );
+});

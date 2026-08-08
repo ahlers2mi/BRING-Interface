@@ -1616,6 +1616,27 @@ function handleFhemRoll(req, res) {
 app.get('/api/fhem/roll', handleFhemRoll);
 app.post('/api/fhem/roll', handleFhemRoll);
 
+// Abgleich mit Mealies Menüplan auf Knopfdruck. Nötig ist das nicht – der
+// Abgleich läuft von allein alle paar Minuten –, aber wer die Ansage morgens um
+// sechs macht, will nicht auf das nächste Intervall warten.
+async function handleFhemSync(req, res) {
+  const params = { ...req.query, ...(req.body || {}) };
+  const week = resolveWeek(params.week);
+  if (!week) return res.status(400).json({ error: 'Ungültige Woche.' });
+  if (!mealieEnabled()) {
+    return res.status(400).json({ error: 'Mealie ist nicht konfiguriert.' });
+  }
+  try {
+    await reconcilePlanWeek(week);
+    res.json(fhemPlanPayload());
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+}
+
+app.get('/api/fhem/sync', handleFhemSync);
+app.post('/api/fhem/sync', handleFhemSync);
+
 // Bewerten: ?rating=lecker|gut|ok|maessig|schlecht|rausgeflogen|nie_wieder&date=today
 function handleFhemRate(req, res) {
   const params = { ...req.query, ...(req.body || {}) };
