@@ -85,6 +85,17 @@ for (const [col, type] of Object.entries(NEW_RECIPE_COLUMNS)) {
     db.exec(`ALTER TABLE recipes ADD COLUMN ${col} ${type}`);
   }
 }
+// Woher ein Plan-Eintrag stammt: 'app' (hier gewürfelt/gesetzt) oder 'mealie'
+// (aus Mealies Menüplan geholt). Nur damit lässt sich erkennen, dass ein Tag in
+// Mealie gelöscht wurde und hier ebenfalls weg soll.
+const planColumns = db
+  .prepare('PRAGMA table_info(meal_plan)')
+  .all()
+  .map((c) => c.name);
+if (!planColumns.includes('origin')) {
+  db.exec(`ALTER TABLE meal_plan ADD COLUMN origin TEXT NOT NULL DEFAULT 'app'`);
+}
+
 // Doppelte Importe verhindern (external_id z. B. "chefkoch:1234").
 db.exec(
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_recipes_external
@@ -545,16 +556,17 @@ export function getPlanEntry(date) {
   return row || null;
 }
 
-export function setPlanEntry({ date, recipe_id, note, status = 'planned' }) {
+export function setPlanEntry({ date, recipe_id, note, status = 'planned', origin = 'app' }) {
   db.prepare(
-    `INSERT INTO meal_plan (date, recipe_id, note, status, updated_at)
-     VALUES (?, ?, ?, ?, datetime('now'))
+    `INSERT INTO meal_plan (date, recipe_id, note, status, origin, updated_at)
+     VALUES (?, ?, ?, ?, ?, datetime('now'))
      ON CONFLICT(date) DO UPDATE SET
        recipe_id = excluded.recipe_id,
        note = excluded.note,
        status = excluded.status,
+       origin = excluded.origin,
        updated_at = datetime('now')`
-  ).run(date, recipe_id ?? null, note || null, status);
+  ).run(date, recipe_id ?? null, note || null, status, origin);
   return getPlanEntry(date);
 }
 

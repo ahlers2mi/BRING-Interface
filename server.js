@@ -71,6 +71,7 @@ import {
   mealieConfig,
   mealieIdOf,
   mealieRecipeUrl,
+  pullPlanFromMealie,
   pushPlanDatesToMealie,
   pushPlanEntryToMealie,
   pushRatingToMealie,
@@ -794,21 +795,47 @@ app.delete('/api/plan/:date', (req, res) => {
   res.json({ success: true, plan: buildWeekView(weekOf(date)) });
 });
 
+// Beide Richtungen für eine Woche: erst holen, dann schieben.
+//
+// Reihenfolge ist wichtig – **Mealie gewinnt**. Wer dort plant, hat sich etwas
+// dabei gedacht; unser Würfel füllt die Lücken, und die wandern anschließend
+// nach Mealie.
+const planPullDeps = {
+  getPlanEntry,
+  setPlanEntry,
+  deletePlanEntry,
+  findRecipeByExternalId,
+  findRecipeByName,
+  upsertRecipeFromSource,
+};
+
+async function reconcilePlanWeek(week) {
+  const dates = weekDates(week);
+  const pulled = await pullPlanFromMealie({ dates, deps: planPullDeps });
+  const pushed = mealieConfig().pushPlan
+    ? await pushPlanDatesToMealie(dates.map(planPushPayload))
+    : { pushed: 0, failed: 0 };
+  return { week, ...pulled, ...pushed };
+}
+
 // POST /api/plan/mealie – body: { week? }
 // Ganze Woche von Hand abgleichen (nach einem Ausfall oder erstmalig). Hier
 // wird gewartet, damit die Oberfläche eine belastbare Zahl anzeigen kann.
 app.post('/api/plan/mealie', async (req, res) => {
+  const cfg = mealieConfig();
   if (!mealieEnabled()) {
     return res.status(400).json({ error: 'Mealie ist nicht konfiguriert.' });
   }
-  if (!mealieConfig().pushPlan) {
-    return res.status(400).json({ error: 'Menüplan-Abgleich ist abgeschaltet (MEALIE_PUSH_PLAN=0).' });
+  if (!cfg.pushPlan && !cfg.pullPlan) {
+    return res
+      .status(400)
+      .json({ error: 'Menüplan-Abgleich ist abgeschaltet (MEALIE_PUSH_PLAN/MEALIE_PULL_PLAN).' });
   }
   const week = resolveWeek(req.body?.week);
   if (!week) return res.status(400).json({ error: 'Ungültige Woche.' });
   try {
-    const result = await pushPlanDatesToMealie(weekDates(week).map(planPushPayload));
-    res.json({ week, ...result });
+    const result = await reconcilePlanWeek(week);
+    res.json({ ...result, plan: buildWeekView(week) });
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
@@ -1561,7 +1588,22 @@ if (startedDirectly) {
             );
           }
         })
-        .catch((err) => console.warn(`Mealie-Abgleich fehlgeschlagen: ${err.message}`));
+        .catch((err) => console.warn(`Mealie-Abgleich fehlgeschlagen: ${err.message}`))
+        // Danach der Menüplan: was in Mealie geplant wurde, gilt auch hier.
+        // Diese und die nächste Woche reichen – ältere Tage sind Geschichte.
+        .then(async () => {
+          if (!mealieConfig().pullPlan) return;
+          const thisWeek = weekOf(todayIso());
+          for (const week of [thisWeek, shiftWeek(thisWeek, 1)]) {
+            const r = await reconcilePlanWeek(week);
+            if (r.pulled || r.cleared) {
+              console.log(
+                `Menüplan ${week}: ${r.pulled} aus Mealie übernommen, ${r.cleared} entfernt`
+              );
+            }
+          }
+        })
+        .catch((err) => console.warn(`Menüplan-Abgleich fehlgeschlagen: ${err.message}`));
     run();
     setInterval(run, syncMinutes * 60 * 1000).unref();
   }
