@@ -75,3 +75,19 @@ test('angemeldet ist der Wochenplan erreichbar (Beweis für den neuen Stand)', a
   assert.equal(res.status, 200);
   assert.match((await res.json()).week, /^\d{4}-W\d{2}$/);
 });
+
+test('Manifest und Service Worker sind ohne Anmeldung erreichbar', async () => {
+  // Chrome holt das Manifest ohne Cookie. Käme dort die Login-Umleitung, wäre
+  // die Seite nicht installierbar – kein Icon, kein Teilen-Menü.
+  for (const pfad of ['/manifest.webmanifest', '/sw.js', '/icon-192.png', '/favicon.svg']) {
+    const res = await fetch(`${base}${pfad}`, { redirect: 'manual' });
+    assert.equal(res.status, 200, `${pfad} sollte ohne Anmeldung 200 liefern`);
+  }
+  // Das Manifest muss gültiges JSON mit share_target sein.
+  const manifest = await (await fetch(`${base}/manifest.webmanifest`)).json();
+  assert.equal(manifest.share_target.action, '/share');
+
+  // Die App selbst bleibt geschützt.
+  const geschuetzt = await fetch(`${base}/`, { redirect: 'manual' });
+  assert.equal(geschuetzt.status, 302);
+});

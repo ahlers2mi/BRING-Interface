@@ -18,7 +18,20 @@ const API_TOKEN = process.env.API_TOKEN || '';
 
 const COOKIE = 'bring_auth';
 const MAX_AGE_MS = 1000 * 60 * 60 * 24 * 30; // 30 Tage
-const ALLOW_PATHS = new Set(['/login', '/logout', '/favicon.svg']);
+// Ohne Anmeldung erreichbar. Neben der Login-Seite sind das die Dateien, die
+// eine Web-App installierbar machen: **das Manifest holt Chrome ohne Cookie**
+// (anonyme Anfrage), und bekommt es dabei die Login-Umleitung, gilt die Seite
+// als nicht installierbar – kein App-Icon, kein Eintrag im Teilen-Menü. Die
+// Dateien enthalten nichts Schützenswertes.
+const ALLOW_PATHS = new Set([
+  '/login',
+  '/logout',
+  '/favicon.svg',
+  '/manifest.webmanifest',
+  '/sw.js',
+  '/icon-192.png',
+  '/icon-512.png',
+]);
 
 export const authEnabled = Boolean(PASSWORD);
 export const apiTokenEnabled = Boolean(API_TOKEN);
