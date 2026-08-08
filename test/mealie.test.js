@@ -1197,3 +1197,54 @@ test('ein in Mealie geplantes, hier noch unbekanntes Rezept wird nachgeladen', a
   const list = (await api('/api/recipes')).json;
   assert.ok(list.some((r) => r.source_slug === 'ganz-neu'));
 });
+
+// ── Teilen-Menü (Android) ─────────────────────────────────────────────────────
+
+test('den Link findet die Teilen-Route auch mitten im Text', async () => {
+  const { urlFromShare } = await import('../server.js');
+  assert.equal(
+    urlFromShare({ url: 'https://www.chefkoch.de/rezepte/1/A.html' }),
+    'https://www.chefkoch.de/rezepte/1/A.html'
+  );
+  // Android-Apps packen die Adresse oft in einen Satz.
+  assert.equal(
+    urlFromShare({ text: 'Schau mal: https://www.chefkoch.de/rezepte/2/B.html' }),
+    'https://www.chefkoch.de/rezepte/2/B.html'
+  );
+  // Satzzeichen am Ende gehören nicht zur Adresse.
+  assert.equal(
+    urlFromShare({ text: 'Lecker (https://example.org/rezept).' }),
+    'https://example.org/rezept'
+  );
+  assert.equal(urlFromShare({ title: 'nur ein Titel' }), '');
+  assert.equal(urlFromShare({}), '');
+});
+
+test('geteilter Link landet im Bestand und die Seite sagt es', async () => {
+  const res = await fetch(
+    `${base}/share?text=${encodeURIComponent('Kochen: https://www.chefkoch.de/rezepte/777777/Geteilt.html')}`
+  );
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type') || '', /html/);
+  const html = await res.text();
+  assert.match(html, /Gespeichert/);
+  assert.match(html, /Chefkoch-Rezept 777777/);
+  assert.match(html, /In Mealie ansehen/);
+
+  const list = (await api('/api/recipes')).json;
+  assert.ok(list.some((r) => r.source_slug === 'chefkoch-777777'));
+});
+
+test('zweimal geteilt heißt nicht zweimal gespeichert', async () => {
+  const res = await fetch(
+    `${base}/share?url=${encodeURIComponent('https://www.chefkoch.de/rezepte/777777/Nochmal.html')}`
+  );
+  assert.equal(res.status, 200);
+  assert.match(await res.text(), /Kennen wir schon/);
+});
+
+test('ohne Adresse im Geteilten kommt ein Hinweis, kein Absturz', async () => {
+  const res = await fetch(`${base}/share?title=${encodeURIComponent('Nur Text')}`);
+  assert.equal(res.status, 400);
+  assert.match(await res.text(), /Kein Link dabei/);
+});

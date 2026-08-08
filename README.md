@@ -13,7 +13,7 @@ Web Interface für Bring APP
 - **Gelernter Geschmack** – aus den Bewertungen entsteht ein Profil beliebter und unbeliebter Zutaten und Kategorien; der Würfel bevorzugt, was ankommt, und meidet, was durchgefallen ist.
 - **Mealie-Anbindung** (optional) – [Mealie](https://mealie.io) als Rezeptquelle: Rezepte dort pflegen, hier spiegeln; Bewertungen wandern als `rating`/`lastMade` zurück, der Wochenplan wird mit Mealies Menüplan abgeglichen (beide Richtungen).
 - **Cookidoo-Anbindung** (optional) – Thermomix-Rezepte aus [Cookidoo](https://cookidoo.de) im Würfeltopf (Name, Zutaten, Zeiten, Link – gekocht wird am Gerät), und Cookidoos Einkaufsliste auf Knopfdruck nach Bring.
-- **Rezept per Link** – Adresse einwerfen und speichern, auch mit Mealie als Quelle; per **iOS-Kurzbefehl** geht das direkt aus dem Teilen-Menü des iPhones.
+- **Rezept per Link, auch vom Handy** – Adresse einwerfen und speichern, auch mit Mealie als Quelle. Unter **Android** trägt sich die installierte Web-App selbst ins Teilen-Menü ein, unter **iOS** geht es über einen Kurzbefehl.
 - **Rezept-Import** – einzelne Rezepte per Link (Chefkoch und alle Seiten mit schema.org-Daten) oder **Massenimport von chefkoch.de** (z. B. 200 Rezepte auf einmal, im Hintergrund mit Fortschrittsanzeige).
 - **Eigener Tab „Import & Quellen"** – Mealie, Cookidoo, Chefkoch-Import und KI-Analyse liegen zusammen; der Rezepte-Tab bleibt Liste und Geschmacksprofil. Die Rezeptliste lässt sich nach Herkunft filtern (Chefkoch, Cookidoo, eigene).
 - **Reste-Küche** – eingeben, was noch im Kühlschrank liegt, und passende Rezepte nach Abdeckung sortiert finden; fehlende Zutaten wandern auf Wunsch direkt nach Bring.
@@ -182,6 +182,41 @@ Die App hat **keine** eingebaute Mehrbenutzer-Verwaltung. Für den Zugriff von a
 1. **`APP_PASSWORD` setzen** – schützt die gesamte App mit einem gemeinsamen Passwort (Session-Cookie, 30 Tage, Brute-Force-Bremse).
 2. **HTTPS ist Pflicht** – ein Passwort über reines HTTP wäre im Klartext im Netz. Stelle der App einen **Reverse Proxy mit TLS** voran (z. B. Synology-Reverse-Proxy mit Let's Encrypt) und gib nach außen **nur Port 443** frei, nicht den Container-Port.
 3. **Noch sicherer:** gar nicht öffentlich exponieren, sondern per **VPN** (z. B. WireGuard auf der UniFi UDR) zugreifen.
+
+## Vom Handy aus teilen
+
+Eine Rezeptseite im Browser gefunden? Dann muss man sie nicht abtippen.
+
+### Android: die App installiert sich ins Teilen-Menü
+
+Die App bringt ein Web-App-Manifest samt `share_target` mit. Einmal über
+**Chrome-Menü → „App installieren"** installieren, danach steht
+**BRING-Interface** im Teilen-Menü jeder Seite; der Link landet auf `/share`,
+wird gespeichert und die Seite meldet, was daraus geworden ist.
+
+Zwei Voraussetzungen: der Aufruf muss über **https** laufen (also die
+Reverse-Proxy-Adresse – über `http://<NAS>:3555` verweigert Chrome die
+Installation), und die App muss einmal installiert sein. Der Service Worker
+(`public/sw.js`) ist genau dafür da und speichert **nichts** zwischen.
+
+### iPhone: Kurzbefehl
+
+iOS erlaubt Webseiten keinen Eintrag im Teilen-Menü (die Web-Share-Target-API
+gibt es dort nicht). Ein Kurzbefehl kann es:
+
+1. Kurzbefehle-App → neuer Kurzbefehl, umbenennen (z. B. „Rezept senden"),
+   unter **„i"** den Schalter **„Im Share-Sheet anzeigen"** einschalten.
+2. Bei „Diesen Kurzbefehl empfangen von …" alle Haken entfernen, nur **URLs**
+   anhaken.
+3. Aktion **„URL codieren"** (auf der Kurzbefehleingabe) – ohne die stolpert die
+   Adresse über Sonderzeichen im geteilten Link.
+4. Aktion **„URL"** (blaue Weltkugel) mit
+   `https://<adresse>/api/recipes/add?url=` + Variable **Codierte URL** +
+   `&token=<API_TOKEN>`.
+5. Aktion **„Inhalte von URL abrufen"** (Methode GET) und **„Ergebnis anzeigen"**.
+
+Die passende Adresse steht auch in der App im Tab *Import & Quellen* unter
+„🔗 Rezept per Link hinzufügen".
 
 ## Wandtablet-Ansicht
 

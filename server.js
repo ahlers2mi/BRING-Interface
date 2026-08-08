@@ -954,6 +954,79 @@ app.post('/api/recipes/import/url', blockWhenMealie, async (req, res) => {
   }
 });
 
+// ── Teilen-Ziel für Android (Web Share Target) ─────────────────────────────────
+//
+// Android kann eine installierte Web-App ins Teilen-Menü aufnehmen; das Ziel
+// steht in `public/manifest.webmanifest`. Hier landet also der Link, den jemand
+// aus Chrome heraus geteilt hat – und weil man beim Teilen eine Rückmeldung
+// sehen will, antwortet diese Route als Seite, nicht als JSON.
+//
+// Was geteilt wird, ist von der App abhängig: manche füllen `url`, viele packen
+// die Adresse mitten in `text` ("Schau mal: https://…"). Deshalb suchen wir in
+// allen drei Feldern nach dem ersten Link.
+export function urlFromShare({ url, text, title } = {}) {
+  for (const candidate of [url, text, title]) {
+    const found = /https?:\/\/[^\s"'<>]+/.exec(String(candidate || ''));
+    if (found) return found[0].replace(/[).,]+$/, '');
+  }
+  return '';
+}
+
+function sharePage({ heading, message, link }) {
+  const esc = (value) =>
+    String(value ?? '').replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+  return `<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${esc(heading)}</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <main>
+    <div class="card">
+      <h2>${esc(heading)}</h2>
+      <p>${esc(message)}</p>
+      <div class="btn-group">
+        ${link ? `<a class="btn btn-secondary" href="${esc(link)}">↗ In Mealie ansehen</a>` : ''}
+        <a class="btn btn-primary" href="/">Zur App</a>
+      </div>
+    </div>
+  </main>
+</body>
+</html>`;
+}
+
+app.get('/share', async (req, res) => {
+  const url = urlFromShare(req.query);
+  if (!url) {
+    return res.status(400).type('html').send(
+      sharePage({
+        heading: 'Kein Link dabei',
+        message:
+          'In dem Geteilten war keine Web-Adresse zu finden. Teile bitte die ' +
+          'Rezeptseite selbst (in Chrome: Teilen → BRING-Interface).',
+      })
+    );
+  }
+  try {
+    const { status, body } = await addRecipeByUrl(url);
+    res.status(status === 201 ? 200 : status).type('html').send(
+      sharePage({
+        heading: body.error ? 'Hat nicht geklappt' : body.duplicate ? 'Kennen wir schon' : 'Gespeichert',
+        message: body.error || body.message || '',
+        link: body.link,
+      })
+    );
+  } catch (err) {
+    res.status(502).type('html').send(
+      sharePage({ heading: 'Hat nicht geklappt', message: err.message })
+    );
+  }
+});
+
 // ── Ein Rezept per Link, egal woher ───────────────────────────────────────────
 //
 // Absichtlich **ohne** `blockWhenMealie` und mit GET-Variante: das ist der Weg
