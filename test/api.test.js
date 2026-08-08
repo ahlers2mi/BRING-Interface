@@ -577,3 +577,10 @@ test('Einzelimport meldet fehlende Rezeptdaten verständlich', async () => {
   });
   assert.equal(badUrl.status, 400);
 });
+
+test('Status nennt Version und Stand – daran erkennt man den laufenden Build', async () => {
+  const res = await api('/api/status');
+  assert.match(res.json.version, /^\d+\.\d+\.\d+$/);
+  // Zeitstempel der server.js im Image: sagt, wann der Code hineingekommen ist.
+  assert.match(res.json.builtAt, /^\d{4}-\d{2}-\d{2}T/);
+});
