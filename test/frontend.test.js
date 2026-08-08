@@ -32,8 +32,38 @@ test('jedes Bring-Listen-Auswahlfeld wird auch gefüllt', () => {
   }
 });
 
+test('cookidoo.js gehört zu den geprüften Modulen', () => {
+  // (Wächter für die Liste unten – neue Module sonst leicht vergessen.)
+  const files = fs.readdirSync(path.join(root, 'public/js'));
+  assert.ok(files.includes('cookidoo.js'));
+});
+
+test('jede Filter-Auswahl der Rezeptliste wird auch ausgewertet', () => {
+  const recipes = fs.readFileSync(path.join(root, 'public/js/recipes.js'), 'utf8');
+  const select = /<select id="recipeFilter">([\s\S]*?)<\/select>/.exec(html);
+  assert.ok(select, 'Auswahlfeld recipeFilter nicht gefunden');
+  const values = [...select[1].matchAll(/value="([^"]+)"/g)].map((m) => m[1]);
+  assert.ok(values.length >= 8, `erwartet mehrere Filter, gefunden: ${values}`);
+
+  for (const value of values) {
+    if (value === 'all') continue; // "Alle" ist der Standardfall ohne eigene Zeile
+    assert.ok(
+      recipes.includes(`'${value}'`),
+      `Filter "${value}" steht im HTML, wird in recipes.js aber nirgends ausgewertet`
+    );
+  }
+});
+
 test('die Module sprechen nur Elemente an, die es im HTML gibt', () => {
-  const files = ['core.js', 'app.js', 'shopping.js', 'plan.js', 'recipes.js', 'fridge.js'];
+  const files = [
+    'core.js',
+    'app.js',
+    'shopping.js',
+    'plan.js',
+    'recipes.js',
+    'fridge.js',
+    'cookidoo.js',
+  ];
   const htmlIds = new Set([...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]));
   // Elemente, die die Module selbst erzeugen (nicht im HTML) – bewusst erlaubt.
   const dynamic = new Set(['orphanCleanBtn', 'orphanCleanAllBtn']);
