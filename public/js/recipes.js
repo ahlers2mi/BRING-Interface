@@ -13,8 +13,11 @@ import {
   on,
   openModal,
   populateListSelects,
+  PROVIDER_LABEL,
+  providerOf,
   ratingBadge,
   ratingButtonsHtml,
+  recipeThumb,
   refreshRecipes,
   setLoading,
   starsText,
@@ -109,20 +112,8 @@ function formPayload() {
 
 // ── Liste ─────────────────────────────────────────────────────────────────────
 
-// Woher ein Rezept ursprünglich kommt. `source` ist der Weg zu uns (fast alles
-// läuft über Mealie) – interessant ist aber der Anbieter dahinter.
-export function providerOf(recipe) {
-  if (recipe.source === 'cookidoo') return 'cookidoo';
-  if (/chefkoch\.de/i.test(recipe.source_url || '')) return 'chefkoch';
-  return 'other';
-}
-
-export const PROVIDER_LABEL = {
-  cookidoo: '🍲 Cookidoo',
-  chefkoch: '🥄 Chefkoch',
-  other: 'eigene Quelle',
-};
-
+// providerOf/PROVIDER_LABEL liegen in core.js – die Reste-Küche braucht sie
+// genauso.
 const PROVIDER_MODES = new Set(['chefkoch', 'cookidoo', 'other']);
 
 function filteredRecipes() {
@@ -248,6 +239,7 @@ function buildRecipeCard(recipe) {
     : '';
 
   node.innerHTML = `
+    ${recipeThumb(recipe)}
     <div class="recipe-info">
       <h3>${escHtml(recipe.name)} ${ratingBadge(recipe)}</h3>
       ${meta.length ? `<div class="meta">${meta.join(' &nbsp;·&nbsp; ')}</div>` : ''}
