@@ -109,6 +109,12 @@ attr HTTP.Wochenplan set06NoArg 1
 # Abgleich mit Mealies Menuplan von Hand anstossen. Noetig ist das nicht - die
 # App gleicht sich alle paar Minuten selbst ab -, aber vor einer Ansage zu
 # fester Uhrzeit will man nicht auf das naechste Intervall warten.
+# Vorlauf: was man am Vorabend noch anfangen muss (auftauen, einweichen).
+attr HTTP.Wochenplan reading25Name heute_vorbereitung
+attr HTTP.Wochenplan reading25Regex "today_prep":"([^"]*)"
+attr HTTP.Wochenplan reading26Name morgen_vorbereitung
+attr HTTP.Wochenplan reading26Regex "tomorrow_prep":"([^"]*)"
+
 attr HTTP.Wochenplan set07Name abgleichen
 attr HTTP.Wochenplan set07URL http://192.168.69.10:8095/api/fhem/sync?week=current&token=DEINTOKEN
 attr HTTP.Wochenplan set07NoArg 1
@@ -136,6 +142,20 @@ attr a_wochenplan_wuerfeln room Küche
 define a_wochenplan_abgleich at *06:00:00 set HTTP.Wochenplan abgleichen
 attr a_wochenplan_abgleich alias Wochenplan mit Mealie abgleichen
 attr a_wochenplan_abgleich room Küche
+
+# ── Optional: Aussentemperatur melden ────────────────────────────────────────
+# Damit bevorzugt der Wuerfel bei Kaelte Eintopf und bei Hitze Salat. Der Wert
+# gilt fuer heute und morgen; weiter voraus entscheidet der Monat.
+# Quelle anpassen - hier der vorhandene Sensor Mobil3data.
+define a_wochenplan_wetter at +*01:00:00 { GetFileFromURL("http://192.168.69.10:8095/api/fhem/weather?temp=".ReadingsVal("Mobil3data","temperature",15)."&token=DEINTOKEN") }
+attr a_wochenplan_wetter alias Wochenplan Wetter melden
+attr a_wochenplan_wetter room Küche
+
+# ── Optional: abends an den Vorlauf erinnern ─────────────────────────────────
+# Meldet sich nur, wenn morgen wirklich etwas vorzubereiten ist.
+define a_wochenplan_vorbereitung at *20:00:00 { my $v = ReadingsVal("HTTP.Wochenplan","morgen_vorbereitung","");; my $m = ReadingsVal("HTTP.Wochenplan","morgen","");; if ($v ne "") { send_to_all("S", "Morgen gibt es $m - heute noch $v", "Wochenplan") } }
+attr a_wochenplan_vorbereitung alias Wochenplan Vorbereitung
+attr a_wochenplan_vorbereitung room Küche
 
 # ── Optional: morgens ansagen, was es heute gibt ─────────────────────────────
 # send_to_all ist die vorhandene Hausfunktion (siehe andere Notifys).

@@ -682,3 +682,74 @@ test('unbekannte Status werden abgelehnt', async () => {
   });
   assert.equal(res.status, 400);
 });
+
+// ── Wetter und Vorlauf ────────────────────────────────────────────────────────
+
+test('das Wetter kommt von FHEM und wird für heute und morgen benutzt', async () => {
+  const { climateBias, weatherFactor, dishTemperament } = await import('../lib/climate.js');
+
+  // Gemessen: gilt nur für heute/morgen und nur, solange der Wert frisch ist.
+  const jetzt = '2026-04-15T18:00:00.000Z';
+  const frisch = { temp: 4, measuredAt: '2026-04-15T17:30:00.000Z', now: jetzt };
+  assert.equal(climateBias('2026-04-15', frisch), 'kalt');
+  assert.equal(climateBias('2026-04-16', frisch), 'kalt');
+  // Übermorgen sagt ein Messwert nichts – und April ist weder noch.
+  assert.equal(climateBias('2026-04-17', frisch), null);
+  // Alter Messwert zählt nicht.
+  assert.equal(
+    climateBias('2026-04-15', { temp: 4, measuredAt: '2026-04-14T06:00:00.000Z', now: jetzt }),
+    null
+  );
+  // Ohne Messwert entscheidet der Monat des geplanten Tages.
+  assert.equal(climateBias('2027-01-20'), 'kalt');
+  assert.equal(climateBias('2026-07-20'), 'warm');
+
+  assert.equal(dishTemperament({ name: 'Kürbissuppe', tags: [] }), 'winter');
+  assert.equal(dishTemperament({ name: 'Nudelsalat', tags: [] }), 'sommer');
+  assert.equal(dishTemperament({ name: 'Spaghetti', tags: [] }), null);
+
+  assert.ok(weatherFactor({ name: 'Kürbissuppe' }, 'kalt') > 1);
+  assert.ok(weatherFactor({ name: 'Kürbissuppe' }, 'warm') < 1);
+  assert.equal(weatherFactor({ name: 'Spaghetti' }, 'kalt'), 1, 'neutrale Gerichte bleiben');
+  assert.equal(weatherFactor({ name: 'Kürbissuppe' }, null), 1, 'ohne Wetter keine Wichtung');
+});
+
+test('FHEM meldet die Temperatur, unplausible Werte werden abgelehnt', async () => {
+  const ok = await api('/api/fhem/weather?temp=3.5');
+  assert.equal(ok.status, 200, ok.text);
+  assert.equal(ok.json.temp, 3.5);
+  assert.equal(ok.json.bias, 'kalt');
+
+  // Komma statt Punkt kommt aus FHEM durchaus vor.
+  assert.equal((await api('/api/fhem/weather?temp=26,5')).json.bias, 'warm');
+  assert.equal((await api('/api/fhem/weather?temp=abc')).status, 400);
+  assert.equal((await api('/api/fhem/weather?temp=999')).status, 400);
+});
+
+test('Vorlauf steht am Rezept und in den FHEM-Readings', async () => {
+  const heute = new Date().toISOString().slice(0, 10);
+  const recipe = (
+    await api('/api/recipes', {
+      method: 'POST',
+      body: {
+        name: 'Gulasch aus der Truhe',
+        instructions: 'Das Fleisch am Vortag auftauen lassen. Dann schmoren.',
+        ingredients: [{ name: 'Rindfleisch', amount: '500 g' }],
+      },
+    })
+  ).json;
+  assert.match(recipe.prep_hint, /auftauen/);
+
+  await api(`/api/plan/${heute}`, { method: 'PUT', body: { recipe_id: recipe.id } });
+  const fhem = await api('/api/fhem/plan');
+  assert.match(fhem.json.today_prep, /auftauen/);
+
+  // Ein Rezept ohne Vorlauf bekommt auch keinen Hinweis.
+  const ohne = (
+    await api('/api/recipes', {
+      method: 'POST',
+      body: { name: 'Butterbrot', instructions: 'Brot streichen.', ingredients: [] },
+    })
+  ).json;
+  assert.equal(ohne.prep_hint, '');
+});

@@ -10,6 +10,8 @@ Web Interface für Bring APP
 - **Rezeptverwaltung** – Rezepte mit Zutaten, Tags, Portionen, Link, Zubereitung und voraussichtlicher Zeit speichern und per Klick in eine Bring-Liste importieren.
 - **Wochenplan mit Würfelfunktion** – einzelne Tage oder die ganze Woche auswürfeln lassen, Tage von Hand belegen, auf einen anderen Tag verschieben und die Zutaten der kompletten Woche in einem Schritt nach Bring schieben.
 - **Aufwand zählt mit** – unter der Woche kommen kurze Rezepte deutlich häufiger, am Wochenende die aufwendigen; Tage mit **Resten** lässt der Würfel in Ruhe.
+- **Wetter und Jahreszeit** – meldet FHEM die Außentemperatur, kommt bei Kälte öfter Eintopf und bei Hitze öfter Salat; ohne Messwert entscheidet der Monat.
+- **Vorlauf-Hinweis** – die App erkennt an Zubereitung und Tags, was am Vortag anzufangen ist (auftauen, einweichen, Teig gehen lassen), zeigt es im Wochenplan und stellt es FHEM für eine Abend-Erinnerung bereit.
 - **Mengen für den Haushalt** – Rezepte stehen meist auf 4 Portionen; einmal eintragen, für wie viele gekocht wird, und die Mengen wandern umgerechnet nach Bring.
 - **Bewertungen** – nach dem Essen „lecker / gut / ok / mies" vergeben, oder ein Rezept als **rausgeflogen** markieren (gar nicht gekocht) bzw. mit **nie wieder** dauerhaft sperren.
 - **Gelernter Geschmack** – aus den Bewertungen entsteht ein Profil beliebter und unbeliebter Zutaten und Kategorien; der Würfel bevorzugt, was ankommt, und meidet, was durchgefallen ist.
@@ -160,6 +162,8 @@ docker run -d \
 | `API_TOKEN` | Token für Maschinen-Zugriffe auf `/api/…` (FHEM, Skripte) – als `?token=…`, Header `X-API-Token` oder `Authorization: Bearer …`. Leer = aus. Am besten ohne `&`, `#` oder `+`, damit der Wert unverändert in eine URL passt. |
 | `HOST_PORT` | Nur `docker-compose.yml`: Port auf der NAS (Standard 8095) – im Container bleibt es 3000. |
 | `PLAN_QUICK_MINUTES` | Ab wann ein Rezept werktags als „dauert lange" gilt (Standard 40). |
+| `PLAN_COLD_C`, `PLAN_WARM_C` | Schwellen für die Wetter-Neigung in °C (Standard 10 und 24). |
+| `PLAN_WEATHER_HOURS` | Wie lange ein gemeldeter Messwert als aktuell gilt (Standard 6 Stunden). |
 | `MEALIE_URL` | Basis-URL einer Mealie-Instanz. Gesetzt = Mealie ist die Rezeptquelle (siehe unten). |
 | `MEALIE_TOKEN` | API-Token aus Mealie („Manage Your API Tokens"). |
 | `MEALIE_SYNC_MINUTES` | Abgleich-Intervall in Minuten (Standard 15). |

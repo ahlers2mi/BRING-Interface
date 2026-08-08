@@ -1,6 +1,6 @@
 {
   "name": "bring-interface",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Web Interface für Bring APP",
   "main": "server.js",
   "type": "module",

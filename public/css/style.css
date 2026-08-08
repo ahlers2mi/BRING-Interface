@@ -733,3 +733,9 @@ details.log pre {
   font-size: 0.72rem;
   opacity: 0.85;
 }
+
+/* Vorlauf-Hinweis im Wochenplan – soll ins Auge fallen, es geht um den Vortag. */
+.prep-hint {
+  color: var(--bring-orange);
+  font-weight: 600;
+}

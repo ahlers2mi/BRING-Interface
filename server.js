@@ -34,6 +34,7 @@ import {
 } from './database.js';
 import {
   buildWeekView,
+  currentWeather,
   fridgeSearch,
   householdServings,
   rollDays,
@@ -42,6 +43,7 @@ import {
   weekShoppingItems,
 } from './lib/mealplan.js';
 import { scaleFactor, scaleIngredients } from './lib/scale.js';
+import { climateBias } from './lib/climate.js';
 import {
   isValidIsoDate,
   todayIso,
@@ -1647,6 +1649,9 @@ function fhemPlanPayload() {
       : '',
     today_stars: today?.rating?.stars || 0,
     tomorrow: tomorrow?.recipe?.name || '',
+    // Vorlauf: was man heute Abend noch anfangen muss, damit es morgen klappt.
+    today_prep: today?.recipe?.prep_hint || '',
+    tomorrow_prep: tomorrow?.recipe?.prep_hint || '',
     recipe_count: taste.recipe_count,
     rated_count: taste.rated_count,
     updated: new Date().toISOString().replace('T', ' ').slice(0, 19),
@@ -1711,6 +1716,24 @@ async function handleFhemSync(req, res) {
 
 app.get('/api/fhem/sync', handleFhemSync);
 app.post('/api/fhem/sync', handleFhemSync);
+
+// Außentemperatur von FHEM entgegennehmen: ?temp=8.5
+// Der Würfel bevorzugt damit bei Kälte Eintopf und bei Hitze Salat – aber nur
+// für heute und morgen, weiter voraus sagt ein Messwert nichts (dann zählt der
+// Monat).
+function handleFhemWeather(req, res) {
+  const params = { ...req.query, ...(req.body || {}) };
+  const temp = Number(String(params.temp ?? params.temperature ?? '').replace(',', '.'));
+  if (!Number.isFinite(temp) || temp < -50 || temp > 60) {
+    return res.status(400).json({ error: 'temp fehlt oder ist unplausibel.' });
+  }
+  setSetting('weatherTemp', String(temp));
+  setSetting('weatherAt', new Date().toISOString());
+  res.json({ temp, bias: climateBias(todayIso(), currentWeather()) || 'neutral' });
+}
+
+app.get('/api/fhem/weather', handleFhemWeather);
+app.post('/api/fhem/weather', handleFhemWeather);
 
 // Bewerten: ?rating=lecker|gut|ok|maessig|schlecht|rausgeflogen|nie_wieder&date=today
 function handleFhemRate(req, res) {

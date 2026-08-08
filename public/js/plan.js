@@ -89,6 +89,10 @@ function buildDayCard(day) {
     meta.push('noch nicht bewertet');
   }
   if (recipe?.last_cooked) meta.push(`zuletzt ${escHtml(deDate(recipe.last_cooked))}`);
+  // Vorlauf: gehört an den Vortag gedacht, deshalb auffällig.
+  const prep = recipe?.prep_hint
+    ? `<div class="hint prep-hint">⏰ Vorher: ${escHtml(recipe.prep_hint)}</div>`
+    : '';
 
   node.innerHTML = `
     <div class="plan-day-head">
@@ -114,6 +118,7 @@ function buildDayCard(day) {
                }
              </div>
              <div class="meta">${meta.join(' &nbsp;·&nbsp; ')}</div>
+             ${prep}
              ${day.note ? `<div class="hint">🎲 ${escHtml(day.note)}</div>` : ''}
              ${ratingText ? `<div class="hint">${ratingText}</div>` : ''}`
           : '<div class="plan-empty">– nichts geplant –</div>'
