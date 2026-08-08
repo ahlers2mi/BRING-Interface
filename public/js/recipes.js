@@ -120,8 +120,10 @@ function filteredRecipes() {
     if (mode === 'unrated' && r.rating_count > 0) return false;
     if (mode === 'blocked' && !r.blocked) return false;
     if (mode === 'missing' && !r.source_missing) return false;
+    if (mode === 'incomplete' && !r.incomplete) return false;
     if (mode !== 'blocked' && r.blocked && mode !== 'all') return false;
     if (mode !== 'missing' && r.source_missing && mode !== 'all') return false;
+    if (mode !== 'incomplete' && r.incomplete && mode !== 'all') return false;
     if (!query) return true;
     const haystack = [
       r.name,
@@ -176,7 +178,9 @@ export function renderRecipeList() {
 
 function buildRecipeCard(recipe) {
   const node = document.createElement('div');
-  node.className = `recipe-item${recipe.blocked || recipe.source_missing ? ' is-blocked' : ''}`;
+  node.className = `recipe-item${
+    recipe.blocked || recipe.source_missing || recipe.incomplete ? ' is-blocked' : ''
+  }`;
   const mealieLink =
     recipe.source === 'mealie' ? mealieRecipeLink(recipe.source_slug) : '';
 
@@ -202,6 +206,9 @@ function buildRecipeCard(recipe) {
   if (recipe.rejected_count) meta.push(`🗑 ${recipe.rejected_count}× rausgeflogen`);
   if (recipe.source_missing) {
     meta.push('⚠️ in Mealie nicht mehr vorhanden – wird nicht mehr gewürfelt');
+  }
+  if (recipe.incomplete) {
+    meta.push('⚠️ unvollständig (Anriss hinter der PLUS-Schranke) – wird nicht gewürfelt');
   }
   if (recipe.source_url) {
     meta.push(
@@ -240,6 +247,11 @@ function buildRecipeCard(recipe) {
             )}" target="_blank" rel="noopener noreferrer">✏️ In Mealie</a>`
           : '<button class="btn btn-secondary btn-sm" data-action="edit">✏️ Bearbeiten</button>'
       }
+      ${
+        recipe.incomplete && mealieLink
+          ? '<button class="btn btn-secondary btn-sm" data-action="repair" title="Zutaten und Zubereitung aus der Chefkoch-API nachtragen">🩹 Anreichern</button>'
+          : ''
+      }
       <button class="btn btn-secondary btn-sm" data-action="block">${
         recipe.blocked ? '✅ Entsperren' : '⛔ Sperren'
       }</button>
@@ -259,6 +271,18 @@ function buildRecipeCard(recipe) {
   node
     .querySelector('[data-action="edit"]')
     ?.addEventListener('click', () => editRecipe(recipe));
+  node.querySelector('[data-action="repair"]')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    setLoading(btn, true);
+    try {
+      const res = await apiFetch(`/api/mealie/repair/${recipe.id}`, { method: 'POST' });
+      flash('mealieResult', escHtml(res.message), res.outcome === 'repaired' ? 'success' : 'info');
+      await refreshAll();
+    } catch (err) {
+      flash('mealieResult', `Fehler: ${escHtml(err.message)}`, 'error');
+      setLoading(btn, false);
+    }
+  });
   node.querySelector('[data-action="block"]').addEventListener('click', async (e) => {
     setLoading(e.currentTarget, true);
     try {

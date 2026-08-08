@@ -4,9 +4,12 @@ import assert from 'node:assert/strict';
 import {
   formatAmountNumber,
   ingredientMatches,
+  isIncompleteRecipe,
   isPantryItem,
+  isTeaserIngredient,
   matchRecipeToFridge,
   normalizeName,
+  realIngredients,
   splitAmount,
 } from '../lib/normalize.js';
 
@@ -85,4 +88,49 @@ test('formatAmountNumber schreibt Brüche lesbar', () => {
   assert.equal(formatAmountNumber(2), '2');
   assert.equal(formatAmountNumber(1.5), '1,5');
   assert.equal(formatAmountNumber(0), '');
+});
+
+// ── Angerissene Rezepte (Chefkoch PLUS) ───────────────────────────────────────
+
+test('der PLUS-Platzhalter gilt nicht als Zutat', () => {
+  assert.equal(isTeaserIngredient('-- additional ingredients not fully disclosed --'), true);
+  assert.equal(isTeaserIngredient('Zutaten nicht vollständig'), true);
+  assert.equal(isTeaserIngredient('450 g Kartoffel(n), in dünnen Scheiben'), false);
+  assert.equal(isTeaserIngredient(''), false);
+  assert.equal(isTeaserIngredient(null), false);
+});
+
+test('realIngredients wirft nur den Platzhalter weg', () => {
+  const list = [
+    { name: 'Kartoffeln' },
+    { name: '-- additional ingredients not fully disclosed --' },
+    { name: 'Chorizo' },
+  ];
+  assert.deepEqual(
+    realIngredients(list).map((i) => i.name),
+    ['Kartoffeln', 'Chorizo']
+  );
+});
+
+test('unvollständig ist ein Rezept mit Platzhalter oder ganz ohne Zutaten', () => {
+  assert.equal(
+    isIncompleteRecipe({
+      ingredients: [{ name: 'Kartoffeln' }, { name: '-- additional ingredients not fully disclosed --' }],
+    }),
+    true
+  );
+  assert.equal(isIncompleteRecipe({ ingredients: [] }), true);
+  assert.equal(isIncompleteRecipe({ ingredients: [{ name: 'Kartoffeln' }] }), false);
+  // Ohne geladene Zutatenliste lieber nichts behaupten.
+  assert.equal(isIncompleteRecipe({}), false);
+});
+
+test('die Reste-Suche rechnet den Platzhalter nicht als fehlende Zutat', () => {
+  const res = matchRecipeToFridge(
+    [{ name: 'Kartoffeln' }, { name: '-- additional ingredients not fully disclosed --' }],
+    ['Kartoffeln'],
+    { assumePantry: false }
+  );
+  assert.equal(res.coverage, 1);
+  assert.equal(res.missing.length, 0);
 });

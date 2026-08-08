@@ -105,9 +105,9 @@ function buildDayCard(day) {
         recipe
           ? `<div class="plan-recipe">
                ${
-                 recipe.source_url
+                 recipe.link
                    ? `<a href="${escHtml(
-                       recipe.source_url
+                       recipe.link
                      )}" target="_blank" rel="noopener noreferrer">${escHtml(recipe.name)}</a>`
                    : escHtml(recipe.name)
                }

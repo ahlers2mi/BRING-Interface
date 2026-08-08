@@ -54,6 +54,7 @@ import {
   startImportJob,
   stripHtml,
 } from './lib/recipe-import.js';
+import { realIngredients } from './lib/normalize.js';
 import { renderPlanSvg } from './lib/plan-svg.js';
 import {
   cancelChefkochJob,
@@ -1132,7 +1133,11 @@ app.post('/api/mealie/repair', async (_req, res) => {
       r.source_slug &&
       !r.source_missing &&
       /chefkoch\.de\/rezepte\/\d+\//.test(r.source_url || '') &&
-      (!String(r.instructions || '').trim() || (r.ingredients || []).length <= 3)
+      // `incomplete` fängt die PLUS-Anrisse: die haben scheinbar genug Zutaten,
+      // aber eine davon ist nur der Platzhalter.
+      (!String(r.instructions || '').trim() ||
+        r.incomplete ||
+        realIngredients(r.ingredients).length <= 3)
   );
 
   const result = { checked: candidates.length, repaired: 0, unchanged: 0, failed: 0, names: [] };
@@ -1158,6 +1163,57 @@ app.post('/api/mealie/repair', async (_req, res) => {
     }
   }
   res.json(result);
+});
+
+// POST /api/mealie/repair/:id – dasselbe für ein einzelnes Rezept, mit einer
+// Antwort, die sagt was passiert ist. Die Sammel-Route meldet nur Zahlen; wer
+// ein bestimmtes Rezept anreichern will, braucht den Grund, wenn es nicht geht.
+app.post('/api/mealie/repair/:id', async (req, res) => {
+  if (!mealieEnabled()) {
+    return res.status(400).json({ error: 'Mealie ist nicht konfiguriert.' });
+  }
+  const recipe = getRecipeById(Number(req.params.id));
+  if (!recipe) return res.status(404).json({ error: 'Rezept nicht gefunden.' });
+  if (!recipe.source_slug || recipe.source !== 'mealie') {
+    return res.status(400).json({ error: 'Das Rezept kommt nicht aus Mealie.' });
+  }
+  if (!/chefkoch\.de\/rezepte\/\d+\//.test(recipe.source_url || '')) {
+    return res.status(400).json({
+      error:
+        'Nachschlagen geht nur bei Chefkoch-Rezepten – hier fehlt eine Chefkoch-Quelle.',
+    });
+  }
+
+  try {
+    const { outcome, detail } = await repairThinMealieRecipe({
+      slug: recipe.source_slug,
+      sourceUrl: recipe.source_url,
+    });
+    // In beiden Fällen den Spiegel auffrischen: `updatedAt` zählt Mealie nach
+    // einem PATCH nicht hoch, der inkrementelle Abgleich würde das überspringen.
+    const mapped = detail && mapMealieRecipe(detail, mealieConfig().url);
+    if (mapped) upsertRecipeFromSource(mapped);
+
+    if (outcome === 'repaired') {
+      return res.json({
+        outcome,
+        message: 'Zutaten und Zubereitung aus der Chefkoch-API nachgetragen.',
+        recipe: getRecipeById(recipe.id),
+      });
+    }
+    res.json({
+      outcome,
+      message:
+        outcome === 'not-needed'
+          ? 'Das Rezept ist in Mealie bereits vollständig – der Spiegel wurde aufgefrischt.'
+          : 'Chefkoch gibt nicht mehr her als den Anriss. Solche Rezepte stehen ' +
+            'hinter der PLUS-Schranke; da hilft nur, sie zu löschen oder von Hand ' +
+            'in Mealie zu vervollständigen.',
+      recipe: getRecipeById(recipe.id),
+    });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
 });
 
 // GET /api/mealie/orphans – was die Quelle nicht mehr kennt (Vorschau).

@@ -906,3 +906,127 @@ test('Rezept ohne Mealie-Herkunft landet als Titel im Kalender', async () => {
   assert.equal(posted.recipeId, null);
   assert.equal(posted.text, 'von Hand gewählt');
 });
+
+// ── Einzelnes Rezept anreichern ───────────────────────────────────────────────
+
+test('ein PLUS-Anriss sieht vollständig aus, ist es aber nicht', async () => {
+  recipes.set('spanisch', {
+    id: 'sp-1',
+    slug: 'spanisch',
+    name: 'Spanischer Kartoffelauflauf',
+    orgURL: 'https://www.chefkoch.de/rezepte/4711/Spanisch.html',
+    updatedAt: '2026-08-08T09:00:00',
+    recipeInstructions: [{ text: 'Alles schichten und backen.' }],
+    recipeIngredient: [
+      { quantity: 450, unit: { abbreviation: 'g' }, food: { name: 'Kartoffeln' } },
+      { quantity: 450, unit: { abbreviation: 'g' }, food: { name: 'Süßkartoffeln' } },
+      { quantity: 2, unit: null, food: { name: 'Spitzpaprika' } },
+      { quantity: 0, unit: null, food: null, note: '-- additional ingredients not fully disclosed --' },
+    ],
+  });
+  await api('/api/mealie/sync', { method: 'POST' });
+
+  const mirrored = (await api('/api/recipes')).json.find((r) => r.source_slug === 'spanisch');
+  // Vier Zutaten und eine Zubereitung – trotzdem unvollständig.
+  assert.equal(mirrored.ingredients.length, 4);
+  assert.equal(mirrored.incomplete, true);
+});
+
+test('unvollständige Rezepte werden nicht gewürfelt', async () => {
+  const mirrored = (await api('/api/recipes')).json.find((r) => r.source_slug === 'spanisch');
+  const plan = await api('/api/plan/roll', { method: 'POST', body: { week: 'current' } });
+  const planned = plan.json.plan.days.map((d) => d.recipe?.id).filter(Boolean);
+  assert.ok(!planned.includes(mirrored.id), 'Anriss darf nicht im Plan landen');
+});
+
+test('der Platzhalter landet nicht auf dem Einkaufszettel', async () => {
+  const mirrored = (await api('/api/recipes')).json.find((r) => r.source_slug === 'spanisch');
+  const day = todayIso;
+  await api(`/api/plan/${day}`, { method: 'PUT', body: { recipe_id: mirrored.id } });
+  const shoppingList = await api('/api/plan/shopping?all=1');
+  assert.ok(
+    !shoppingList.json.items.some((i) => /disclosed/i.test(i.name)),
+    'Platzhalter darf nicht in die Bring-Liste'
+  );
+  assert.ok(shoppingList.json.items.some((i) => /Kartoffeln/.test(i.name)));
+});
+
+test('Absprung im Wochenplan zeigt nach Mealie, nicht auf die gesperrte Quelle', async () => {
+  const plan = await api('/api/plan?week=current');
+  const day = plan.json.days.find((d) => d.recipe?.id);
+  assert.ok(day, 'ein geplanter Tag erwartet');
+  assert.match(day.recipe.link, /\/g\/home\/r\//);
+  assert.ok(!day.recipe.link.includes('chefkoch.de'));
+});
+
+test('Anreichern einzeln: Chefkoch gibt nichts her, die Antwort sagt warum', async () => {
+  const mirrored = (await api('/api/recipes')).json.find((r) => r.source_slug === 'spanisch');
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const href = String(input);
+    if (href.includes('127.0.0.1')) return realFetch(input, init);
+    return new Response('paywall', { status: 403 });
+  };
+  try {
+    const res = await api(`/api/mealie/repair/${mirrored.id}`, { method: 'POST' });
+    assert.equal(res.status, 200, res.text);
+    assert.equal(res.json.outcome, 'no-data');
+    assert.match(res.json.message, /PLUS/);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('Anreichern einzeln: was die Chefkoch-API hergibt, wird nachgetragen', async () => {
+  const mirrored = (await api('/api/recipes')).json.find((r) => r.source_slug === 'spanisch');
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const href = String(input);
+    if (href.includes('127.0.0.1')) return realFetch(input, init);
+    if (href.includes('api.chefkoch.de') && href.includes('4711')) {
+      return new Response(
+        JSON.stringify({
+          id: '4711',
+          title: 'Spanischer Kartoffelauflauf',
+          instructions: 'Kartoffeln hobeln.\nChorizo anbraten.\nBacken.',
+          servings: 6,
+          preparationTime: 30,
+          ingredientGroups: [
+            {
+              ingredients: [
+                { name: 'Kartoffeln', unit: 'g', amount: 450 },
+                { name: 'Süßkartoffeln', unit: 'g', amount: 450 },
+                { name: 'Spitzpaprika', unit: '', amount: 2 },
+                { name: 'Chorizo', unit: 'g', amount: 200 },
+                { name: 'Manchego', unit: 'g', amount: 100 },
+                { name: 'Mandeln', unit: 'g', amount: 50 },
+              ],
+            },
+          ],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      );
+    }
+    return new Response('not found', { status: 404 });
+  };
+  try {
+    const res = await api(`/api/mealie/repair/${mirrored.id}`, { method: 'POST' });
+    assert.equal(res.status, 200, res.text);
+    assert.equal(res.json.outcome, 'repaired', res.text);
+    assert.equal(res.json.recipe.incomplete, false);
+    assert.ok(res.json.recipe.ingredients.length >= 6);
+    assert.match(res.json.recipe.instructions, /Chorizo anbraten/);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('Anreichern einzeln: ohne Chefkoch-Quelle gibt es eine klare Absage', async () => {
+  const other = (await api('/api/recipes')).json.find(
+    (r) => r.source_slug && !/chefkoch\.de/.test(r.source_url || '')
+  );
+  if (!other) return; // kein passendes Rezept übrig – dann ist nichts zu prüfen
+  const res = await api(`/api/mealie/repair/${other.id}`, { method: 'POST' });
+  assert.equal(res.status, 400);
+  assert.match(res.json.error, /Chefkoch/);
+});
