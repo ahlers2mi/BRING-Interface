@@ -54,7 +54,16 @@ async function loadBringLists() {
 async function applyLastList() {
   try {
     const { lastListUuid } = await apiFetch('/api/preferences');
-    if (!lastListUuid) return;
+    // Noch nie eine Liste benutzt? Dann die erste vorwählen – sonst steht die
+    // Bearbeitungsansicht leer da und man weiß nicht, dass sie eine braucht.
+    if (!lastListUuid) {
+      const first = state.bringLists[0]?.listUuid;
+      if (first) {
+        selectListEverywhere(first);
+        await loadCurrentItems(first);
+      }
+      return;
+    }
     selectListEverywhere(lastListUuid);
     if (el('listSelect')?.value === lastListUuid) await loadCurrentItems(lastListUuid);
   } catch {

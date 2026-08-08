@@ -434,6 +434,19 @@ app.post('/api/lists/:uuid/items', async (req, res) => {
   }
 });
 
+// Abhaken: Bring nimmt den Artikel von der Liste und legt ihn unter „zuletzt
+// gekauft" ab – dasselbe wie ein Tipp in der App. Löschen wäre der falsche Weg,
+// dann verlernt Bring die Gewohnheiten.
+app.post('/api/lists/:uuid/items/:name/done', async (req, res) => {
+  try {
+    const client = await getBringClient();
+    await client.moveToRecentList(req.params.uuid, decodeURIComponent(req.params.name));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.delete('/api/lists/:uuid/items/:name', async (req, res) => {
   try {
     const client = await getBringClient();

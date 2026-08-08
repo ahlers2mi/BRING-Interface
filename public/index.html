@@ -78,10 +78,27 @@
     </div>
 
     <div class="card">
-      <h2>Aktuelle Liste</h2>
+      <h2>Aktuelle Liste bearbeiten</h2>
+      <p class="hint">
+        Menge antippen und ändern (wird beim Verlassen des Feldes gespeichert),
+        ✓ hakt den Artikel ab wie in der Bring-App, 🗑 wirft ihn ganz von der Liste.
+      </p>
+
+      <div class="inline-fields">
+        <input type="text" id="newItemName" placeholder="Artikel, z. B. Butter" />
+        <input type="text" id="newItemAmount" placeholder="Menge (optional)" />
+        <button class="btn btn-primary btn-sm" id="addItemBtn">➕ Auf die Liste</button>
+      </div>
+      <div id="itemsResult"></div>
+
       <div id="currentItems" class="hint">
         Wähle eine Liste aus, um die aktuellen Artikel anzuzeigen.
       </div>
+
+      <details class="instructions" id="recentBox" style="display:none;">
+        <summary>Zuletzt gekauft – zum Wieder-Auf-die-Liste-Setzen</summary>
+        <div id="recentItems"></div>
+      </details>
     </div>
 
   </div>

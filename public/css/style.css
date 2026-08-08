@@ -677,3 +677,39 @@ details.log pre {
   .plan-grid { grid-template-columns: 1fr; }
   main { margin: 1rem auto; }
 }
+
+/* ── Bring-Liste bearbeiten ────────────────────────────────────────────────── */
+
+.item-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.item-row:last-child { border-bottom: none; }
+
+.item-row .item-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.item-row .item-amount {
+  flex: 0 0 8rem;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.9rem;
+}
+
+.ingredient-tag.is-clickable {
+  cursor: pointer;
+  border: 1px solid var(--border);
+  font: inherit;
+}
+
+.ingredient-tag.is-clickable:hover { filter: brightness(0.95); }
+
+@media (max-width: 520px) {
+  .item-row .item-amount { flex-basis: 5.5rem; }
+}
