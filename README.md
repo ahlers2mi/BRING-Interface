@@ -205,6 +205,10 @@ erreichbar ist.
 
 ## Wochenplan & Würfel
 
+> Der Rezeptname im Wochenplan (auch auf der Wandtablet-Seite) verlinkt bei
+> Mealie-Rezepten **nach Mealie**, nicht auf die Quell-Seite – Chefkoch-Rezepte
+> stehen dort oft hinter der PLUS-Schranke.
+
 Der Würfel zieht gewichtet, nicht gleichverteilt:
 
 - **eigene Bewertung**: 5★ ist rund 20× wahrscheinlicher als 1★, „nie wieder" fällt ganz heraus
@@ -248,6 +252,14 @@ Wochenplan und FHEM weiter.
   `MEALIE_PLAN_ENTRY_TYPE` (Standard `dinner`). War Mealie beim Würfeln nicht
   erreichbar, holt der Knopf **„📅 Woche nach Mealie"** im Wochenplan-Tab den
   Abgleich nach. Abschaltbar mit `MEALIE_PUSH_PLAN=0`.
+- **Angerissene Rezepte** (Chefkoch PLUS) erkennt die App am Platzhalter
+  „-- additional ingredients not fully disclosed --": sie zählen als
+  **unvollständig**, werden **nicht gewürfelt**, der Platzhalter landet nicht auf
+  dem Einkaufszettel und stört die Reste-Suche nicht. Über den Filter
+  **„Unvollständig (PLUS-Anriss)"** siehst du sie, der Knopf **„🩹 Anreichern"**
+  an der Karte versucht das einzelne Rezept aus der Chefkoch-API nachzutragen und
+  sagt, wenn dort nichts mehr zu holen ist. Dann hilft nur löschen oder von Hand
+  in Mealie vervollständigen.
 - **Verwaiste Einträge aufräumen:** die Mealie-Karte meldet, wie viele Rezepte in
   Mealie gelöscht wurden und hier noch liegen, und räumt sie auf Knopfdruck weg –
   standardmäßig nur die ohne Bewertungen und Plan-Einträge, auf ausdrücklichen

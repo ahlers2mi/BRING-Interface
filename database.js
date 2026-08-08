@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { todayIso } from './lib/week.js';
+import { isIncompleteRecipe } from './lib/normalize.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dbPath = process.env.DB_PATH || path.join(__dirname, 'recipes.db');
@@ -217,6 +218,8 @@ export function getAllRecipes({ withIngredients = true } = {}) {
       .prepare('SELECT id, recipe_id, name, amount FROM ingredients ORDER BY id')
       .all();
     for (const ing of ings) byId.get(ing.recipe_id)?.ingredients.push(ing);
+    // Angerissene Chefkoch-PLUS-Rezepte kenntlich machen (siehe normalize.js).
+    for (const r of recipes) r.incomplete = isIncompleteRecipe(r);
   }
   return recipes;
 }
@@ -228,6 +231,7 @@ export function getRecipeById(id) {
   full.ingredients = db
     .prepare('SELECT * FROM ingredients WHERE recipe_id = ? ORDER BY id')
     .all(id);
+  full.incomplete = isIncompleteRecipe(full);
   full.ratings = db
     .prepare('SELECT * FROM ratings WHERE recipe_id = ? ORDER BY created_at DESC')
     .all(id);

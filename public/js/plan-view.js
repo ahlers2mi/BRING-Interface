@@ -135,8 +135,8 @@ function render() {
   el('heroRate').innerHTML = recipe ? ratingRow(hero, 'rate') : '';
 
   const link = el('heroLink');
-  if (recipe?.source_url) {
-    link.href = recipe.source_url;
+  if (recipe?.link) {
+    link.href = recipe.link;
     link.style.display = '';
   } else {
     link.style.display = 'none';
