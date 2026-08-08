@@ -14,6 +14,7 @@ import { initShopping, loadCurrentItems } from './shopping.js';
 import { applyMealieMode, initRecipes, loadTaste, renderRecipeList } from './recipes.js';
 import { initPlan, loadPlan } from './plan.js';
 import { initFridge } from './fridge.js';
+import { applyCookidooMode, initCookidoo } from './cookidoo.js';
 
 // ── Status ────────────────────────────────────────────────────────────────────
 
@@ -88,6 +89,7 @@ async function init() {
   initShopping();
   initPlan();
   initFridge();
+  initCookidoo();
   wireModalDismiss('importModal');
   wireModalDismiss('pickerModal');
 
@@ -96,6 +98,7 @@ async function init() {
 
   await loadStatus();
   applyMealieMode(); // Rezeptpflege ausblenden, wenn Mealie die Quelle ist
+  applyCookidooMode();
   await loadBringLists();
   await initRecipes();
   await refreshRecipes();

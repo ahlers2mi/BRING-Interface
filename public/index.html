@@ -114,6 +114,9 @@
         <div class="btn-group">
           <button class="btn btn-secondary btn-sm" id="planShoppingPreviewBtn">👀 Zutaten der Woche anzeigen</button>
           <button class="btn btn-primary btn-sm" id="planShoppingBtn">🛒 Wocheneinkauf in Bring</button>
+          <button class="btn btn-secondary btn-sm" id="planMealieBtn" hidden>
+            📅 Woche nach Mealie
+          </button>
         </div>
       </div>
 
@@ -138,6 +141,35 @@
 
   <!-- ─── Recipes Tab ────────────────────────────────────────────────────── -->
   <div id="tab-recipes" class="tab-panel">
+
+    <!-- Cookidoo/Thermomix als zweite Quelle (nur sichtbar, wenn konfiguriert) -->
+    <div class="card" id="cookidooCard" style="display:none;">
+      <h2>🍲 Cookidoo (Thermomix)</h2>
+      <div id="cookidooStatus"><span class="spinner"></span></div>
+      <p class="hint">
+        Gespiegelt werden Name, Zutaten, Zeiten und der Link – gekocht wird am Gerät.
+        Damit würfelt der Wochenplan die Thermomix-Rezepte mit und ihre Zutaten
+        landen im Wocheneinkauf.
+      </p>
+      <div class="btn-group">
+        <button class="btn btn-primary btn-sm" id="cookidooSyncBtn">🔄 Jetzt abgleichen</button>
+        <button class="btn btn-secondary btn-sm" id="cookidooShoppingPreviewBtn">
+          👀 Cookidoo-Einkaufsliste ansehen
+        </button>
+      </div>
+      <div class="form-group" style="margin-top:0.75rem;">
+        <label for="cookidooListSelect">Cookidoo-Einkaufsliste nach Bring</label>
+        <select id="cookidooListSelect">
+          <option value="">– Liste wählen –</option>
+        </select>
+        <div class="btn-group">
+          <button class="btn btn-secondary btn-sm" id="cookidooShoppingBtn">
+            🛒 Übertragen
+          </button>
+        </div>
+      </div>
+      <div id="cookidooResult"></div>
+    </div>
 
     <!-- Mealie als Rezeptquelle (nur sichtbar, wenn konfiguriert) -->
     <div class="card" id="mealieCard" style="display:none;">

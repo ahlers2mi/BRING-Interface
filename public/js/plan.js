@@ -8,6 +8,7 @@ import {
   el,
   escHtml,
   flash,
+  mealieActive,
   on,
   openModal,
   ratingButtonsHtml,
@@ -49,6 +50,9 @@ function renderPlan(plan) {
     `KW ${plan.week.slice(-2)} (${deDate(plan.from)} – ${deDate(plan.to)})`;
   el('planWeekLabel').dataset.from = plan.from;
   el('planSummary').textContent = `${plan.planned} von 7 Tagen geplant`;
+  // Der Abgleich läuft beim Würfeln automatisch – der Knopf ist für den Fall,
+  // dass Mealie gerade nicht erreichbar war.
+  el('planMealieBtn').hidden = !mealieActive();
 
   const grid = el('planGrid');
   grid.innerHTML = '';
@@ -301,6 +305,28 @@ export function initPlan() {
                .join('')}
            </div>`
         : '<div class="alert alert-info">Für diese Woche ist nichts eingeplant.</div>';
+    } catch (err) {
+      flash('planResult', `Fehler: ${escHtml(err.message)}`, 'error');
+    } finally {
+      setLoading(btn, false);
+    }
+  });
+
+  on('planMealieBtn', 'click', async (e) => {
+    const btn = e.currentTarget;
+    setLoading(btn, true);
+    try {
+      const res = await apiFetch('/api/plan/mealie', {
+        method: 'POST',
+        body: JSON.stringify({ week: currentWeek }),
+      });
+      flash(
+        'planResult',
+        res.failed
+          ? `${res.pushed} Tage nach Mealie übertragen, ${res.failed} fehlgeschlagen (siehe Container-Log).`
+          : `✓ ${res.pushed} Tage in Mealies Menüplan geschrieben.`,
+        res.failed ? 'error' : 'success'
+      );
     } catch (err) {
       flash('planResult', `Fehler: ${escHtml(err.message)}`, 'error');
     } finally {

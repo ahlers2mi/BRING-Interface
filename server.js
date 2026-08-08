@@ -66,11 +66,22 @@ import {
   mealieAbout,
   mealieEnabled,
   mealieConfig,
+  mealieIdOf,
   mealieRecipeUrl,
+  pushPlanDatesToMealie,
+  pushPlanEntryToMealie,
   pushRatingToMealie,
   startChefkochToMealieJob,
   syncFromMealie,
 } from './lib/mealie.js';
+import {
+  cookidooCheck,
+  cookidooConfig,
+  cookidooEnabled,
+  cookidooShoppingItems,
+  getCookidooState,
+  syncFromCookidoo,
+} from './lib/cookidoo.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -346,6 +357,7 @@ app.get('/api/status', async (_req, res) => {
     apiTokenEnabled,
     aiEnabled: Boolean(process.env.OPENROUTER_API_KEY),
     mealie: { ...getSyncState(), recipeUrlPattern: mealieConfig().recipeUrlPattern },
+    cookidoo: getCookidooState(),
   };
   try {
     await getBringClient();
@@ -679,6 +691,27 @@ function resolveDate(value) {
   return isValidIsoDate(value) ? value : null;
 }
 
+// Einen Tag so beschreiben, wie Mealie ihn braucht.
+function planPushPayload(date) {
+  const entry = getPlanEntry(date);
+  const recipe = entry?.recipe_id ? getRecipeById(entry.recipe_id) : null;
+  return {
+    date,
+    mealieId: mealieIdOf(recipe),
+    title: recipe ? recipe.name : '',
+    note: entry?.note || '',
+  };
+}
+
+// Änderungen am Plan nach Mealie schieben. Wie beim Bewerten absichtlich ohne
+// await: der Plan steht hier schon, und ein langsames oder abgeschaltetes Mealie
+// darf das Würfeln nicht ausbremsen.
+function syncPlanToMealie(dates) {
+  if (!mealieEnabled() || !mealieConfig().pushPlan) return;
+  const unique = [...new Set((Array.isArray(dates) ? dates : [dates]).filter(Boolean))];
+  pushPlanDatesToMealie(unique.map(planPushPayload)).catch(() => {});
+}
+
 app.get('/api/plan', (req, res) => {
   const week = resolveWeek(req.query.week);
   if (!week) return res.status(400).json({ error: 'Ungültige Woche.' });
@@ -696,12 +729,14 @@ app.post('/api/plan/roll', (req, res) => {
       return res.status(400).json({ error: 'Ungültiges Datum.' });
     }
     const results = rollDays(list, { overwrite: !onlyEmpty });
+    syncPlanToMealie(list);
     return res.json({ results, plan: buildWeekView(weekOf(list[0])) });
   }
 
   const week = resolveWeek(req.body?.week);
   if (!week) return res.status(400).json({ error: 'Ungültige Woche.' });
   const results = rollWeek(week, { onlyEmpty: Boolean(onlyEmpty) });
+  syncPlanToMealie(weekDates(week));
   res.json({ results, plan: buildWeekView(week) });
 });
 
@@ -725,6 +760,7 @@ app.put('/api/plan/:date', (req, res) => {
     note: req.body.note,
     status: req.body.status || 'planned',
   });
+  syncPlanToMealie(date);
   res.json({ entry, plan: buildWeekView(weekOf(date)) });
 });
 
@@ -732,7 +768,28 @@ app.delete('/api/plan/:date', (req, res) => {
   const date = resolveDate(req.params.date);
   if (!date) return res.status(400).json({ error: 'Ungültiges Datum.' });
   deletePlanEntry(date);
+  syncPlanToMealie(date);
   res.json({ success: true, plan: buildWeekView(weekOf(date)) });
+});
+
+// POST /api/plan/mealie – body: { week? }
+// Ganze Woche von Hand abgleichen (nach einem Ausfall oder erstmalig). Hier
+// wird gewartet, damit die Oberfläche eine belastbare Zahl anzeigen kann.
+app.post('/api/plan/mealie', async (req, res) => {
+  if (!mealieEnabled()) {
+    return res.status(400).json({ error: 'Mealie ist nicht konfiguriert.' });
+  }
+  if (!mealieConfig().pushPlan) {
+    return res.status(400).json({ error: 'Menüplan-Abgleich ist abgeschaltet (MEALIE_PUSH_PLAN=0).' });
+  }
+  const week = resolveWeek(req.body?.week);
+  if (!week) return res.status(400).json({ error: 'Ungültige Woche.' });
+  try {
+    const result = await pushPlanDatesToMealie(weekDates(week).map(planPushPayload));
+    res.json({ week, ...result });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
 });
 
 // POST /api/plan/:date/rate – body: { rating } oder { kind, stars, comment }
@@ -909,6 +966,79 @@ app.post('/api/mealie/sync', async (_req, res) => {
     const state = await syncFromMealie({ deps: mealieDeps });
     if (state.status === 'error') return res.status(502).json(state);
     res.json(state);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Cookidoo (Thermomix) ──────────────────────────────────────────────────────
+
+const cookidooDeps = {
+  upsertRecipeFromSource,
+  markRecipesMissing,
+  findRecipeByExternalId,
+};
+
+app.get('/api/cookidoo/status', async (_req, res) => {
+  const state = getCookidooState();
+  if (!state.enabled) return res.json(state);
+  try {
+    const check = await cookidooCheck();
+    res.json({
+      ...state,
+      reachable: true,
+      user: check?.user?.username || '',
+      subscription: check?.subscription?.status || '',
+      subscriptionActive: Boolean(check?.subscription?.active),
+    });
+  } catch (err) {
+    res.json({ ...state, reachable: false, error: err.message });
+  }
+});
+
+// Abgleich anstoßen. Dauert länger als bei Mealie: für jedes Rezept muss die
+// Brücke einmal bei Cookidoo nachfragen, und das absichtlich nacheinander.
+app.post('/api/cookidoo/sync', async (_req, res) => {
+  if (!cookidooEnabled()) {
+    return res.status(400).json({
+      error: 'Cookidoo ist nicht konfiguriert (COOKIDOO_URL auf die Brücke setzen).',
+    });
+  }
+  try {
+    const state = await syncFromCookidoo({ deps: cookidooDeps });
+    if (state.status === 'error') return res.status(502).json(state);
+    res.json(state);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Cookidoos eigene Einkaufsliste ansehen …
+app.get('/api/cookidoo/shopping', async (req, res) => {
+  if (!cookidooEnabled()) {
+    return res.status(400).json({ error: 'Cookidoo ist nicht konfiguriert.' });
+  }
+  try {
+    res.json(await cookidooShoppingItems({ all: req.query.all === '1' }));
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+// … und nach Bring schieben.
+app.post('/api/cookidoo/shopping', async (req, res) => {
+  if (!cookidooEnabled()) {
+    return res.status(400).json({ error: 'Cookidoo ist nicht konfiguriert.' });
+  }
+  const { listUuid } = req.body || {};
+  if (!listUuid) return res.status(400).json({ error: 'listUuid fehlt.' });
+  try {
+    const { items, recipes } = await cookidooShoppingItems({ all: Boolean(req.body.all) });
+    if (!items.length) {
+      return res.status(400).json({ error: 'Die Cookidoo-Einkaufsliste ist leer.' });
+    }
+    const imported = await importItemsToBring(listUuid, items);
+    res.json({ imported, recipes });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1199,10 +1329,12 @@ function handleFhemRoll(req, res) {
       const week = resolveWeek(params.week);
       if (!week) return res.status(400).json({ error: 'Ungültige Woche.' });
       rollWeek(week, { onlyEmpty });
+      syncPlanToMealie(weekDates(week));
     } else {
       const date = resolveDate(params.date);
       if (!date) return res.status(400).json({ error: 'Ungültiges Datum.' });
       rollDays([date], { overwrite: !onlyEmpty });
+      syncPlanToMealie(date);
     }
     res.json(fhemPlanPayload());
   } catch (err) {
@@ -1286,6 +1418,28 @@ if (startedDirectly) {
           }
         })
         .catch((err) => console.warn(`Mealie-Abgleich fehlgeschlagen: ${err.message}`));
+    run();
+    setInterval(run, syncMinutes * 60 * 1000).unref();
+  }
+
+  // Cookidoo genauso, nur seltener: für jedes Rezept fragt die Brücke einmal
+  // einzeln bei Cookidoo nach, das muss nicht alle 15 Minuten passieren.
+  if (cookidooEnabled()) {
+    const { url, syncMinutes } = cookidooConfig();
+    console.log(`Cookidoo über die Brücke ${url} (Abgleich alle ${syncMinutes} Min.)`);
+    const run = () =>
+      syncFromCookidoo({ deps: cookidooDeps })
+        .then((state) => {
+          if (state.status === 'error') {
+            console.warn(`Cookidoo-Abgleich fehlgeschlagen: ${state.error}`);
+          } else {
+            console.log(
+              `Cookidoo-Abgleich: ${state.added} neu, ${state.updated} geändert, ` +
+                `${state.missing} verschwunden, ${state.failed} Fehler`
+            );
+          }
+        })
+        .catch((err) => console.warn(`Cookidoo-Abgleich fehlgeschlagen: ${err.message}`));
     run();
     setInterval(run, syncMinutes * 60 * 1000).unref();
   }
