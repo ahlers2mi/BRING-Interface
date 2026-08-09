@@ -87,11 +87,11 @@ das läuft über NAT. Lösung: ein **eigenes** Netz nur für Mealie
 Dienstnamen benutzen. `network_mode: host` ist keine Lösung – damit fällt die
 Port-Abbildung weg.
 
-**Portainer wendet nur EINEN Compose-Pfad an.** Zwei Dateien in das Feld zu
-schreiben läuft fehlerfrei durch und lässt trotzdem den Zusatz weg – deshalb
-zieht `docker-compose.mealie-extern.yml` die Hauptdatei per `include:` selbst
-herein. Sie wird **immer allein** angegeben, auch von der Shell: die Hauptdatei
-zusätzlich als `-f` bricht mit `include cycle detected` ab.
+**Portainer: der Zusatz gehört in „Additional paths".** Das Feld „Compose path"
+nimmt nur EINEN Pfad – zwei hineinzuschreiben läuft fehlerfrei durch und lässt
+den Zusatz trotzdem weg. `include:` ist hier **kein** Ausweg: Compose verbietet
+es, einen importierten Dienst zu erweitern
+(`services.bring-interface conflicts with imported resource`).
 
 Zum Nachmessen im Container: das Laufzeit-Image ist `node:20-bookworm-slim` und
 hat **weder `wget` noch `curl`**. Stattdessen
