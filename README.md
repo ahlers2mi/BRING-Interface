@@ -123,6 +123,68 @@ docker compose logs -f      # Logs ansehen
 docker compose down         # Container stoppen
 ```
 
+### Eine zweite Instanz für einen anderen Haushalt
+
+Die App ist auf **einen** Haushalt gebaut: Bring-, Mealie- und Cookidoo-Zugang
+kommen aus den Umgebungsvariablen, `APP_PASSWORD` ist ein gemeinsames Passwort,
+und Rezepte, Plan und Bewertungen liegen alle in derselben Datenbank ohne
+Besitzer-Kennzeichen. Für einen zweiten Haushalt startet man deshalb **eine
+zweite Instanz** aus demselben Repo, statt die App mehrbenutzerfähig zu machen.
+Beide bleiben sauber getrennt, es gibt keinen gemeinsamen Zustand.
+
+In Portainer: denselben Git-Stack ein **zweites Mal** anlegen (anderer
+Stack-Name, z. B. `bring-kumpel`) und dort eigene Variablen setzen. Fünf Werte
+**müssen** sich unterscheiden, sonst kollidieren die Instanzen:
+
+| Variable | warum |
+| --- | --- |
+| `CONTAINER_NAME` | Container-Namen sind auf dem ganzen Docker-Host eindeutig – sonst `Conflict. The container name … is already in use` |
+| `HOST_PORT` | zwei Dienste können nicht denselben Port belegen |
+| `DATA_PATH` | **nur wenn gesetzt**: zwei Instanzen auf denselben Ordner wären dieselbe Datenbank. Leer lassen ist am einfachsten, dann bekommt jeder Stack sein eigenes Volume |
+| `APP_PASSWORD`, `API_TOKEN` | eigener Zugang |
+| `BRING_MAIL`, `BRING_PASSWORD` | sein Bring-Konto |
+
+Kommt Mealie bzw. Cookidoo mit, zusätzlich `MEALIE_CONTAINER_NAME`,
+`MEALIE_PORT`, `MEALIE_DATA_PATH` bzw. `COOKIDOO_CONTAINER_NAME` und
+`COOKIDOO_DATA_PATH`.
+
+Ein Beispiel für die zweite Instanz (die erste bleibt unverändert):
+
+```
+CONTAINER_NAME=bring-kumpel
+HOST_PORT=3556
+DATA_PATH=
+APP_PASSWORD=…
+API_TOKEN=…
+BRING_MAIL=kumpel@example.de
+BRING_PASSWORD=…
+# nur mit eigenem Mealie:
+COMPOSE_PROFILES=mealie
+MEALIE_CONTAINER_NAME=mealie-kumpel
+MEALIE_PORT=9926
+MEALIE_URL=http://mealie:9000
+```
+
+`MEALIE_URL=http://mealie:9000` bleibt richtig: der Dienstname gilt **innerhalb**
+des Stacks, jede Instanz spricht mit ihrem eigenen Mealie.
+
+Von der Shell aus bauen wie gehabt, nur mit eigenem Projektnamen:
+
+```bash
+S=<Portainer-Datenpfad>/compose/<neue-stack-id>
+sudo docker compose -p bring-kumpel \
+  --project-directory "$S" --env-file "$S/stack.env" up -d --build
+```
+
+Für den Zugriff von außen im DSM-Reverse-Proxy einen **zweiten Hostnamen** auf
+den neuen Port legen. Updates laufen pro Stack – nach einem Merge also beide
+Stacks „Pull and redeploy" + neu bauen.
+
+Was dabei **nicht** geteilt wird: Rezepte, Wochenplan, Bewertungen,
+Einstellungen, Bring-Listen. Gemeinsame Rezepte gingen nur über ein
+gemeinsames Mealie (beide Instanzen auf dieselbe `MEALIE_URL`) – dann sehen
+aber beide Haushalte alles, und die Bewertungen bleiben trotzdem getrennt.
+
 ### Variante B: Reines Docker (ohne Compose)
 
 ```bash
@@ -161,6 +223,8 @@ docker run -d \
 | `APP_SECRET` | Optional: Schlüssel zum Signieren der Session-Cookies (sonst aus `APP_PASSWORD` abgeleitet). |
 | `API_TOKEN` | Token für Maschinen-Zugriffe auf `/api/…` (FHEM, Skripte) – als `?token=…`, Header `X-API-Token` oder `Authorization: Bearer …`. Leer = aus. Am besten ohne `&`, `#` oder `+`, damit der Wert unverändert in eine URL passt. |
 | `HOST_PORT` | Nur `docker-compose.yml`: Port auf der NAS (Standard 8095) – im Container bleibt es 3000. |
+| `CONTAINER_NAME` | Nur `docker-compose.yml`: Name des Containers (Standard `bring-interface`). Muss für eine [zweite Instanz](#eine-zweite-instanz-für-einen-anderen-haushalt) anders lauten, Docker-Namen sind hostweit eindeutig. |
+| `MEALIE_CONTAINER_NAME`, `COOKIDOO_CONTAINER_NAME` | Dasselbe für die beiden optionalen Dienste. |
 | `PLAN_QUICK_MINUTES` | Ab wann ein Rezept werktags als „dauert lange" gilt (Standard 40). |
 | `PUBLIC_URL` | Adresse, unter der die App im Browser erreichbar ist – für absolute Bild-Adressen in den FHEM-Readings. Leer = die Adresse der jeweiligen Anfrage. |
 | `PLAN_COLD_C`, `PLAN_WARM_C` | Schwellen für die Wetter-Neigung in °C (Standard 10 und 24). |
