@@ -314,22 +314,32 @@
     <!-- Recipe list -->
     <div class="card">
       <h2>Gespeicherte Rezepte</h2>
-      <div class="inline-fields">
-        <input type="search" id="recipeSearch" placeholder="Suchen (Name, Zutat, Tag) …" />
-        <select id="recipeFilter">
-          <option value="all">Alle</option>
-          <option value="favourites">Favoriten (ab 4★)</option>
-          <option value="unrated">Noch nicht bewertet</option>
-          <option value="blocked">Gesperrt</option>
-          <option value="missing">In Mealie gelöscht</option>
-          <option value="incomplete">Unvollständig (PLUS-Anriss)</option>
-          <option value="side">Kein Abendessen (Dip, Beilage, Kuchen …)</option>
-          <option value="chefkoch">Quelle: Chefkoch</option>
-          <option value="cookidoo">Quelle: Cookidoo (Thermomix)</option>
-          <option value="other">Quelle: eigene/andere</option>
+      <div class="filterbar">
+        <div class="search-field">
+          <span class="search-icon" aria-hidden="true">🔍</span>
+          <input type="search" id="recipeSearch"
+            placeholder="Suchen (Name, Zutat, Tag) …" autocomplete="off" />
+        </div>
+        <select id="recipeFilter" aria-label="Rezepte filtern">
+          <option value="all">Alle Rezepte</option>
+          <optgroup label="Bewertung">
+            <option value="favourites">⭐ Favoriten (ab 4★)</option>
+            <option value="unrated">Noch nicht bewertet</option>
+          </optgroup>
+          <optgroup label="Zustand">
+            <option value="blocked">⛔ Gesperrt</option>
+            <option value="missing">In Mealie gelöscht</option>
+            <option value="incomplete">Unvollständig (PLUS-Anriss)</option>
+            <option value="side">🥄 Kein Abendessen</option>
+          </optgroup>
+          <optgroup label="Quelle">
+            <option value="chefkoch">🥄 Chefkoch</option>
+            <option value="cookidoo">🍲 Cookidoo (Thermomix)</option>
+            <option value="other">eigene/andere</option>
+          </optgroup>
         </select>
+        <span class="count-badge" id="recipeCount"></span>
       </div>
-      <div class="hint" id="recipeCount"></div>
     </div>
 
     <div id="recipeList" class="recipe-list"></div>

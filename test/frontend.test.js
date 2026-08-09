@@ -40,7 +40,9 @@ test('cookidoo.js gehört zu den geprüften Modulen', () => {
 
 test('jede Filter-Auswahl der Rezeptliste wird auch ausgewertet', () => {
   const recipes = fs.readFileSync(path.join(root, 'public/js/recipes.js'), 'utf8');
-  const select = /<select id="recipeFilter">([\s\S]*?)<\/select>/.exec(html);
+  // Attribute am <select> (aria-label, class …) dürfen dazukommen, ohne dass
+  // dieser Wächter blind wird.
+  const select = /<select id="recipeFilter"[^>]*>([\s\S]*?)<\/select>/.exec(html);
   assert.ok(select, 'Auswahlfeld recipeFilter nicht gefunden');
   const values = [...select[1].matchAll(/value="([^"]+)"/g)].map((m) => m[1]);
   assert.ok(values.length >= 8, `erwartet mehrere Filter, gefunden: ${values}`);
