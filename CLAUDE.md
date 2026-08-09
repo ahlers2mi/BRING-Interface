@@ -16,7 +16,8 @@ Läuft als Docker-Stack auf der Synology.
   der Brücke), `mealplan.js` (Würfeln, Reste-Suche, Wocheneinkauf),
   `normalize.js` (Zutaten, PLUS-Anriss, Vorlauf-Erkennung), `scale.js`
   (Portionen umrechnen), `climate.js` (Wetter-Gewichtung), `course.js`
-  (Abendessen oder nur Dip/Beilage/Dessert).
+  (Abendessen oder nur Dip/Beilage/Dessert), `site-import.js` + `site-job.js`
+  (Rezepte von einer beliebigen Koch-Seite einsammeln).
 - **`public/js/`** – ES-Module ohne Bauschritt: `core.js` (gemeinsame Helfer und
   `state`), dazu je Tab ein Modul. Neue geteilte Helfer gehören nach `core.js`,
   nicht in ein Tab-Modul.
@@ -109,6 +110,21 @@ Beilage (deshalb die Verbindungswörter `mit`/`und`/`an` …), und `kuchen`/`eis
 in der Liste erwischen Zwiebelkuchen, Flammkuchen, Eisbein und Milchreis –
 deshalb stehen sie **nicht** drin. Was die Endung nicht trifft, fangen die
 Kategorien; im Zweifel wird gewürfelt.
+
+## Rezepte von fremden Koch-Seiten
+
+`site-import.js` sammelt Links einer Übersichtsseite ein, `site-job.js` legt sie
+an. Bewusst **keine Seite fest verdrahtet**: welche Links Rezepte sind,
+entscheidet ein Anlesen der jeweiligen Seite (schema.org-`Recipe` vorhanden?).
+Das kostet einen Abruf je Kandidat, ist dafür gegen jedes Layout immun und
+gegen Umbauten der Quelle robust.
+
+Ist Mealie an, geht die Adresse an `/api/recipes/create/url` – Mealies
+`recipe-scrapers` kennt mehr Seiten als unser JSON-LD-Leser. Ohne Mealie wird
+das beim Prüfen ohnehin gelesene Rezept direkt angelegt (`source: web`).
+
+Der `dryRun` ist wichtig: gegen eine unbekannte Seite ist er die einzige
+ehrliche Auskunft, ob sie sich einlesen lässt.
 
 ## Mealie
 

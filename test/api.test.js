@@ -541,6 +541,135 @@ test('Massenimport von Chefkoch legt Rezepte an und überspringt Dubletten', asy
   }
 });
 
+// ── Rezepte von einer beliebigen Koch-Seite ───────────────────────────────────
+
+async function waitForSiteImport() {
+  for (let i = 0; i < 100; i += 1) {
+    const res = await api('/api/recipes/import/site-status');
+    if (res.json.status !== 'running') return res.json;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  throw new Error('Import wurde nicht fertig');
+}
+
+function rezeptSeite(name) {
+  return `<script type="application/ld+json">${JSON.stringify({
+    '@type': 'Recipe',
+    name,
+    recipeIngredient: ['200 g Mehl', '2 Eier'],
+    recipeInstructions: 'Verruehren und backen.',
+    totalTime: 'PT30M',
+  })}</script>`;
+}
+
+// Nachgebaute Blog-Uebersicht: zwei Rezepte, ein Blogeintrag ohne Rezeptdaten,
+// dazu die ueblichen Nebenwege.
+function fakeBlogFetch() {
+  const uebersicht = `
+    <a href="/rezepte/pfannkuchen/">Pfannkuchen</a>
+    <a href="/rezepte/waffeln/">Waffeln</a>
+    <a href="/rezepte/kein-rezept/">Nur ein Bericht</a>
+    <a href="/impressum/">Impressum</a>
+    <a href="https://fremde.example/werbung">Werbung</a>`;
+  return async (url, opts) => {
+    const href = String(url);
+    if (href.startsWith(base)) return realFetch(url, opts);
+    const seiten = {
+      'https://blog.example/rezepte/': uebersicht,
+      'https://blog.example/rezepte/pfannkuchen/': rezeptSeite('Pfannkuchen'),
+      'https://blog.example/rezepte/waffeln/': rezeptSeite('Waffeln'),
+      'https://blog.example/rezepte/kein-rezept/': '<p>Heute war schoenes Wetter.</p>',
+    };
+    const body = seiten[href];
+    if (body === undefined) return new Response('weg', { status: 404 });
+    return new Response(body, { status: 200, headers: { 'content-type': 'text/html' } });
+  };
+}
+
+test('Probelauf findet Rezepte, legt aber nichts an', async () => {
+  globalThis.fetch = fakeBlogFetch();
+  try {
+    const vorher = (await api('/api/recipes')).json.length;
+    const start = await api('/api/recipes/import/site', {
+      method: 'POST',
+      body: { url: 'https://blog.example/rezepte/', dryRun: true, pages: 1 },
+    });
+    assert.equal(start.status, 202, start.text);
+
+    const done = await waitForSiteImport();
+    assert.equal(done.status, 'done', JSON.stringify(done.log));
+    assert.equal(done.dryRun, true);
+    assert.deepEqual(done.found.sort(), ['Pfannkuchen', 'Waffeln']);
+    assert.equal(done.imported, 0);
+    assert.equal((await api('/api/recipes')).json.length, vorher, 'nichts angelegt');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('Site-Import legt die gefundenen Rezepte an und ueberspringt Dubletten', async () => {
+  globalThis.fetch = fakeBlogFetch();
+  try {
+    await api('/api/recipes/import/site', {
+      method: 'POST',
+      body: { url: 'https://blog.example/rezepte/', pages: 1 },
+    });
+    const done = await waitForSiteImport();
+    assert.equal(done.status, 'done', JSON.stringify(done.log));
+    assert.equal(done.imported, 2, JSON.stringify(done.log));
+    assert.equal(done.failed, 0);
+
+    const liste = (await api('/api/recipes')).json;
+    const waffeln = liste.find((r) => r.name === 'Waffeln');
+    assert.ok(waffeln, 'Waffeln angelegt');
+    assert.equal(waffeln.source, 'web');
+    assert.deepEqual(waffeln.ingredients.map((i) => i.name), ['Mehl', 'Eier']);
+    assert.ok(!liste.some((r) => r.name === 'Nur ein Bericht'));
+
+    // Zweiter Lauf: alles schon da.
+    await api('/api/recipes/import/site', {
+      method: 'POST',
+      body: { url: 'https://blog.example/rezepte/', pages: 1 },
+    });
+    const zweiter = await waitForSiteImport();
+    assert.equal(zweiter.imported, 0);
+    assert.equal(zweiter.skipped, 2);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('Seite ohne Rezeptdaten meldet einen verstaendlichen Fehler', async () => {
+  globalThis.fetch = async (url, opts) => {
+    const href = String(url);
+    if (href.startsWith(base)) return realFetch(url, opts);
+    return new Response('<a href="/blog/eintrag/">Eintrag</a>', {
+      status: 200,
+      headers: { 'content-type': 'text/html' },
+    });
+  };
+  try {
+    await api('/api/recipes/import/site', {
+      method: 'POST',
+      body: { url: 'https://leer.example/liste/', pages: 1 },
+    });
+    const done = await waitForSiteImport();
+    assert.equal(done.status, 'error');
+    assert.match(done.error, /schema\.org/);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('unvollstaendige Adresse wird abgelehnt', async () => {
+  const res = await api('/api/recipes/import/site', {
+    method: 'POST',
+    body: { url: 'blog.example/rezepte' },
+  });
+  assert.equal(res.status, 409);
+  assert.match(res.json.error, /http/);
+});
+
 test('Einzelimport per URL liest schema.org-Daten', async () => {
   const html = `<script type="application/ld+json">
     {"@type":"Recipe","name":"Ofengemüse","recipeIngredient":["3 Karotten","1 Zucchini"],

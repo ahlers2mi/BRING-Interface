@@ -672,6 +672,108 @@ async function pollCkJob() {
   }
 }
 
+// ── Rezepte von einer beliebigen Koch-Seite ───────────────────────────────────
+
+let sitePollTimer = null;
+
+function renderSiteJob(job) {
+  const box = el('siteStatus');
+  if (!box) return;
+  if (!job || job.status === 'idle') {
+    box.innerHTML = '';
+    return;
+  }
+  const total = job.total || job.requested || 0;
+  const percent = job.dryRun
+    ? job.status === 'running'
+      ? 50
+      : 100
+    : total
+      ? Math.min(100, Math.round((job.done / total) * 100))
+      : 0;
+  const statusText =
+    { running: '⏳ läuft', done: '✓ fertig', error: '✗ Fehler', cancelled: '■ abgebrochen' }[
+      job.status
+    ] || job.status;
+
+  // Beim Probelauf zählt nur, was gefunden wurde – angelegt wird nichts.
+  const zahlen = job.dryRun
+    ? `${job.candidates || 0} Adressen geprüft · <b>${job.total || 0} Rezepte gefunden</b>`
+    : `${job.done}/${total || '?'} · ${job.imported} importiert ·
+       ${job.skipped} schon vorhanden · ${job.failed} fehlgeschlagen`;
+
+  const liste = (job.found || []).length
+    ? `<details class="log"${job.dryRun ? ' open' : ''}>
+         <summary>${job.found.length} gefundene Rezepte</summary>
+         <pre>${escHtml(job.found.join('\n'))}</pre>
+       </details>`
+    : '';
+
+  box.innerHTML = `
+    <div class="progress"><div class="progress-bar" style="width:${percent}%"></div></div>
+    <div class="hint">
+      ${statusText}${job.dryRun ? ' (Probelauf)' : ''} · Ziel:
+      ${job.target === 'mealie' ? 'Mealie' : 'lokale Datenbank'} · ${zahlen}
+    </div>
+    ${job.error ? `<div class="alert alert-error">${escHtml(job.error)}</div>` : ''}
+    ${liste}
+    <details class="log"><summary>Protokoll</summary><pre>${escHtml(
+      (job.log || []).join('\n')
+    )}</pre></details>`;
+  el('siteCancelBtn').style.display = job.status === 'running' ? 'inline-flex' : 'none';
+}
+
+async function pollSiteJob() {
+  try {
+    const job = await apiFetch('/api/recipes/import/site-status');
+    renderSiteJob(job);
+    if (job.status === 'running' || job.status === 'idle') return job;
+    clearInterval(sitePollTimer);
+    sitePollTimer = null;
+    el('siteImportBtn').disabled = false;
+    el('siteDryRunBtn').disabled = false;
+    if (!job.dryRun) await refreshAll();
+    return job;
+  } catch (err) {
+    clearInterval(sitePollTimer);
+    sitePollTimer = null;
+    el('siteImportBtn').disabled = false;
+    el('siteDryRunBtn').disabled = false;
+    flash('siteResult', `Fehler: ${escHtml(err.message)}`, 'error');
+    return null;
+  }
+}
+
+async function startSiteJob(dryRun) {
+  const url = (el('siteUrl').value || '').trim();
+  if (!/^https?:\/\//i.test(url)) {
+    return flash('siteResult', 'Bitte eine vollständige http(s)-Adresse angeben.', 'error');
+  }
+  el('siteImportBtn').disabled = true;
+  el('siteDryRunBtn').disabled = true;
+  try {
+    await apiFetch('/api/recipes/import/site', {
+      method: 'POST',
+      body: JSON.stringify({
+        url,
+        dryRun,
+        count: Number(el('siteCount').value) || 20,
+        pages: Number(el('sitePages').value) || 3,
+      }),
+    });
+    flash(
+      'siteResult',
+      dryRun ? 'Probelauf gestartet …' : 'Import gestartet – das dauert einen Moment.'
+    );
+    if (!sitePollTimer) sitePollTimer = setInterval(pollSiteJob, 1500);
+    pollSiteJob();
+  } catch (err) {
+    el('siteImportBtn').disabled = false;
+    el('siteDryRunBtn').disabled = false;
+    flash('siteResult', `Fehler: ${escHtml(err.message)}`, 'error');
+  }
+}
+
 // ── Massenimport (Chefkoch) ───────────────────────────────────────────────────
 
 function renderImportJob(job) {
@@ -1003,6 +1105,16 @@ export async function initRecipes() {
     }
   });
 
+  on('siteDryRunBtn', 'click', () => startSiteJob(true));
+  on('siteImportBtn', 'click', () => startSiteJob(false));
+  on('siteCancelBtn', 'click', async () => {
+    try {
+      await apiFetch('/api/recipes/import/site-cancel', { method: 'POST' });
+    } catch (err) {
+      flash('siteResult', `Fehler: ${escHtml(err.message)}`, 'error');
+    }
+  });
+
   // Liste filtern
   on('recipeSearch', 'input', () => {
     visibleCount = 30;
@@ -1050,5 +1162,11 @@ export async function initRecipes() {
       el('ckImportBtn').disabled = true;
       ckPollTimer = setInterval(pollCkJob, 2000);
     }
+  }
+  const site = await pollSiteJob();
+  if (site?.status === 'running') {
+    el('siteImportBtn').disabled = true;
+    el('siteDryRunBtn').disabled = true;
+    sitePollTimer = setInterval(pollSiteJob, 1500);
   }
 }

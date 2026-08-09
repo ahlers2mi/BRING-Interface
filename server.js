@@ -46,6 +46,7 @@ import {
 } from './lib/mealplan.js';
 import { scaleFactor, scaleIngredients } from './lib/scale.js';
 import { DEFAULT_MAIN_TAGS, DEFAULT_SIDE_TAGS } from './lib/course.js';
+import { cancelSiteJob, getSiteJob, startSiteImportJob } from './lib/site-job.js';
 import { climateBias } from './lib/climate.js';
 import {
   isValidIsoDate,
@@ -1630,6 +1631,41 @@ app.get('/api/mealie/import-status', (_req, res) => {
 
 app.post('/api/mealie/import-cancel', (_req, res) => {
   res.json({ cancelled: cancelChefkochJob(), job: getChefkochJob() });
+});
+
+// ── Rezepte von einer beliebigen Rezeptseite ──────────────────────────────────
+//
+// Übersichtsseite eines Koch-Blogs angeben, die App sammelt die Rezeptlinks
+// ein und legt sie an (über Mealie, wenn Mealie eingerichtet ist).
+// Absichtlich ohne blockWhenMealie: der Job entscheidet selbst, wohin.
+
+// POST /api/recipes/import/site – body: { url, count?, pages?, dryRun? }
+app.post('/api/recipes/import/site', (req, res) => {
+  try {
+    const job = startSiteImportJob({
+      url: String(req.body?.url || '').trim(),
+      count: Number(req.body?.count) || 20,
+      pages: Number(req.body?.pages) || 3,
+      dryRun: Boolean(req.body?.dryRun),
+      deps: {
+        ...mealieDeps,
+        createRecipe,
+        findRecipeByName,
+        findRecipeBySourceUrlPart,
+      },
+    });
+    res.status(202).json(job);
+  } catch (err) {
+    res.status(409).json({ error: err.message });
+  }
+});
+
+app.get('/api/recipes/import/site-status', (_req, res) => {
+  res.json(getSiteJob() || { status: 'idle' });
+});
+
+app.post('/api/recipes/import/site-cancel', (_req, res) => {
+  res.json({ cancelled: cancelSiteJob(), job: getSiteJob() });
 });
 
 // Adresse eines Rezepts in der Mealie-Oberfläche (für den Knopf in der Liste).

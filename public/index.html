@@ -415,6 +415,42 @@
       </div>
     </div>
 
+    <!-- Rezepte von einer beliebigen Seite -->
+    <div class="card" id="siteImportCard">
+      <h2>🌐 Rezepte von einer Koch-Seite holen</h2>
+      <p class="hint">
+        Adresse einer <b>Übersichtsseite</b> eintragen (Kategorie, Schlagwort,
+        Rezeptliste) – die App liest die Seite, findet die verlinkten Rezepte
+        und legt sie an. Sie erkennt Rezepte an den maschinenlesbaren Daten
+        (schema.org) auf der jeweiligen Seite, funktioniert also ohne
+        Anpassung für viele Koch-Blogs. Beispiele:
+        <code>gaumenfreundin.de/rezepte/hauptgerichte/</code>,
+        <code>familienkost.de/rezepte.php</code>,
+        <code>emmikochteinfach.de/tag/familien-rezepte/</code>
+      </p>
+      <p class="hint">
+        <b>Erst den Probelauf</b> – der zeigt, was gefunden wird, ohne etwas
+        anzulegen. Bitte nur eigene Sammlungen aufbauen und die Seiten nicht
+        leerräumen: es wird eine Adresse nach der anderen geholt, mit Pause.
+      </p>
+      <input type="url" id="siteUrl" placeholder="https://www.gaumenfreundin.de/rezepte/hauptgerichte/" />
+      <div class="inline-fields" style="margin-top:0.5rem;">
+        <label class="check">höchstens
+          <input type="number" id="siteCount" value="20" min="1" max="200" style="width:5rem;" />
+          Rezepte
+        </label>
+        <label class="check">über
+          <input type="number" id="sitePages" value="3" min="1" max="20" style="width:4.5rem;" />
+          Übersichtsseiten
+        </label>
+        <button class="btn btn-secondary" id="siteDryRunBtn">👀 Probelauf</button>
+        <button class="btn btn-primary" id="siteImportBtn">Holen</button>
+        <button class="btn btn-danger" id="siteCancelBtn" style="display:none;">Abbrechen</button>
+      </div>
+      <div id="siteResult"></div>
+      <div id="siteStatus"></div>
+    </div>
+
     <!-- Import -->
     <div class="card" id="importCard">
       <h2>📥 Rezepte importieren</h2>
