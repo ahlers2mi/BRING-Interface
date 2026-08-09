@@ -37,13 +37,18 @@
 #      das Feld zu schreiben hilft nicht – Portainer wendet nur den ersten an,
 #      und nach jedem Redeploy hängt wieder niemand im gemeinsamen Netz.
 #
-#      Von der Shell geht beides:
+#      Von der Shell ebenso – NUR diese Datei:
 #        S=<Portainer-Datenpfad>/compose/<stack-id>
 #        sudo docker compose -p <projektname> --project-directory "$S" \
 #          --env-file "$S/stack.env" -f "$S/docker-compose.mealie-extern.yml" up -d
 #
-#   Braucht Docker Compose ab v2.20 (`include:`). Ältere Fassungen nehmen
-#   stattdessen beide Dateien: `-f docker-compose.yml -f dieser-datei`.
+#   Die Hauptdatei NICHT zusätzlich mit -f angeben. Sie steht schon im
+#   `include:`, und Compose bricht dann ab:
+#       include cycle detected:
+#        …/docker-compose.yml include …/docker-compose.yml
+#
+#   Braucht Docker Compose ab v2.20 (`include:`). Bei einer älteren Fassung
+#   die drei include-Zeilen unten löschen und wieder beide Dateien angeben.
 #
 # Eigene Dienste immer über den CONTAINER-Namen ansprechen, nicht über den
 # Dienstnamen: `cookidoo-bridge` heißt der Dienst in jedem Stack gleich, der

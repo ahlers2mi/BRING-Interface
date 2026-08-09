@@ -90,7 +90,8 @@ Port-Abbildung weg.
 **Portainer wendet nur EINEN Compose-Pfad an.** Zwei Dateien in das Feld zu
 schreiben läuft fehlerfrei durch und lässt trotzdem den Zusatz weg – deshalb
 zieht `docker-compose.mealie-extern.yml` die Hauptdatei per `include:` selbst
-herein und wird allein eingetragen. Von der Shell geht beides.
+herein. Sie wird **immer allein** angegeben, auch von der Shell: die Hauptdatei
+zusätzlich als `-f` bricht mit `include cycle detected` ab.
 
 Zum Nachmessen im Container: das Laufzeit-Image ist `node:20-bookworm-slim` und
 hat **weder `wget` noch `curl`**. Stattdessen

@@ -219,13 +219,18 @@ Drei Wege, vom besten zum schnellsten:
    benutzt von **beiden** Stacks; die Anleitung steht im Kopf der Datei.
    Danach ist `MEALIE_URL=http://mealie:9000` wieder richtig.
 
-   > **In Portainer gehört nur diese eine Datei in das Feld „Compose path"**
-   > (`docker-compose.mealie-extern.yml`) – sie holt die Hauptdatei über
-   > `include:` selbst herein. Zwei Pfade in das Feld zu schreiben hilft
-   > **nicht**: Portainer wendet nur den ersten an, der Redeploy läuft
-   > fehlerfrei durch, und trotzdem hängt danach niemand im gemeinsamen Netz.
-   > Braucht Docker Compose ab v2.20; ältere nehmen von der Shell
-   > `-f docker-compose.yml -f docker-compose.mealie-extern.yml`.
+   > **Immer nur diese eine Datei angeben** – in Portainer im Feld
+   > „Compose path", von der Shell als einziges `-f`. Sie holt die Hauptdatei
+   > über `include:` selbst herein.
+   >
+   > - Zwei Pfade im Portainer-Feld helfen **nicht**: es wird nur der erste
+   >   angewandt, der Redeploy läuft fehlerfrei durch, und trotzdem hängt
+   >   danach niemand im gemeinsamen Netz.
+   > - Die Hauptdatei zusätzlich mit `-f` anzugeben bricht ab mit
+   >   `include cycle detected` – sie steht ja schon im `include:`.
+   >
+   > Braucht Docker Compose ab v2.20. Bei einer älteren Fassung die drei
+   > `include`-Zeilen aus der Datei löschen und wieder beide Dateien angeben.
 2. **Docker-Gateway** – `MEALIE_URL=http://172.17.0.1:9925`. Geht sofort, hängt
    aber an einer Adresse, die Docker vergibt.
 3. **Firewall öffnen** – in der DSM-Systemsteuerung dem Docker-Subnetz den
