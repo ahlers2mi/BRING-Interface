@@ -198,12 +198,17 @@ dann stimmt die Adresse (sonst käme `ENOTFOUND`) und Mealie lehnt auch nicht ab
 meist die Firewall: sie lässt das Docker-Netz (172.x) nicht auf einen Port der
 NAS. Ausgehend ins Internet funktioniert trotzdem, das läuft über NAT.
 
-Nachmessen im Container der zweiten Instanz:
+Nachmessen im Container der zweiten Instanz. Das Image ist ein schlankes
+Debian, es gibt **weder `wget` noch `curl`** – Node ist aber da:
 
 ```bash
-J=bring-kumpel
-sudo docker exec $J wget -qO- -T 5 http://<NAS>:9925/api/app/about     # scheitert
-sudo docker exec $J wget -qO- -T 5 http://172.17.0.1:9925/api/app/about # Docker-Gateway
+J=bring-kumpel   # der CONTAINER_NAME, nicht der Stack-Name
+probe() {
+  sudo docker exec $J node -e "fetch('$1').then(r=>r.text()).then(t=>console.log('OK',t.slice(0,80))).catch(e=>console.log('FEHLER:',e.cause?.code||e.message))"
+}
+probe http://<NAS>:9925/api/app/about      # scheitert (Firewall)
+probe http://172.17.0.1:9925/api/app/about # Docker-Gateway
+probe http://mealie:9000/api/app/about     # im gemeinsamen Netz
 ```
 
 Drei Wege, vom besten zum schnellsten:
