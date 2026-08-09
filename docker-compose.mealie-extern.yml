@@ -1,0 +1,45 @@
+# Ergänzung für eine ZWEITE Instanz, die das Mealie der ersten mitbenutzt.
+#
+# Ohne diese Datei müsste die zweite Instanz Mealie über die NAS-Adresse
+# erreichen (http://<NAS>:9925). Das geht über den Host und scheitert auf der
+# Synology gern an der Firewall – erkennbar an
+#   UND_ERR_CONNECT_TIMEOUT (Mealie unter http://192.168.69.10:9925)
+# also: Adresse richtig, aber die Pakete versickern.
+#
+# Hiermit hängt sich die zweite Instanz stattdessen in das Docker-Netz der
+# ersten. Beide Container reden dann direkt miteinander, ganz ohne Host und
+# ohne offenen Port – und MEALIE_URL darf wieder der Dienstname sein.
+#
+# Einrichten:
+#
+#   1. Namen des vorhandenen Netzes herausfinden (Stack der ERSTEN Instanz):
+#        sudo docker network ls | grep bring
+#      Üblich ist "<projektname>_default", z. B. bring-interface_default.
+#
+#   2. In den Stack-Variablen der ZWEITEN Instanz setzen:
+#        MEALIE_NETWORK=bring-interface_default
+#        MEALIE_URL=http://mealie:9000
+#        COMPOSE_PROFILES=            (kein eigenes Mealie starten!)
+#
+#   3. Stack mit BEIDEN Dateien bauen:
+#        S=<Portainer-Datenpfad>/compose/<stack-id>
+#        sudo docker compose -p bring-kumpel --project-directory "$S" \
+#          --env-file "$S/stack.env" \
+#          -f "$S/docker-compose.yml" -f "$S/docker-compose.mealie-extern.yml" \
+#          up -d --build
+#
+#      In Portainer trägt man dafür unter "Compose path" beide Dateien ein
+#      (durch Komma getrennt), oder man baut den Stack von der Shell.
+#
+# Die erste Instanz bleibt unangetastet – sie benutzt diese Datei nicht.
+
+services:
+  bring-interface:
+    networks:
+      - default
+      - mealie
+
+networks:
+  mealie:
+    external: true
+    name: ${MEALIE_NETWORK}
