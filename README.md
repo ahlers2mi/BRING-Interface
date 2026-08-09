@@ -583,9 +583,39 @@ bleiben.
   Protokoll, lässt sich abbrechen und überspringt bereits vorhandene Rezepte
   (Erkennung über `chefkoch:<id>` und den Rezeptnamen).
 
+- **Von einer beliebigen Koch-Seite** (`🌐 Rezepte von einer Koch-Seite holen`):
+  Adresse einer **Übersichtsseite** eintragen – Kategorie, Schlagwort oder
+  Rezeptliste. Der Lauf ist zweistufig:
+
+  1. Übersichtsseite lesen, alle Links derselben Domain einsammeln, offensichtliches
+     Beiwerk wegwerfen (Kategorien, Feeds, Impressum, Bilder), bei Bedarf der
+     Blätter-Navigation folgen (`rel="next"`, `/page/2/`, `?seite=2`)
+  2. jede verbliebene Adresse anlesen und nur behalten, wo wirklich
+     schema.org-Rezeptdaten stehen
+
+  Dadurch ist **keine Seite fest verdrahtet** – welche Links Rezepte sind, sagt
+  die Seite selbst. Getestet mit dem üblichen WordPress-Zuschnitt (WP Recipe
+  Maker & Co.).
+
+  **Erst den Probelauf** (`👀`): er führt beide Schritte aus und listet auf, was
+  gefunden wurde, ohne etwas anzulegen. So sieht man einer unbekannten Seite an,
+  ob sie sich einlesen lässt.
+
+  Ist Mealie eingerichtet, gehen die gefundenen Adressen an **Mealies eigenen
+  Importer** (`/api/recipes/create/url`) – der bringt den gepflegten
+  `recipe-scrapers`-Fundus mit und kommt mit mehr Seiten zurecht als wir.
+  Ohne Mealie werden die gelesenen Daten direkt lokal angelegt (`source: web`).
+  Schon vorhandene Rezepte werden anhand der Quell-Adresse und des Namens
+  übersprungen.
+
 > Zwischen den Abrufen liegt eine Pause (`IMPORT_DELAY_MS`), damit der Import
 > die Quelle nicht belastet. 200 Rezepte dauern damit einige Minuten.
-> Der Server muss `chefkoch.de` erreichen können.
+> Der Server muss die jeweilige Seite erreichen können.
+>
+> Der Seiten-Import ist als Helfer für die **eigene** Rezeptsammlung gedacht:
+> eine Adresse nach der anderen, mit Pause, und mit Obergrenzen für Seiten
+> (20) und Kandidaten (400). Bitte fremde Seiten damit nicht leerräumen und
+> die Nutzungsbedingungen der Quelle beachten.
 
 ## Reste-Küche
 
