@@ -30,14 +30,20 @@
 #        COMPOSE_PROFILES=            (kein eigenes Mealie starten)
 #        MEALIE_URL=http://mealie:9000
 #
-#   3. Beide Stacks mit BEIDEN Dateien bauen:
+#   3. In Portainer als "Compose path" NUR DIESE DATEI eintragen:
+#        docker-compose.mealie-extern.yml
+#
+#      Sie zieht die Hauptdatei über `include:` selbst herein. Zwei Pfade in
+#      das Feld zu schreiben hilft nicht – Portainer wendet nur den ersten an,
+#      und nach jedem Redeploy hängt wieder niemand im gemeinsamen Netz.
+#
+#      Von der Shell geht beides:
 #        S=<Portainer-Datenpfad>/compose/<stack-id>
 #        sudo docker compose -p <projektname> --project-directory "$S" \
-#          --env-file "$S/stack.env" \
-#          -f "$S/docker-compose.yml" -f "$S/docker-compose.mealie-extern.yml" \
-#          up -d --build
+#          --env-file "$S/stack.env" -f "$S/docker-compose.mealie-extern.yml" up -d
 #
-#      In Portainer trägt man beide Dateien unter "Compose path" ein.
+#   Braucht Docker Compose ab v2.20 (`include:`). Ältere Fassungen nehmen
+#   stattdessen beide Dateien: `-f docker-compose.yml -f dieser-datei`.
 #
 # Eigene Dienste immer über den CONTAINER-Namen ansprechen, nicht über den
 # Dienstnamen: `cookidoo-bridge` heißt der Dienst in jedem Stack gleich, der
@@ -45,6 +51,10 @@
 # Instanz z. B.
 #     COOKIDOO_CONTAINER_NAME=cookidoo-jan
 #     COOKIDOO_URL=http://cookidoo-jan:8099
+
+# Holt die Hauptdatei herein, damit diese Datei allein deployt werden kann.
+include:
+  - docker-compose.yml
 
 services:
   bring-interface:

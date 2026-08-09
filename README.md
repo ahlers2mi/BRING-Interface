@@ -216,8 +216,16 @@ Drei Wege, vom besten zum schnellsten:
 1. **Eigenes Netz nur für Mealie** (empfohlen) – ein drittes Netz, in dem nur
    Mealie und die Apps stehen. Beide reden direkt miteinander, ohne Host und
    ohne offenen Port. Dafür liegt `docker-compose.mealie-extern.yml` im Repo,
-   eingebunden von **beiden** Stacks; die Anleitung steht im Kopf der Datei.
+   benutzt von **beiden** Stacks; die Anleitung steht im Kopf der Datei.
    Danach ist `MEALIE_URL=http://mealie:9000` wieder richtig.
+
+   > **In Portainer gehört nur diese eine Datei in das Feld „Compose path"**
+   > (`docker-compose.mealie-extern.yml`) – sie holt die Hauptdatei über
+   > `include:` selbst herein. Zwei Pfade in das Feld zu schreiben hilft
+   > **nicht**: Portainer wendet nur den ersten an, der Redeploy läuft
+   > fehlerfrei durch, und trotzdem hängt danach niemand im gemeinsamen Netz.
+   > Braucht Docker Compose ab v2.20; ältere nehmen von der Shell
+   > `-f docker-compose.yml -f docker-compose.mealie-extern.yml`.
 2. **Docker-Gateway** – `MEALIE_URL=http://172.17.0.1:9925`. Geht sofort, hängt
    aber an einer Adresse, die Docker vergibt.
 3. **Firewall öffnen** – in der DSM-Systemsteuerung dem Docker-Subnetz den

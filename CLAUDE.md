@@ -87,6 +87,11 @@ das läuft über NAT. Lösung: ein **eigenes** Netz nur für Mealie
 Dienstnamen benutzen. `network_mode: host` ist keine Lösung – damit fällt die
 Port-Abbildung weg.
 
+**Portainer wendet nur EINEN Compose-Pfad an.** Zwei Dateien in das Feld zu
+schreiben läuft fehlerfrei durch und lässt trotzdem den Zusatz weg – deshalb
+zieht `docker-compose.mealie-extern.yml` die Hauptdatei per `include:` selbst
+herein und wird allein eingetragen. Von der Shell geht beides.
+
 Zum Nachmessen im Container: das Laufzeit-Image ist `node:20-bookworm-slim` und
 hat **weder `wget` noch `curl`**. Stattdessen
 `docker exec <container> node -e "fetch('…').then(…)"` – der Fehlercode steht
