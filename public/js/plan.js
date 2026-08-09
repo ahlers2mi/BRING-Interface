@@ -149,7 +149,7 @@ function buildDayCard(day) {
     try {
       const res = await apiFetch('/api/plan/roll', {
         method: 'POST',
-        body: JSON.stringify({ date: day.date }),
+        body: JSON.stringify({ date: day.date, ...rollOptions() }),
       });
       renderPlan(res.plan);
       const first = res.results?.[0];
@@ -392,6 +392,25 @@ export function initPlan() {
     });
   }
 
+  // Dauerhafte Würfel-Schwellen. Leeres Feld = zurück auf den Standard.
+  for (const id of ['planQuickMinutes', 'planColdC', 'planWarmC']) {
+    on(id, 'change', async (e) => {
+      try {
+        const res = await apiFetch('/api/preferences', {
+          method: 'PUT',
+          body: JSON.stringify({ [id.replace('plan', '').replace(/^./, (c) => c.toLowerCase())]: e.currentTarget.value }),
+        });
+        state.preferences = { ...(state.preferences || {}), ...res };
+        el('planQuickMinutes').value = res.quickMinutes ?? '';
+        el('planColdC').value = res.coldC ?? '';
+        el('planWarmC').value = res.warmC ?? '';
+        flash('rollSettingsResult', '✓ Gespeichert. Gilt ab dem nächsten Würfeln.');
+      } catch (err) {
+        flash('rollSettingsResult', `Fehler: ${escHtml(err.message)}`, 'error');
+      }
+    });
+  }
+
   on('planMealieBtn', 'click', async (e) => {
     const btn = e.currentTarget;
     setLoading(btn, true);
@@ -418,12 +437,22 @@ export function initPlan() {
   on('pickerCloseBtn', 'click', () => closeModal('pickerModal'));
 }
 
+// Vorgaben für den nächsten Wurf (Zeitgrenze, Wetter). Leer = wie bisher.
+function rollOptions() {
+  const opts = {};
+  const minuten = Number(el('rollMaxMinutes')?.value) || 0;
+  if (minuten) opts.maxMinutes = minuten;
+  const wetter = el('rollWeather')?.value || '';
+  if (wetter) opts.weather = wetter;
+  return opts;
+}
+
 async function roll(btn, body) {
   setLoading(btn, true);
   try {
     const res = await apiFetch('/api/plan/roll', {
       method: 'POST',
-      body: JSON.stringify(body),
+      body: JSON.stringify({ ...body, ...rollOptions() }),
     });
     renderPlan(res.plan);
     const errors = (res.results || []).filter((r) => r.error);
