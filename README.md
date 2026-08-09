@@ -183,7 +183,44 @@ MEALIE_TOKEN=…                        # Token aus SEINEM Mealie-Konto
 > **Falle:** der Dienstname `mealie` löst sich nur innerhalb desselben
 > Compose-Projekts auf. Die zweite Instanz ist ein eigenes Projekt und erreicht
 > den Container darüber nicht – dort muss die NAS-Adresse samt veröffentlichtem
-> Port stehen (oder eine gemeinsame Docker-Netzwerk-Definition).
+> Port stehen (oder das gemeinsame Netz, siehe unten).
+
+##### Wenn die NAS-Adresse nicht durchkommt
+
+Meldet die zweite Instanz
+
+```
+UND_ERR_CONNECT_TIMEOUT (Mealie unter http://192.168.69.10:9925) – Zeitüberschreitung beim Verbinden.
+```
+
+dann stimmt die Adresse (sonst käme `ENOTFOUND`) und Mealie lehnt auch nicht ab
+(das wäre `ECONNREFUSED`) – die Pakete versickern. Auf der Synology ist das
+meist die Firewall: sie lässt das Docker-Netz (172.x) nicht auf einen Port der
+NAS. Ausgehend ins Internet funktioniert trotzdem, das läuft über NAT.
+
+Nachmessen im Container der zweiten Instanz:
+
+```bash
+J=bring-kumpel
+sudo docker exec $J wget -qO- -T 5 http://<NAS>:9925/api/app/about     # scheitert
+sudo docker exec $J wget -qO- -T 5 http://172.17.0.1:9925/api/app/about # Docker-Gateway
+```
+
+Drei Wege, vom besten zum schnellsten:
+
+1. **Gemeinsames Docker-Netz** (empfohlen) – die zweite Instanz hängt sich in
+   das Netz der ersten, beide reden direkt miteinander, ohne Host und ohne
+   offenen Port. Dafür liegt `docker-compose.mealie-extern.yml` im Repo; die
+   Anleitung steht im Kopf der Datei. Danach ist `MEALIE_URL=http://mealie:9000`
+   wieder richtig.
+2. **Docker-Gateway** – `MEALIE_URL=http://172.17.0.1:9925`. Geht sofort, hängt
+   aber an einer Adresse, die Docker vergibt.
+3. **Firewall öffnen** – in der DSM-Systemsteuerung dem Docker-Subnetz den
+   Zugriff auf den Mealie-Port erlauben.
+
+> `network_mode: host` ist hier **kein** guter Weg: damit fällt die
+> Port-Abbildung weg (`ports:` wird ignoriert) und die zweite Instanz streitet
+> sich mit der ersten um denselben Port.
 
 In Mealie hängen die **Rezepte an der Gruppe**, **Menüplan und Einkaufsliste am
 Haushalt** darin. Daraus folgen zwei Zuschnitte:

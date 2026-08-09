@@ -78,6 +78,14 @@ Drei Fallen, die schon mehrfach Zeit gekostet haben:
   Zeile im Checkout; im Notfall den Tarball des Branches über den Ordner
   entpacken (`stack.env` dabei nicht anfassen).
 
+**Container erreicht die NAS nicht:** `UND_ERR_CONNECT_TIMEOUT` auf eine
+`192.168.x`-Adresse heißt nicht „falsche Adresse" (das wäre `ENOTFOUND`) und
+auch nicht „Dienst aus" (`ECONNREFUSED`), sondern: die DSM-Firewall lässt das
+Docker-Netz nicht auf einen Port der NAS. Ausgehend ins Internet geht trotzdem,
+das läuft über NAT. Lösung: beide Container ins selbe Docker-Netz
+(`docker-compose.mealie-extern.yml`), dann wieder Dienstnamen benutzen.
+`network_mode: host` ist keine Lösung – damit fällt die Port-Abbildung weg.
+
 **Ein zweiter Haushalt bekommt eine eigene Instanz**, keine Mehrbenutzer-App.
 Die fünf Tabellen haben keine Besitzer-Spalte, und Bring/Mealie/Cookidoo kommen
 aus der Umgebung – Mandantenfähigkeit wäre ein Umbau quer durch alles. Zweiter
