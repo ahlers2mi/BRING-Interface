@@ -7,7 +7,10 @@ services:
     # holen und bricht mit "pull access denied" ab. Das Image entsteht hier aus
     # dem Dockerfile, es liegt in keiner Registry.
     pull_policy: build
-    container_name: bring-interface
+    # Der Name ist auf dem ganzen Docker-Host eindeutig. Für eine zweite
+    # Instanz (anderer Haushalt) muss er anders lauten, sonst bricht Compose
+    # mit "container name is already in use" ab.
+    container_name: ${CONTAINER_NAME:-bring-interface}
     restart: unless-stopped
     ports:
       # Linke Zahl = Port auf der NAS (per HOST_PORT änderbar), rechte = im Container
@@ -68,7 +71,7 @@ services:
   mealie:
     profiles: ["mealie"]
     image: ghcr.io/mealie-recipes/mealie:${MEALIE_VERSION:-v3.22.0}
-    container_name: mealie
+    container_name: ${MEALIE_CONTAINER_NAME:-mealie}
     restart: unless-stopped
     ports:
       - "${MEALIE_PORT:-9925}:9000"
@@ -104,7 +107,7 @@ services:
     profiles: ["cookidoo"]
     build: ./cookidoo-bridge
     pull_policy: build
-    container_name: cookidoo-bridge
+    container_name: ${COOKIDOO_CONTAINER_NAME:-cookidoo-bridge}
     restart: unless-stopped
     environment:
       COOKIDOO_EMAIL: ${COOKIDOO_EMAIL}

@@ -77,6 +77,13 @@ Drei Fallen, die schon mehrfach Zeit gekostet haben:
   Zeile im Checkout; im Notfall den Tarball des Branches über den Ordner
   entpacken (`stack.env` dabei nicht anfassen).
 
+**Ein zweiter Haushalt bekommt eine eigene Instanz**, keine Mehrbenutzer-App.
+Die fünf Tabellen haben keine Besitzer-Spalte, und Bring/Mealie/Cookidoo kommen
+aus der Umgebung – Mandantenfähigkeit wäre ein Umbau quer durch alles. Zweiter
+Stack aus demselben Repo, eigene Werte für `CONTAINER_NAME` (Docker-Namen sind
+hostweit eindeutig!), `HOST_PORT`, `DATA_PATH`, `APP_PASSWORD`, `API_TOKEN` und
+die Bring-Zugangsdaten. Anleitung im README.
+
 **Woran man erkennt, dass wirklich der neue Stand läuft:** in der Kopfzeile
 steht Version und Stand (`v1.7.1 · 09.08., 00:10`) – Version aus der
 `package.json`, Zeitstempel von der `server.js` im Image. Auf der
