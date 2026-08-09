@@ -61,4 +61,7 @@ services:
 networks:
   mealie_share:
     external: true
-    name: ${MEALIE_NETWORK}
+    # Ohne Standardwert nähme Compose bei leerer Variable den Schlüssel
+    # "mealie_share" (Unterstrich!) als Netznamen – und suchte damit ein Netz,
+    # das es nicht gibt. Der Standard passt zu `docker network create` oben.
+    name: ${MEALIE_NETWORK:-mealie-share}
