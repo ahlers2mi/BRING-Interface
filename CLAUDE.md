@@ -87,6 +87,11 @@ das läuft über NAT. Lösung: ein **eigenes** Netz nur für Mealie
 Dienstnamen benutzen. `network_mode: host` ist keine Lösung – damit fällt die
 Port-Abbildung weg.
 
+Zum Nachmessen im Container: das Laufzeit-Image ist `node:20-bookworm-slim` und
+hat **weder `wget` noch `curl`**. Stattdessen
+`docker exec <container> node -e "fetch('…').then(…)"` – der Fehlercode steht
+dort in `e.cause.code`.
+
 **Nicht das Standardnetz der ersten Instanz teilen:** Dienstnamen sind je Stack
 gleich (`cookidoo-bridge`, `mealie`, `bring-interface`). Hängen zwei Stacks im
 selben Netz, ist die Auflösung mehrdeutig – die zweite Instanz landet mit
