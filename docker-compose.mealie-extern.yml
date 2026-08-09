@@ -30,25 +30,23 @@
 #        COMPOSE_PROFILES=            (kein eigenes Mealie starten)
 #        MEALIE_URL=http://mealie:9000
 #
-#   3. In Portainer als "Compose path" NUR DIESE DATEI eintragen:
-#        docker-compose.mealie-extern.yml
+#   3. Diese Datei ist ein ZUSATZ zur Hauptdatei, keine eigenständige.
 #
-#      Sie zieht die Hauptdatei über `include:` selbst herein. Zwei Pfade in
-#      das Feld zu schreiben hilft nicht – Portainer wendet nur den ersten an,
-#      und nach jedem Redeploy hängt wieder niemand im gemeinsamen Netz.
+#      In Portainer beim Stack:
+#        Compose path      docker-compose.yml
+#        Additional paths  + Add file -> docker-compose.mealie-extern.yml
 #
-#      Von der Shell ebenso – NUR diese Datei:
+#      Das Feld "Additional paths" ist genau dafür da. Zwei Pfade in das eine
+#      Feld "Compose path" zu schreiben hilft NICHT – es wird nur der erste
+#      angewandt, der Redeploy läuft fehlerfrei durch, und trotzdem hängt
+#      danach niemand im gemeinsamen Netz.
+#
+#      Von der Shell entsprechend beide Dateien:
 #        S=<Portainer-Datenpfad>/compose/<stack-id>
 #        sudo docker compose -p <projektname> --project-directory "$S" \
-#          --env-file "$S/stack.env" -f "$S/docker-compose.mealie-extern.yml" up -d
-#
-#   Die Hauptdatei NICHT zusätzlich mit -f angeben. Sie steht schon im
-#   `include:`, und Compose bricht dann ab:
-#       include cycle detected:
-#        …/docker-compose.yml include …/docker-compose.yml
-#
-#   Braucht Docker Compose ab v2.20 (`include:`). Bei einer älteren Fassung
-#   die drei include-Zeilen unten löschen und wieder beide Dateien angeben.
+#          --env-file "$S/stack.env" \
+#          -f "$S/docker-compose.yml" -f "$S/docker-compose.mealie-extern.yml" \
+#          up -d
 #
 # Eigene Dienste immer über den CONTAINER-Namen ansprechen, nicht über den
 # Dienstnamen: `cookidoo-bridge` heißt der Dienst in jedem Stack gleich, der
@@ -56,10 +54,6 @@
 # Instanz z. B.
 #     COOKIDOO_CONTAINER_NAME=cookidoo-jan
 #     COOKIDOO_URL=http://cookidoo-jan:8099
-
-# Holt die Hauptdatei herein, damit diese Datei allein deployt werden kann.
-include:
-  - docker-compose.yml
 
 services:
   bring-interface:
