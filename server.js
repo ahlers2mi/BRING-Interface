@@ -20,6 +20,7 @@ import {
   updateRecipe,
   deleteRecipe,
   setRecipeBlocked,
+  setRecipeCourse,
   findRecipeByExternalId,
   findRecipeByName,
   addRating,
@@ -31,6 +32,7 @@ import {
   updatePlanStatus,
   getSetting,
   setSetting,
+  currentCourseConfig,
 } from './database.js';
 import {
   buildWeekView,
@@ -43,6 +45,7 @@ import {
   weekShoppingItems,
 } from './lib/mealplan.js';
 import { scaleFactor, scaleIngredients } from './lib/scale.js';
+import { DEFAULT_MAIN_TAGS, DEFAULT_SIDE_TAGS } from './lib/course.js';
 import { climateBias } from './lib/climate.js';
 import {
   isValidIsoDate,
@@ -374,11 +377,20 @@ function parseItems(text) {
 // ── Einstellungen (zuletzt benutzte Liste merken) ──────────────────────────────
 
 function preferences() {
+  const courses = currentCourseConfig();
   return {
     lastListUuid: getSetting('lastListUuid'),
     // Für wie viele Portionen eingekauft wird. 0/leer = Mengen unverändert
     // übernehmen, wie es vorher war.
     householdServings: householdServings(),
+    // Welche Kategorien kein Abendessen sind (Dip, Beilage, Kuchen …) und
+    // welche eines erzwingen. Leer gespeichert = die Standardlisten unten.
+    courseSideTags: courses.sideTags.join(', '),
+    courseMainTags: courses.mainTags.join(', '),
+    courseDefaults: {
+      sideTags: DEFAULT_SIDE_TAGS.join(', '),
+      mainTags: DEFAULT_MAIN_TAGS.join(', '),
+    },
   };
 }
 
@@ -396,6 +408,12 @@ app.put('/api/preferences', (req, res) => {
       return res.status(400).json({ error: 'Portionen müssen zwischen 0 und 20 liegen.' });
     }
     setSetting('householdServings', String(value));
+  }
+  // Leerer Text = zurück auf die Standardliste.
+  for (const key of ['courseSideTags', 'courseMainTags']) {
+    if (typeof req.body[key] === 'string') {
+      setSetting(key, req.body[key].trim());
+    }
   }
   res.json(preferences());
 });
@@ -735,6 +753,19 @@ app.post('/api/recipes/:id/block', (req, res) => {
   const recipe = getRecipeById(Number(req.params.id));
   if (!recipe) return res.status(404).json({ error: 'Rezept nicht gefunden.' });
   res.json(setRecipeBlocked(recipe.id, Boolean(req.body.blocked)));
+});
+
+// POST /api/recipes/:id/course – body: { course: 'main'|'side'|null }
+// Übersteuert die automatische Einordnung (Kategorien) für dieses eine Rezept.
+app.post('/api/recipes/:id/course', (req, res) => {
+  const recipe = getRecipeById(Number(req.params.id));
+  if (!recipe) return res.status(404).json({ error: 'Rezept nicht gefunden.' });
+  const raw = req.body?.course;
+  const course = raw === null || raw === '' || raw === 'auto' ? null : String(raw);
+  if (course !== null && course !== 'main' && course !== 'side') {
+    return res.status(400).json({ error: 'course muss main, side oder leer sein.' });
+  }
+  res.json(setRecipeCourse(recipe.id, course));
 });
 
 app.get('/api/ratings', (req, res) => {

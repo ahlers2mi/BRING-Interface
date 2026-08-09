@@ -140,6 +140,23 @@
         <div id="servingsResult"></div>
       </div>
 
+      <details class="form-group" id="courseSettings">
+        <summary>Was ist kein Abendessen? (Dips, Beilagen, Kuchen …)</summary>
+        <p class="hint">
+          Der Würfel überspringt Rezepte mit einer dieser Kategorien – gemeint
+          sind die Kategorien und Schlagwörter aus Mealie. Mehrere durch Komma
+          trennen; leer lassen setzt die Liste auf den Standard zurück. Einzelne
+          Rezepte lassen sich in der Rezeptliste von Hand umstellen.
+        </p>
+        <label for="courseSideTags">Nicht würfeln bei</label>
+        <textarea id="courseSideTags" rows="3"></textarea>
+        <label for="courseMainTags" style="margin-top:0.6rem;">
+          Immer würfeln bei (schlägt die Liste oben)
+        </label>
+        <textarea id="courseMainTags" rows="2"></textarea>
+        <div id="courseResult"></div>
+      </details>
+
       <div class="form-group">
         <label for="planListSelect">Bring-Liste für den Wocheneinkauf</label>
         <select id="planListSelect">
@@ -256,6 +273,7 @@
           <option value="blocked">Gesperrt</option>
           <option value="missing">In Mealie gelöscht</option>
           <option value="incomplete">Unvollständig (PLUS-Anriss)</option>
+          <option value="side">Kein Abendessen (Dip, Beilage, Kuchen …)</option>
           <option value="chefkoch">Quelle: Chefkoch</option>
           <option value="cookidoo">Quelle: Cookidoo (Thermomix)</option>
           <option value="other">Quelle: eigene/andere</option>

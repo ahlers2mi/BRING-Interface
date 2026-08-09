@@ -15,7 +15,8 @@ Läuft als Docker-Stack auf der Synology.
 - **`lib/`** – `mealie.js` (Spiegelung + Plan-Sync), `cookidoo.js` (spricht mit
   der Brücke), `mealplan.js` (Würfeln, Reste-Suche, Wocheneinkauf),
   `normalize.js` (Zutaten, PLUS-Anriss, Vorlauf-Erkennung), `scale.js`
-  (Portionen umrechnen), `climate.js` (Wetter-Gewichtung).
+  (Portionen umrechnen), `climate.js` (Wetter-Gewichtung), `course.js`
+  (Abendessen oder nur Dip/Beilage/Dessert).
 - **`public/js/`** – ES-Module ohne Bauschritt: `core.js` (gemeinsame Helfer und
   `state`), dazu je Tab ein Modul. Neue geteilte Helfer gehören nach `core.js`,
   nicht in ein Tab-Modul.
@@ -86,6 +87,21 @@ das alte `style.css`/JS im Cache.
 
 Neue Umgebungsvariablen brauchen `docker compose up -d` – ein `restart`
 übernimmt sie **nicht**.
+
+## Würfeln: Abendessen vs. Beilage
+
+`lib/course.js` sortiert Dips, Beilagen, Kuchen aus. Grundlage sind die
+**Mealie-Kategorien** – `recipeCategory` landet in `mapMealieRecipe` zusammen mit
+den Tags in unserem `tags`-Feld, ausgewertet wird also beides. Reihenfolge:
+Spalte `course` am Rezept (von Hand) → Haupt-Liste → Beilagen-Liste → Name →
+sonst Abendessen.
+
+Der Namens-Notnagel ist absichtlich klein. Zwei Fallen, die beim ersten Versuch
+zugeschnappt sind: eine reine Endungsprüfung macht aus „Nudeln mit Pesto" eine
+Beilage (deshalb die Verbindungswörter `mit`/`und`/`an` …), und `kuchen`/`eis`
+in der Liste erwischen Zwiebelkuchen, Flammkuchen, Eisbein und Milchreis –
+deshalb stehen sie **nicht** drin. Was die Endung nicht trifft, fangen die
+Kategorien; im Zweifel wird gewürfelt.
 
 ## Mealie
 
