@@ -47,6 +47,7 @@ import {
 import { scaleFactor, scaleIngredients } from './lib/scale.js';
 import { DEFAULT_MAIN_TAGS, DEFAULT_SIDE_TAGS } from './lib/course.js';
 import { cancelSiteJob, getSiteJob, startSiteImportJob } from './lib/site-job.js';
+import { fetchOrExplain } from './lib/neterror.js';
 import { climateBias } from './lib/climate.js';
 import {
   isValidIsoDate,
@@ -1658,6 +1659,47 @@ app.post('/api/recipes/import/site', (req, res) => {
   } catch (err) {
     res.status(409).json({ error: err.message });
   }
+});
+
+// GET /api/net-check?url=… – erreicht der Container diese Adresse?
+// Gedacht für „fetch failed": zeigt Auflösung, Verbindung und Antwortcode
+// getrennt, damit man DNS, Firewall und HTTP-Fehler unterscheiden kann.
+app.get('/api/net-check', async (req, res) => {
+  const ziele = req.query.url
+    ? [String(req.query.url)]
+    : [mealieConfig().url, 'https://www.chefkoch.de/', 'https://www.gaumenfreundin.de/'].filter(
+        Boolean
+      );
+  const ergebnis = [];
+  for (const url of ziele) {
+    const started = Date.now();
+    try {
+      const antwort = await fetchOrExplain(
+        url,
+        {
+          method: 'GET',
+          headers: { 'User-Agent': 'BRING-Interface/net-check' },
+          signal: AbortSignal.timeout(10000),
+        },
+        { was: url }
+      );
+      ergebnis.push({
+        url,
+        ok: true,
+        status: antwort.status,
+        ms: Date.now() - started,
+      });
+    } catch (err) {
+      ergebnis.push({
+        url,
+        ok: false,
+        code: err.code || '',
+        error: err.message,
+        ms: Date.now() - started,
+      });
+    }
+  }
+  res.json({ checks: ergebnis });
 });
 
 app.get('/api/recipes/import/site-status', (_req, res) => {
