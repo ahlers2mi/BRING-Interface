@@ -372,6 +372,26 @@ export function initPlan() {
     }
   });
 
+  // Kategorien, die kein Abendessen sind. Beide Felder speichern gleich; leer
+  // heißt "Standardliste", der Server schickt sie dann zurück ins Feld.
+  for (const id of ['courseSideTags', 'courseMainTags']) {
+    on(id, 'change', async (e) => {
+      try {
+        const res = await apiFetch('/api/preferences', {
+          method: 'PUT',
+          body: JSON.stringify({ [id]: e.currentTarget.value }),
+        });
+        state.preferences = { ...(state.preferences || {}), ...res };
+        el('courseSideTags').value = res.courseSideTags || '';
+        el('courseMainTags').value = res.courseMainTags || '';
+        flash('courseResult', '✓ Gespeichert. Gilt ab dem nächsten Würfeln.');
+        await refreshRecipes();
+      } catch (err) {
+        flash('courseResult', `Fehler: ${escHtml(err.message)}`, 'error');
+      }
+    });
+  }
+
   on('planMealieBtn', 'click', async (e) => {
     const btn = e.currentTarget;
     setLoading(btn, true);

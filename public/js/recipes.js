@@ -133,6 +133,7 @@ function filteredRecipes() {
       if (mode === 'blocked' && !r.blocked) return false;
       if (mode === 'missing' && !r.source_missing) return false;
       if (mode === 'incomplete' && !r.incomplete) return false;
+      if (mode === 'side' && r.course !== 'side') return false;
       if (mode !== 'blocked' && r.blocked && mode !== 'all') return false;
       if (mode !== 'missing' && r.source_missing && mode !== 'all') return false;
       if (mode !== 'incomplete' && r.incomplete && mode !== 'all') return false;
@@ -223,6 +224,13 @@ function buildRecipeCard(recipe) {
   if (recipe.incomplete) {
     meta.push('⚠️ unvollständig (Anriss hinter der PLUS-Schranke) – wird nicht gewürfelt');
   }
+  if (recipe.course === 'side') {
+    meta.push(
+      `🥄 kein Abendessen – wird nicht gewürfelt <span class="hint">(${escHtml(
+        recipe.course_reason || ''
+      )})</span>`
+    );
+  }
   if (recipe.source_url) {
     meta.push(
       `🔗 <a href="${escHtml(recipe.source_url)}" target="_blank" rel="noopener noreferrer">${
@@ -268,6 +276,11 @@ function buildRecipeCard(recipe) {
           ? '<button class="btn btn-secondary btn-sm" data-action="repair" title="Zutaten und Zubereitung aus der Chefkoch-API nachtragen">🩹 Anreichern</button>'
           : ''
       }
+      <button class="btn btn-secondary btn-sm" data-action="course" title="${
+        recipe.course === 'side'
+          ? 'Doch als Abendessen würfeln lassen'
+          : 'Nur Beilage/Dip/Dessert – nicht als Abendessen würfeln'
+      }">${recipe.course === 'side' ? '🍽 Ist Abendessen' : '🥄 Kein Abendessen'}</button>
       <button class="btn btn-secondary btn-sm" data-action="block">${
         recipe.blocked ? '✅ Entsperren' : '⛔ Sperren'
       }</button>
@@ -297,6 +310,21 @@ function buildRecipeCard(recipe) {
     } catch (err) {
       flash('mealieResult', `Fehler: ${escHtml(err.message)}`, 'error');
       setLoading(btn, false);
+    }
+  });
+  node.querySelector('[data-action="course"]').addEventListener('click', async (e) => {
+    setLoading(e.currentTarget, true);
+    try {
+      // Umgekehrt zur jetzigen Einordnung – und zwar von Hand, damit eine
+      // spätere Änderung der Kategorien in Mealie das nicht wieder umwirft.
+      await apiFetch(`/api/recipes/${recipe.id}/course`, {
+        method: 'POST',
+        body: JSON.stringify({ course: recipe.course === 'side' ? 'main' : 'side' }),
+      });
+      await refreshAll();
+    } catch (err) {
+      alert(`Fehler: ${err.message}`);
+      setLoading(e.currentTarget, false);
     }
   });
   node.querySelector('[data-action="block"]').addEventListener('click', async (e) => {

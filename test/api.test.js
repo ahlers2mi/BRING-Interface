@@ -56,6 +56,15 @@ async function api(pathname, { method = 'GET', body, token = TOKEN } = {}) {
 
 const todayIso = new Date().toISOString().slice(0, 10);
 
+// Irgendein Tag der laufenden Woche, der nicht heute ist. Nötig, weil einige
+// Antworten (Wocheneinkauf, Plan-Ansicht) genau eine Woche zeigen – „morgen"
+// liegt an einem Sonntag schon in der nächsten.
+async function freierWochentag() {
+  const plan = (await api('/api/plan')).json;
+  const tag = plan.days.find((d) => d.date !== todayIso);
+  return (tag || plan.days[0]).date;
+}
+
 // ── Zugang ────────────────────────────────────────────────────────────────────
 
 test('API-Routen sind ohne Token gesperrt, mit Token offen', async () => {
@@ -650,8 +659,10 @@ test('der Wocheneinkauf rechnet die Mengen auf die Haushaltsgröße um', async (
     })
   ).json;
 
-  const morgen = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-  await api(`/api/plan/${morgen}`, { method: 'PUT', body: { recipe_id: recipe.id } });
+  // Bewusst ein Tag DIESER Woche: der Wocheneinkauf sieht nur die laufende
+  // Woche, und an einem Sonntag läge "morgen" schon in der nächsten.
+  const tag = await freierWochentag();
+  await api(`/api/plan/${tag}`, { method: 'PUT', body: { recipe_id: recipe.id } });
 
   const liste = await api('/api/plan/shopping?all=1');
   const kartoffeln = liste.json.items.find((i) => /Kartoffeln/i.test(i.name));
@@ -661,19 +672,22 @@ test('der Wocheneinkauf rechnet die Mengen auf die Haushaltsgröße um', async (
 });
 
 test('ein Tag lässt sich verschieben statt neu zu würfeln', async () => {
-  const heute = new Date().toISOString().slice(0, 10);
-  const morgen = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  // Beide Tage in derselben Woche – die Antwort zeigt nur eine Woche, und am
+  // Sonntag wäre das Ziel sonst in der nächsten.
+  const plan0 = (await api('/api/plan')).json;
+  const von = plan0.days[0].date;
+  const nach = plan0.days[1].date;
   const recipe = (await api('/api/recipes')).json[0];
 
-  await api(`/api/plan/${heute}`, { method: 'PUT', body: { recipe_id: recipe.id } });
-  await api(`/api/plan/${morgen}`, { method: 'DELETE' });
+  await api(`/api/plan/${von}`, { method: 'PUT', body: { recipe_id: recipe.id } });
+  await api(`/api/plan/${nach}`, { method: 'DELETE' });
 
-  const res = await api(`/api/plan/${heute}/move`, { method: 'POST', body: { to: morgen } });
+  const res = await api(`/api/plan/${von}/move`, { method: 'POST', body: { to: nach } });
   assert.equal(res.status, 200, res.text);
 
   const plan = res.json.plan;
-  assert.equal(plan.days.find((d) => d.date === heute).recipe, null, 'Quelle ist leer');
-  assert.equal(plan.days.find((d) => d.date === morgen).recipe.id, recipe.id);
+  assert.equal(plan.days.find((d) => d.date === von).recipe, null, 'Quelle ist leer');
+  assert.equal(plan.days.find((d) => d.date === nach).recipe.id, recipe.id);
 });
 
 test('ein Reste-Tag wird nicht überwürfelt', async () => {
@@ -690,6 +704,49 @@ test('ein Reste-Tag wird nicht überwürfelt', async () => {
   const nachher = gewuerfelt.json.plan.days.find((d) => d.date === morgen);
   assert.equal(nachher.status, 'leftovers', 'der Status bleibt');
   assert.equal(nachher.recipe?.id ?? null, vorher, 'und das Gericht auch');
+});
+
+test('ein Dip wird nicht als Abendessen gewürfelt', async () => {
+  const dip = (
+    await api('/api/recipes', {
+      method: 'POST',
+      body: {
+        name: 'Kräuterdip',
+        tags: ['Dip'],
+        ingredients: [{ name: 'Schmand', amount: '200 g' }],
+      },
+    })
+  ).json;
+  assert.equal(dip.course, 'side', dip.course_reason);
+
+  // Alles andere sperren – bliebe der Dip würfelbar, käme jetzt genau er.
+  const alle = (await api('/api/recipes')).json;
+  for (const r of alle) {
+    if (r.id !== dip.id) {
+      await api(`/api/recipes/${r.id}/block`, { method: 'POST', body: { blocked: true } });
+    }
+  }
+  const tag = await freierWochentag();
+  const gewuerfelt = await api('/api/plan/roll', { method: 'POST', body: { date: tag } });
+  assert.equal(gewuerfelt.status, 200, gewuerfelt.text);
+  assert.match(gewuerfelt.json.results[0].error || '', /kein/i, 'kein Rezept übrig');
+
+  // Von Hand zum Abendessen erklärt, darf er dann doch.
+  const umgestellt = await api(`/api/recipes/${dip.id}/course`, {
+    method: 'POST',
+    body: { course: 'main' },
+  });
+  assert.equal(umgestellt.json.course, 'main');
+  const nochmal = await api('/api/plan/roll', { method: 'POST', body: { date: tag } });
+  assert.equal(nochmal.json.plan.days.find((d) => d.date === tag).recipe.name, 'Kräuterdip');
+
+  // Aufräumen für die folgenden Tests.
+  await api(`/api/recipes/${dip.id}`, { method: 'DELETE' });
+  for (const r of alle) {
+    if (r.id !== dip.id) {
+      await api(`/api/recipes/${r.id}/block`, { method: 'POST', body: { blocked: false } });
+    }
+  }
 });
 
 test('unbekannte Status werden abgelehnt', async () => {

@@ -75,6 +75,10 @@ async function loadPreferences() {
     if (el('householdServings')) {
       el('householdServings').value = state.preferences.householdServings || '';
     }
+    if (el('courseSideTags')) {
+      el('courseSideTags').value = state.preferences.courseSideTags || '';
+      el('courseMainTags').value = state.preferences.courseMainTags || '';
+    }
   } catch (err) {
     console.error('Einstellungen nicht ladbar:', err.message);
   }

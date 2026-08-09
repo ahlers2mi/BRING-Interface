@@ -275,6 +275,26 @@ Reichen die Kandidaten nicht (kleine Sammlung), werden die Regeln
 schrittweise gelockert, statt gar nichts vorzuschlagen. Als **gekocht**
 markierte Tage bleiben beim Neuwürfeln unangetastet.
 
+### Was gar nicht erst gewürfelt wird
+
+Ein Dip ist kein Abendessen. Welche Rezepte draußen bleiben, entscheiden die
+**Kategorien und Schlagwörter aus Mealie** (Mealies `recipeCategory` landet hier
+zusammen mit den Tags im Feld `tags`):
+
+1. `course` am Rezept – in der Rezeptliste von Hand gesetzt, schlägt alles
+2. eine Kategorie der **Haupt-Liste** (`Hauptgericht`, `Abendessen` …) → wird gewürfelt
+3. eine Kategorie der **Beilagen-Liste** (`Dip`, `Beilage`, `Dessert`, `Kuchen` …) → nicht
+4. der Name spricht dafür (`Kräuterdip`, `Basilikumpesto`, `Erdbeermarmelade`) → nicht
+5. sonst: wird gewürfelt – ohne Kategorie lieber vorschlagen als verschlucken
+
+Beide Listen stehen im Tab **Wochenplan** und sind änderbar; leer speichern
+stellt den Standard wieder her. Der Namens-Notnagel ist bewusst knapp und
+lässt Zutaten im Namen in Ruhe: „Nudeln mit Pesto" bleibt ein Abendessen,
+„Zwiebelkuchen" und „Flammkuchen" ebenso.
+
+Die Rezeptliste zeigt bei den Ausgenommenen, **warum**, und stellt sie per Knopf
+um; der Filter „Kein Abendessen" listet sie alle auf.
+
 ## Mealie als Rezeptquelle (optional)
 
 Sind `MEALIE_URL` und `MEALIE_TOKEN` gesetzt, ist [Mealie](https://mealie.io)

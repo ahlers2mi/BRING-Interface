@@ -3,6 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { todayIso } from './lib/week.js';
 import { isIncompleteRecipe, prepHint } from './lib/normalize.js';
+import { courseConfig, courseOf, courseReason } from './lib/course.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dbPath = process.env.DB_PATH || path.join(__dirname, 'recipes.db');
@@ -79,6 +80,9 @@ const NEW_RECIPE_COLUMNS = {
   source_slug: 'TEXT',
   source_updated_at: 'TEXT',
   source_missing: 'INTEGER NOT NULL DEFAULT 0',
+  // Abendessen oder nur Beilage/Dip/Dessert? Leer = automatisch nach den
+  // Kategorien entscheiden (siehe lib/course.js), 'main'/'side' = von Hand.
+  course: 'TEXT',
 };
 for (const [col, type] of Object.entries(NEW_RECIPE_COLUMNS)) {
   if (!recipeColumns.includes(col)) {
@@ -196,14 +200,27 @@ function ratingStats() {
   return map;
 }
 
-function decorate(recipe, stats) {
+// Die Listen stehen in den Einstellungen; einmal je Abfrage lesen reicht.
+export function currentCourseConfig() {
+  return courseConfig({
+    sideTags: getSetting('courseSideTags'),
+    mainTags: getSetting('courseMainTags'),
+  });
+}
+
+function decorate(recipe, stats, courses = currentCourseConfig()) {
   const s = stats?.get(recipe.id) || {};
   const tags = tagsToArray(recipe.tags);
+  const withTags = { ...recipe, tags };
   return {
     ...recipe,
     blocked: Boolean(recipe.blocked),
     source_missing: Boolean(recipe.source_missing),
     tags,
+    // Abendessen oder Beilage/Dip/Dessert? Entscheidet mit, ob gewürfelt wird.
+    course: courseOf(withTags, courses),
+    course_manual: recipe.course || null,
+    course_reason: courseReason(withTags, courses),
     // Braucht das Gericht Vorlauf (auftauen, einweichen)? Steht nirgends als
     // Feld, aber fast immer im Text.
     prep_hint: prepHint({ ...recipe, tags }),
@@ -221,10 +238,11 @@ function decorate(recipe, stats) {
 // Tabelle, damit auch 200+ Rezepte in einem Rutsch geladen werden können.
 export function getAllRecipes({ withIngredients = true } = {}) {
   const stats = ratingStats();
+  const courses = currentCourseConfig(); // einmal lesen, nicht je Rezept
   const recipes = db
     .prepare('SELECT * FROM recipes ORDER BY name COLLATE NOCASE')
     .all()
-    .map((r) => decorate(r, stats));
+    .map((r) => decorate(r, stats, courses));
 
   if (withIngredients) {
     const byId = new Map(recipes.map((r) => [r.id, r]));
@@ -489,6 +507,13 @@ export function getRecipeBySlug(slug) {
 
 export function setRecipeBlocked(id, blocked) {
   db.prepare('UPDATE recipes SET blocked = ? WHERE id = ?').run(blocked ? 1 : 0, id);
+  return getRecipeById(id);
+}
+
+// 'main' | 'side' | null (null = wieder automatisch nach den Kategorien)
+export function setRecipeCourse(id, course) {
+  const value = course === 'main' || course === 'side' ? course : null;
+  db.prepare('UPDATE recipes SET course = ? WHERE id = ?').run(value, id);
   return getRecipeById(id);
 }
 
