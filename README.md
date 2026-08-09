@@ -208,15 +208,26 @@ sudo docker exec $J wget -qO- -T 5 http://172.17.0.1:9925/api/app/about # Docker
 
 Drei Wege, vom besten zum schnellsten:
 
-1. **Gemeinsames Docker-Netz** (empfohlen) – die zweite Instanz hängt sich in
-   das Netz der ersten, beide reden direkt miteinander, ohne Host und ohne
-   offenen Port. Dafür liegt `docker-compose.mealie-extern.yml` im Repo; die
-   Anleitung steht im Kopf der Datei. Danach ist `MEALIE_URL=http://mealie:9000`
-   wieder richtig.
+1. **Eigenes Netz nur für Mealie** (empfohlen) – ein drittes Netz, in dem nur
+   Mealie und die Apps stehen. Beide reden direkt miteinander, ohne Host und
+   ohne offenen Port. Dafür liegt `docker-compose.mealie-extern.yml` im Repo,
+   eingebunden von **beiden** Stacks; die Anleitung steht im Kopf der Datei.
+   Danach ist `MEALIE_URL=http://mealie:9000` wieder richtig.
 2. **Docker-Gateway** – `MEALIE_URL=http://172.17.0.1:9925`. Geht sofort, hängt
    aber an einer Adresse, die Docker vergibt.
 3. **Firewall öffnen** – in der DSM-Systemsteuerung dem Docker-Subnetz den
    Zugriff auf den Mealie-Port erlauben.
+
+> **Warum ein eigenes Netz und nicht einfach das der ersten Instanz?** Weil dort
+> auch deren App und Cookidoo-Brücke stehen. Dienstnamen heißen in jedem Stack
+> gleich (`cookidoo-bridge`, `mealie`, `bring-interface`) – hängt die zweite
+> Instanz im selben Netz, ist nicht mehr eindeutig, welche Brücke gemeint ist,
+> und ein `COOKIDOO_URL=http://cookidoo-bridge:8099` kann in der fremden landen.
+> Ein Netz nur für Mealie enthält genau das, was geteilt werden soll.
+>
+> Eigene Dienste in der zweiten Instanz deshalb über den **Container**-Namen
+> ansprechen, der ist hostweit eindeutig:
+> `COOKIDOO_CONTAINER_NAME=cookidoo-jan` und `COOKIDOO_URL=http://cookidoo-jan:8099`.
 
 > `network_mode: host` ist hier **kein** guter Weg: damit fällt die
 > Port-Abbildung weg (`ports:` wird ignoriert) und die zweite Instanz streitet
