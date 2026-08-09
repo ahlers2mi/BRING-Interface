@@ -82,9 +82,17 @@ Drei Fallen, die schon mehrfach Zeit gekostet haben:
 `192.168.x`-Adresse heißt nicht „falsche Adresse" (das wäre `ENOTFOUND`) und
 auch nicht „Dienst aus" (`ECONNREFUSED`), sondern: die DSM-Firewall lässt das
 Docker-Netz nicht auf einen Port der NAS. Ausgehend ins Internet geht trotzdem,
-das läuft über NAT. Lösung: beide Container ins selbe Docker-Netz
-(`docker-compose.mealie-extern.yml`), dann wieder Dienstnamen benutzen.
-`network_mode: host` ist keine Lösung – damit fällt die Port-Abbildung weg.
+das läuft über NAT. Lösung: ein **eigenes** Netz nur für Mealie
+(`docker-compose.mealie-extern.yml`, von beiden Stacks eingebunden), dann wieder
+Dienstnamen benutzen. `network_mode: host` ist keine Lösung – damit fällt die
+Port-Abbildung weg.
+
+**Nicht das Standardnetz der ersten Instanz teilen:** Dienstnamen sind je Stack
+gleich (`cookidoo-bridge`, `mealie`, `bring-interface`). Hängen zwei Stacks im
+selben Netz, ist die Auflösung mehrdeutig – die zweite Instanz landet mit
+`http://cookidoo-bridge:8099` womöglich in der fremden Brücke, also im fremden
+Cookidoo-Konto. Eigene Dienste dort über den **Container**-Namen ansprechen
+(`COOKIDOO_CONTAINER_NAME`), der ist hostweit eindeutig.
 
 **Ein zweiter Haushalt bekommt eine eigene Instanz**, keine Mehrbenutzer-App.
 Die fünf Tabellen haben keine Besitzer-Spalte, und Bring/Mealie/Cookidoo kommen
