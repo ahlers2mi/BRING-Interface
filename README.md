@@ -168,6 +168,35 @@ MEALIE_URL=http://mealie:9000
 `MEALIE_URL=http://mealie:9000` bleibt richtig: der Dienstname gilt **innerhalb**
 des Stacks, jede Instanz spricht mit ihrem eigenen Mealie.
 
+#### Variante: ein gemeinsames Mealie für beide Instanzen
+
+Ein Mealie reicht auch für zwei Haushalte – der zweite bekommt dort einfach ein
+eigenes Konto. Dann in seinem Stack **kein** Mealie mitstarten
+(`COMPOSE_PROFILES=` leer lassen) und auf das vorhandene zeigen:
+
+```
+MEALIE_URL=http://<NAS>:9925          # NICHT http://mealie:9000
+MEALIE_PUBLIC_URL=https://mealie.<deine-domain>
+MEALIE_TOKEN=…                        # Token aus SEINEM Mealie-Konto
+```
+
+> **Falle:** der Dienstname `mealie` löst sich nur innerhalb desselben
+> Compose-Projekts auf. Die zweite Instanz ist ein eigenes Projekt und erreicht
+> den Container darüber nicht – dort muss die NAS-Adresse samt veröffentlichtem
+> Port stehen (oder eine gemeinsame Docker-Netzwerk-Definition).
+
+In Mealie hängen die **Rezepte an der Gruppe**, **Menüplan und Einkaufsliste am
+Haushalt** darin. Daraus folgen zwei Zuschnitte:
+
+- **Eigene Gruppe** – alles getrennt, keine Berührungspunkte.
+- **Gleiche Gruppe, eigener Haushalt** – gemeinsamer Rezept-Pool, getrennte
+  Menüpläne. Dann in der zweiten Instanz `MEALIE_PUSH_RATINGS=0` setzen:
+  Bewertung und „zuletzt gekocht" schreibt die App **auf das Rezept selbst**
+  (`PATCH /api/recipes/<slug>`), nicht pro Haushalt – sonst überschreiben sich
+  die beiden Haushalte gegenseitig. Für das Würfeln ist das folgenlos, die App
+  **liest** diese beiden Felder nie zurück; Bewertungen und Kochverlauf liegen
+  in der jeweils eigenen Datenbank.
+
 Von der Shell aus bauen wie gehabt, nur mit eigenem Projektnamen:
 
 ```bash
