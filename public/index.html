@@ -122,6 +122,30 @@
         </div>
       </div>
 
+      <div class="inline-fields" id="rollOptions">
+        <label class="check">höchstens
+          <select id="rollMaxMinutes">
+            <option value="">– egal –</option>
+            <option value="20">20 Min.</option>
+            <option value="30">30 Min.</option>
+            <option value="45">45 Min.</option>
+            <option value="60">60 Min.</option>
+            <option value="90">90 Min.</option>
+          </select>
+        </label>
+        <label class="check">Wetter
+          <select id="rollWeather">
+            <option value="">automatisch</option>
+            <option value="kalt">kalt – Eintopf &amp; Auflauf</option>
+            <option value="warm">warm – Salat &amp; Leichtes</option>
+          </select>
+        </label>
+        <span class="hint">
+          Gilt für den nächsten Wurf, auch für einzelne Tage. „Automatisch"
+          nimmt die gemeldete Außentemperatur (heute/morgen), sonst den Monat.
+        </span>
+      </div>
+
       <div class="btn-group">
         <button class="btn btn-primary" id="rollWeekBtn">🎲 Ganze Woche würfeln</button>
         <button class="btn btn-secondary" id="rollEmptyBtn">🎲 Nur leere Tage</button>
@@ -155,6 +179,32 @@
         </label>
         <textarea id="courseMainTags" rows="2"></textarea>
         <div id="courseResult"></div>
+      </details>
+
+      <details class="form-group" id="rollSettings">
+        <summary>Wann ist ein Rezept „aufwendig", wann ist es kalt?</summary>
+        <p class="hint">
+          Dauerhafte Schwellen für den Würfel. Die Zeit entscheidet, was
+          werktags seltener kommt (am Wochenende bekommen die längeren Rezepte
+          umgekehrt einen Bonus). Die Temperaturen entscheiden, ab wann Eintopf
+          bzw. Salat bevorzugt wird – gemeldet wird sie stündlich aus FHEM, sonst
+          zählt der Monat. Leer speichern setzt auf den Standard zurück.
+        </p>
+        <div class="inline-fields">
+          <label class="check">aufwendig ab
+            <input type="number" id="planQuickMinutes" min="10" max="240" step="5"
+              style="width:5.5rem;" /> Min.
+          </label>
+          <label class="check">kalt bis
+            <input type="number" id="planColdC" min="-30" max="40" step="1"
+              style="width:5rem;" /> °C
+          </label>
+          <label class="check">warm ab
+            <input type="number" id="planWarmC" min="-30" max="50" step="1"
+              style="width:5rem;" /> °C
+          </label>
+        </div>
+        <div id="rollSettingsResult"></div>
       </details>
 
       <div class="form-group">

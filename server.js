@@ -39,6 +39,7 @@ import {
   currentWeather,
   fridgeSearch,
   householdServings,
+  planSettings,
   rollDays,
   rollWeek,
   tasteSummary,
@@ -393,6 +394,9 @@ function preferences() {
       sideTags: DEFAULT_SIDE_TAGS.join(', '),
       mainTags: DEFAULT_MAIN_TAGS.join(', '),
     },
+    // Würfel-Schwellen: ab wann ein Rezept werktags als "dauert lange" gilt
+    // und ab welcher Temperatur Eintopf bzw. Salat bevorzugt wird.
+    ...planSettings(),
   };
 }
 
@@ -416,6 +420,32 @@ app.put('/api/preferences', (req, res) => {
     if (typeof req.body[key] === 'string') {
       setSetting(key, req.body[key].trim());
     }
+  }
+  // Würfel-Schwellen. Leer = zurück auf den Wert aus der Umgebung.
+  const grenzen = {
+    quickMinutes: ['planQuickMinutes', 10, 240],
+    coldC: ['planColdC', -30, 40],
+    warmC: ['planWarmC', -30, 50],
+  };
+  for (const [feld, [key, min, max]] of Object.entries(grenzen)) {
+    if (req.body[feld] === undefined) continue;
+    if (req.body[feld] === '' || req.body[feld] === null) {
+      setSetting(key, '');
+      continue;
+    }
+    const wert = Number(req.body[feld]);
+    if (!Number.isFinite(wert) || wert < min || wert > max) {
+      return res.status(400).json({ error: `${feld} muss zwischen ${min} und ${max} liegen.` });
+    }
+    setSetting(key, String(wert));
+  }
+  // Gegen die WIRKSAMEN Werte prüfen: ist nur eine der beiden Schwellen
+  // gesetzt, gilt für die andere weiter der Wert aus der Umgebung.
+  const wirksam = planSettings();
+  if (wirksam.coldC >= wirksam.warmC) {
+    return res.status(400).json({
+      error: `Die Kalt-Schwelle (${wirksam.coldC} °C) muss unter der Warm-Schwelle (${wirksam.warmC} °C) liegen.`,
+    });
   }
   res.json(preferences());
 });
@@ -831,19 +861,33 @@ app.get('/api/plan', (req, res) => {
 app.post('/api/plan/roll', (req, res) => {
   const { date, dates, onlyEmpty } = req.body || {};
 
+  // Vorgaben für genau diesen Wurf. maxMinutes 0/leer = keine Grenze,
+  // weather leer = wie bisher selbst ermitteln (Messwert bzw. Monat).
+  const maxMinutes = Number(req.body?.maxMinutes) || 0;
+  if (maxMinutes && (maxMinutes < 5 || maxMinutes > 480)) {
+    return res.status(400).json({ error: 'Zeitgrenze muss zwischen 5 und 480 Minuten liegen.' });
+  }
+  const rohWetter = String(req.body?.weather || '').trim();
+  if (rohWetter && !['kalt', 'warm'].includes(rohWetter)) {
+    return res.status(400).json({ error: 'weather muss kalt, warm oder leer sein.' });
+  }
+  // undefined = automatisch, '' wäre "ausdrücklich keine Neigung".
+  const weather = rohWetter || undefined;
+  const vorgaben = { maxMinutes, weather };
+
   if (date || Array.isArray(dates)) {
     const list = (Array.isArray(dates) ? dates : [date]).map(resolveDate);
     if (list.some((d) => !d)) {
       return res.status(400).json({ error: 'Ungültiges Datum.' });
     }
-    const results = rollDays(list, { overwrite: !onlyEmpty });
+    const results = rollDays(list, { overwrite: !onlyEmpty, ...vorgaben });
     syncPlanToMealie(list);
     return res.json({ results, plan: buildWeekView(weekOf(list[0])) });
   }
 
   const week = resolveWeek(req.body?.week);
   if (!week) return res.status(400).json({ error: 'Ungültige Woche.' });
-  const results = rollWeek(week, { onlyEmpty: Boolean(onlyEmpty) });
+  const results = rollWeek(week, { onlyEmpty: Boolean(onlyEmpty), ...vorgaben });
   syncPlanToMealie(weekDates(week));
   res.json({ results, plan: buildWeekView(week) });
 });

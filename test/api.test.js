@@ -775,6 +775,110 @@ test('Haushaltsgröße lässt sich speichern und wird geprüft', async () => {
   assert.equal(unsinn.status, 400);
 });
 
+test('Würfel-Vorgaben: Zeitgrenze und Wetter', async () => {
+  // Zwei Rezepte, die sich in der Zeit klar unterscheiden.
+  const schnell = (
+    await api('/api/recipes', {
+      method: 'POST',
+      body: {
+        name: 'Schnelle Pfanne',
+        prep_time: '15 Min.',
+        ingredients: [{ name: 'Gemuese', amount: '300 g' }],
+      },
+    })
+  ).json;
+  const lang = (
+    await api('/api/recipes', {
+      method: 'POST',
+      body: {
+        name: 'Langer Schmorbraten',
+        prep_time: '3 Stunden',
+        ingredients: [{ name: 'Rindfleisch', amount: '1 kg' }],
+      },
+    })
+  ).json;
+
+  // Alles andere sperren, damit nur diese zwei in Frage kommen.
+  const alle = (await api('/api/recipes')).json;
+  const fremde = alle.filter((r) => r.id !== schnell.id && r.id !== lang.id);
+  for (const r of fremde) {
+    await api(`/api/recipes/${r.id}/block`, { method: 'POST', body: { blocked: true } });
+  }
+
+  try {
+    const tag = await freierWochentag();
+    // Mit Grenze 30 Min. darf der Schmorbraten nicht kommen – mehrfach würfeln,
+    // damit es kein Zufallstreffer ist.
+    for (let i = 0; i < 6; i += 1) {
+      const res = await api('/api/plan/roll', {
+        method: 'POST',
+        body: { date: tag, maxMinutes: 30 },
+      });
+      assert.equal(res.status, 200, res.text);
+      const gewuerfelt = res.json.plan.days.find((d) => d.date === tag).recipe;
+      assert.equal(gewuerfelt.name, 'Schnelle Pfanne', 'Zeitgrenze wurde missachtet');
+    }
+
+    // Die Begründung nennt die Vorgabe, damit man sie im Plan wiederfindet.
+    const mitGrund = await api('/api/plan/roll', {
+      method: 'POST',
+      body: { date: tag, maxMinutes: 30, weather: 'kalt' },
+    });
+    const notiz = mitGrund.json.plan.days.find((d) => d.date === tag).note || '';
+    assert.match(notiz, /30 Min/);
+    assert.match(notiz, /kalt/);
+
+    // Unsinnige Vorgaben werden abgewiesen.
+    assert.equal(
+      (await api('/api/plan/roll', { method: 'POST', body: { date: tag, maxMinutes: 2 } })).status,
+      400
+    );
+    assert.equal(
+      (await api('/api/plan/roll', { method: 'POST', body: { date: tag, weather: 'nebel' } }))
+        .status,
+      400
+    );
+  } finally {
+    for (const r of fremde) {
+      await api(`/api/recipes/${r.id}/block`, { method: 'POST', body: { blocked: false } });
+    }
+    await api(`/api/recipes/${schnell.id}`, { method: 'DELETE' });
+    await api(`/api/recipes/${lang.id}`, { method: 'DELETE' });
+  }
+});
+
+test('Würfel-Schwellen lassen sich speichern und werden geprüft', async () => {
+  const gesetzt = await api('/api/preferences', {
+    method: 'PUT',
+    body: { quickMinutes: 25, coldC: 8, warmC: 26 },
+  });
+  assert.equal(gesetzt.status, 200, gesetzt.text);
+  assert.equal(gesetzt.json.quickMinutes, 25);
+  assert.equal(gesetzt.json.coldC, 8);
+  assert.equal(gesetzt.json.warmC, 26);
+  assert.equal((await api('/api/preferences')).json.quickMinutes, 25);
+
+  // Kalt muss unter warm liegen - auch wenn nur EINE der beiden gesetzt wird.
+  const verdreht = await api('/api/preferences', { method: 'PUT', body: { coldC: 30 } });
+  assert.equal(verdreht.status, 400);
+  assert.match(verdreht.json.error, /Kalt-Schwelle/);
+
+  assert.equal(
+    (await api('/api/preferences', { method: 'PUT', body: { quickMinutes: 999 } })).status,
+    400
+  );
+
+  // Leer speichern setzt auf den Wert aus der Umgebung zurueck.
+  const zurueck = await api('/api/preferences', {
+    method: 'PUT',
+    body: { quickMinutes: '', coldC: '', warmC: '' },
+  });
+  assert.equal(zurueck.status, 200, zurueck.text);
+  assert.equal(zurueck.json.quickMinutes, 40, 'Standard aus der Umgebung');
+  assert.equal(zurueck.json.coldC, 10);
+  assert.equal(zurueck.json.warmC, 24);
+});
+
 test('der Wocheneinkauf rechnet die Mengen auf die Haushaltsgröße um', async () => {
   const recipe = (
     await api('/api/recipes', {

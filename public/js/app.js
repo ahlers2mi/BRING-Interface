@@ -79,6 +79,11 @@ async function loadPreferences() {
       el('courseSideTags').value = state.preferences.courseSideTags || '';
       el('courseMainTags').value = state.preferences.courseMainTags || '';
     }
+    if (el('planQuickMinutes')) {
+      el('planQuickMinutes').value = state.preferences.quickMinutes ?? '';
+      el('planColdC').value = state.preferences.coldC ?? '';
+      el('planWarmC').value = state.preferences.warmC ?? '';
+    }
   } catch (err) {
     console.error('Einstellungen nicht ladbar:', err.message);
   }

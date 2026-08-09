@@ -405,6 +405,34 @@ Reichen die Kandidaten nicht (kleine Sammlung), werden die Regeln
 schrittweise gelockert, statt gar nichts vorzuschlagen. Als **gekocht**
 markierte Tage bleiben beim Neuwürfeln unangetastet.
 
+### Vorgaben für den nächsten Wurf
+
+Über den Würfel-Knöpfen stehen zwei Felder. Sie gelten für den nächsten Wurf –
+für die ganze Woche wie für einen einzelnen Tag – und landen als Begründung im
+Plan (`🎲 mal was Neues · höchstens 30 Min. · Wetter: kalt`):
+
+- **höchstens X Minuten** – anders als der Aufwands-Faktor oben ist das eine
+  Ansage: was länger dauert, fällt raus, auch in der letzten Lockerungsstufe.
+  Rezepte **ohne** Zeitangabe bleiben möglich, kommen aber seltener – sie ganz
+  auszuschließen würde bei Quellen ohne Zeitangabe die halbe Sammlung schlucken.
+- **Wetter** – `automatisch` nimmt die gemeldete Außentemperatur (für heute und
+  morgen) bzw. den Monat. `kalt` und `warm` überschreiben das von Hand, wenn man
+  es besser weiß als der Sensor.
+
+### Dauerhafte Schwellen
+
+Im Tab **Wochenplan** unter „Wann ist ein Rezept ‚aufwendig', wann ist es kalt?":
+
+| Feld | Wirkung | Standard |
+| --- | --- | --- |
+| aufwendig ab … Min. | ab wann ein Rezept werktags abgewertet und am Wochenende bevorzugt wird | `PLAN_QUICK_MINUTES`, 40 |
+| kalt bis … °C | ab wann Eintopf und Auflauf bevorzugt werden | `PLAN_COLD_C`, 10 |
+| warm ab … °C | ab wann Salat und Leichtes bevorzugt werden | `PLAN_WARM_C`, 24 |
+
+Die Werte liegen in der Datenbank und gelten geräteübergreifend – die
+Umgebungsvariablen sind nur noch der Anfangswert. Ein leeres Feld speichern
+setzt auf diesen zurück.
+
 ### Was gar nicht erst gewürfelt wird
 
 Ein Dip ist kein Abendessen. Welche Rezepte draußen bleiben, entscheiden die
