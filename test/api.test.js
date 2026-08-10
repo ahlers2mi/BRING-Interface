@@ -670,6 +670,30 @@ test('unvollstaendige Adresse wird abgelehnt', async () => {
   assert.match(res.json.error, /http/);
 });
 
+test('mitkopierter Text hinter der Adresse wird abgeschnitten', async () => {
+  // Aus dem Feld kam schon eine 900 Zeichen lange "Adresse", weil die ganze
+  // Ausgabe der letzten Suche mit eingefuegt wurde -> 404 auf %20-Ketten.
+  globalThis.fetch = fakeBlogFetch();
+  try {
+    const start = await api('/api/recipes/import/site', {
+      method: 'POST',
+      body: {
+        url: 'https://blog.example/rezepte/ hoechstens 20 Rezepte ueber 3 Uebersichtsseiten',
+        dryRun: true,
+        pages: 1,
+      },
+    });
+    assert.equal(start.status, 202, start.text);
+    assert.equal(start.json.url, 'https://blog.example/rezepte/');
+
+    const done = await waitForSiteImport();
+    assert.equal(done.status, 'done', JSON.stringify(done.log));
+    assert.deepEqual(done.found.sort(), ['Pfannkuchen', 'Waffeln']);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
 test('Einzelimport per URL liest schema.org-Daten', async () => {
   const html = `<script type="application/ld+json">
     {"@type":"Recipe","name":"Ofengemüse","recipeIngredient":["3 Karotten","1 Zucchini"],

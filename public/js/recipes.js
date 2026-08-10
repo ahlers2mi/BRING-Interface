@@ -745,7 +745,12 @@ async function pollSiteJob() {
 }
 
 async function startSiteJob(dryRun) {
-  const url = (el('siteUrl').value || '').trim();
+  // Beim Einfügen landet gern der ganze umgebende Text im Feld – nur das erste
+  // Wort ist die Adresse. Das Feld gleich mitkorrigieren, damit man sieht, was
+  // benutzt wird.
+  const roh = (el('siteUrl').value || '').trim();
+  const url = roh.split(/\s+/)[0] || '';
+  if (url !== roh) el('siteUrl').value = url;
   if (!/^https?:\/\//i.test(url)) {
     return flash('siteResult', 'Bitte eine vollständige http(s)-Adresse angeben.', 'error');
   }
