@@ -959,7 +959,11 @@ test('ein Dip wird nicht als Abendessen gewürfelt', async () => {
       await api(`/api/recipes/${r.id}/block`, { method: 'POST', body: { blocked: true } });
     }
   }
+  // Tag vorher leeren und auf "geplant" stellen: ein gekochter oder als Reste
+  // markierter Tag wird uebersprungen, dann meldet der Wuerfel gar keinen
+  // Fehler und der Test prueft ins Leere.
   const tag = await freierWochentag();
+  await api(`/api/plan/${tag}`, { method: 'DELETE' });
   const gewuerfelt = await api('/api/plan/roll', { method: 'POST', body: { date: tag } });
   assert.equal(gewuerfelt.status, 200, gewuerfelt.text);
   assert.match(gewuerfelt.json.results[0].error || '', /kein/i, 'kein Rezept übrig');

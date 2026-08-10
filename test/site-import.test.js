@@ -11,6 +11,7 @@ import {
   collectLinks,
   discoverCandidates,
   looksLikeCandidate,
+  looksLikeSingleRecipe,
   nextPageUrl,
   sameHost,
   verifyRecipeUrls,
@@ -166,4 +167,71 @@ test('die Obergrenze bricht das Prüfen ab', async () => {
   const hits = await verifyRecipeUrls(urls, { fetchImpl, delayMs: 0, limit: 3 });
   assert.equal(hits.length, 3);
   assert.equal(geholt.length, 3, 'nach dem Treffer-Limit wird nichts mehr geholt');
+});
+
+// ── Übersichtsseiten, die sich als Rezept ausgeben ────────────────────────────
+//
+// familienkost.de hängt schema.org-Rezeptdaten auch an seine Kategorieseiten.
+// Der Probelauf hat dort 20 "Rezepte" gefunden, die alle Übersichten waren
+// ("Hauptgerichte - die besten Rezepte für die Familie").
+
+test('Kategorieseiten als einzelne Datei fallen aus den Kandidaten', () => {
+  const basis = 'https://kost.example/kategorie-fleischgerichte.html';
+  for (const pfad of [
+    '/kategorie-fleischgerichte.html',
+    '/category-dinner.html',
+    '/tag-schnell.html',
+    '/rezepte.php',
+  ]) {
+    assert.ok(
+      !looksLikeCandidate(`https://kost.example${pfad}`, basis),
+      `${pfad} sollte nicht als Rezept gelten`
+    );
+  }
+  // Ein echtes Rezept derselben Seite bleibt drin.
+  assert.ok(looksLikeCandidate('https://kost.example/frikadellen.html', basis));
+});
+
+test('ohne Zutaten ist es kein einzelnes Rezept', () => {
+  assert.ok(!looksLikeSingleRecipe({ name: 'Hauptgerichte', ingredients: [] }));
+  assert.ok(!looksLikeSingleRecipe({ name: 'Salat Rezepte' }));
+  assert.ok(!looksLikeSingleRecipe({ name: 'Fast nichts', ingredients: [{ name: 'Mehl' }] }));
+  assert.ok(
+    looksLikeSingleRecipe({ name: 'Frikadellen', ingredients: [{ name: 'Hack' }, { name: 'Ei' }] })
+  );
+  // Chefkoch-PLUS-Anrisse zählen nicht als Zutaten (Marker aus normalize.js).
+  assert.ok(
+    !looksLikeSingleRecipe({
+      name: 'Angerissen',
+      ingredients: [
+        { name: '500 g Mehl' },
+        { name: '-- additional ingredients not fully disclosed --' },
+      ],
+    }),
+    'eine echte Zutat plus Anriss-Platzhalter reicht nicht'
+  );
+});
+
+test('die Prüfung wirft Übersichtsseiten weg und meldet das', async () => {
+  const uebersicht = `<script type="application/ld+json">
+    {"@type":"Recipe","name":"Hauptgerichte - die besten Rezepte"}</script>`;
+  const echtes = `<script type="application/ld+json">
+    {"@type":"Recipe","name":"Frikadellen","recipeIngredient":["500 g Hack","1 Ei"]}</script>`;
+  const meldungen = [];
+  const fetchImpl = async (url) => ({
+    ok: true,
+    status: 200,
+    text: async () => (String(url).includes('frikadellen') ? echtes : uebersicht),
+  });
+
+  const hits = await verifyRecipeUrls(
+    ['https://kost.example/uebersicht.html', 'https://kost.example/frikadellen.html'],
+    { fetchImpl, delayMs: 0, log: (m) => meldungen.push(m) }
+  );
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0].recipe.name, 'Frikadellen');
+  assert.ok(
+    meldungen.some((m) => /Übersicht/.test(m)),
+    `Hinweis erwartet, bekommen: ${meldungen.join(' | ')}`
+  );
 });
