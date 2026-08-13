@@ -434,6 +434,17 @@ Reichen die Kandidaten nicht (kleine Sammlung), werden die Regeln
 schrittweise gelockert, statt gar nichts vorzuschlagen. Als **gekocht**
 markierte Tage bleiben beim Neuwürfeln unangetastet.
 
+### Ein Rezept von Hand einplanen
+
+Zwei Richtungen, je nachdem was schon feststeht:
+
+- **Tag steht fest** → im Tab *Wochenplan* beim Tag auf `📋`, dann das Rezept
+  suchen.
+- **Rezept steht fest** → im Tab *Rezepte* an der Karte auf `📅 Einplanen`. Der
+  Wähler zeigt die nächsten zwei Wochen mit dem, was dort schon geplant ist;
+  ein Klick ersetzt es. Als **gekocht** markierte Tage sind gesperrt, damit die
+  Historie nicht kaputtgeht.
+
 ### Vorgaben für den nächsten Wurf
 
 Über den Würfel-Knöpfen stehen zwei Felder. Sie gelten für den nächsten Wurf –
