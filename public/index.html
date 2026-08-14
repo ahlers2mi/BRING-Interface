@@ -642,6 +642,22 @@
 </div>
 
 <!-- ─── Rezept-Auswahl für einen Tag ─────────────────────────────────────── -->
+<!-- Umgekehrter Weg: Rezept steht fest, Tag wird gewählt -->
+<div id="dayPickModal" class="modal">
+  <div class="modal-box">
+    <h2>Wann gibt es <span id="dayPickName"></span>?</h2>
+    <p class="hint">
+      Belegte Tage stehen mit dem geplanten Gericht dabei – ein Klick darauf
+      ersetzt es. Gekochte Tage lassen sich nicht überschreiben.
+    </p>
+    <div id="dayPickList" class="picker-list"></div>
+    <div class="btn-group">
+      <button class="btn btn-secondary" id="dayPickCloseBtn">Schließen</button>
+    </div>
+    <div id="dayPickResult"></div>
+  </div>
+</div>
+
 <div id="pickerModal" class="modal">
   <div class="modal-box">
     <h2>Rezept für <span id="pickerDate"></span></h2>

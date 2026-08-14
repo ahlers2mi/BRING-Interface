@@ -146,6 +146,7 @@ async function init() {
   initCookidoo();
   wireModalDismiss('importModal');
   wireModalDismiss('pickerModal');
+  wireModalDismiss('dayPickModal');
 
   // Rezeptliste hängt am gemeinsamen Zwischenspeicher.
   onRecipesChanged(renderRecipeList);

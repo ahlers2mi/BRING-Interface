@@ -264,6 +264,8 @@ function buildRecipeCard(recipe) {
     </div>
     <div class="recipe-actions">
       <button class="btn btn-primary btn-sm" data-action="import">🛒 Zutaten</button>
+      <button class="btn btn-secondary btn-sm" data-action="plan"
+        title="Diesem Rezept einen Tag im Wochenplan zuweisen">📅 Einplanen</button>
       ${
         mealieLink
           ? `<a class="btn btn-secondary btn-sm" href="${escHtml(
@@ -297,6 +299,9 @@ function buildRecipeCard(recipe) {
   node
     .querySelector('[data-action="import"]')
     .addEventListener('click', () => openImportModal(recipe.id));
+  node
+    .querySelector('[data-action="plan"]')
+    .addEventListener('click', () => openDayPicker(recipe));
   node
     .querySelector('[data-action="edit"]')
     ?.addEventListener('click', () => editRecipe(recipe));
@@ -406,6 +411,81 @@ function openImportModal(recipeId) {
   importTargetRecipeId = recipeId;
   el('modalResult').innerHTML = '';
   openModal('importModal');
+}
+
+// ── Rezept einem Tag zuordnen ─────────────────────────────────────────────────
+//
+// Der Gegenweg zum Wochenplan-Tab: dort wählt man pro Tag ein Rezept, hier
+// steht das Rezept fest und man sucht den Tag. Gezeigt werden zwei Wochen –
+// weiter voraus zu planen kommt in der Praxis nicht vor.
+
+let dayPickRecipe = null;
+
+async function openDayPicker(recipe) {
+  dayPickRecipe = recipe;
+  el('dayPickName').textContent = recipe.name;
+  el('dayPickResult').innerHTML = '';
+  el('dayPickList').innerHTML = '<span class="spinner"></span>';
+  openModal('dayPickModal');
+  try {
+    const [diese, naechste] = await Promise.all([
+      apiFetch('/api/plan?week=current'),
+      apiFetch('/api/plan?week=next'),
+    ]);
+    renderDayPicker([...diese.days, ...naechste.days]);
+  } catch (err) {
+    el('dayPickList').innerHTML = `<div class="alert alert-error">${escHtml(err.message)}</div>`;
+  }
+}
+
+function renderDayPicker(days) {
+  const heute = new Date().toISOString().slice(0, 10);
+  el('dayPickList').innerHTML = days
+    // Vergangenes anzubieten hilft niemandem.
+    .filter((d) => d.date >= heute)
+    .map((d) => {
+      const belegt = d.recipe ? escHtml(d.recipe.name) : '– frei –';
+      const gekocht = d.status === 'cooked';
+      return `<button class="picker-item" data-date="${d.date}"${
+        gekocht ? ' disabled title="schon gekocht"' : ''
+      }>
+        <span>${escHtml(d.label)}, ${escHtml(deDate(d.date))}${
+          d.date === heute ? ' (heute)' : ''
+        }</span>
+        <span class="hint">${gekocht ? '✓ gekocht' : belegt}</span>
+      </button>`;
+    })
+    .join('');
+
+  el('dayPickList')
+    .querySelectorAll('.picker-item:not([disabled])')
+    .forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        setLoading(btn, true);
+        try {
+          await apiFetch(`/api/plan/${btn.dataset.date}`, {
+            method: 'PUT',
+            body: JSON.stringify({
+              recipe_id: dayPickRecipe.id,
+              note: 'von Hand gewählt',
+            }),
+          });
+          closeModal('dayPickModal');
+          // Den Wochenplan hier NICHT nachladen: plan.js einzubinden würde
+          // einen Ringschluss ergeben (plan.js holt loadTaste von hier), und
+          // der Tab lädt beim Wechsel sowieso neu.
+          flash(
+            'recipeFormResult',
+            `✓ „${escHtml(dayPickRecipe.name)}" für ${escHtml(
+              deDate(btn.dataset.date)
+            )} eingeplant.`
+          );
+        } catch (err) {
+          flash('dayPickResult', `Fehler: ${escHtml(err.message)}`, 'error');
+          setLoading(btn, false);
+        }
+      });
+    });
 }
 
 // ── Geschmacksprofil ──────────────────────────────────────────────────────────
@@ -1109,6 +1189,8 @@ export async function initRecipes() {
       flash('ckResult', `Fehler: ${escHtml(err.message)}`, 'error');
     }
   });
+
+  on('dayPickCloseBtn', 'click', () => closeModal('dayPickModal'));
 
   on('siteDryRunBtn', 'click', () => startSiteJob(true));
   on('siteImportBtn', 'click', () => startSiteJob(false));
