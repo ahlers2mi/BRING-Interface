@@ -21,6 +21,7 @@ import {
   deleteRecipe,
   setRecipeBlocked,
   setRecipeCourse,
+  setPlanShopped,
   findRecipeByExternalId,
   findRecipeByName,
   addRating,
@@ -678,7 +679,15 @@ app.post('/api/recipes/:id/import', async (req, res) => {
       imported.push(ing.name);
     }
     setSetting('lastListUuid', listUuid);
-    res.json({ imported, scaled: Boolean(factor) });
+    // Kam der Aufruf von einem Plan-Tag, gilt der Tag als eingekauft – der
+    // Würfel lässt ihn dann beim Wochenwurf in Ruhe.
+    const planDate = resolveDate(req.body?.date);
+    let markiert = null;
+    if (planDate && getPlanEntry(planDate)?.recipe_id === recipe.id) {
+      setPlanShopped(planDate, true);
+      markiert = planDate;
+    }
+    res.json({ imported, scaled: Boolean(factor), shopped: markiert });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -880,7 +889,13 @@ app.post('/api/plan/roll', (req, res) => {
     if (list.some((d) => !d)) {
       return res.status(400).json({ error: 'Ungültiges Datum.' });
     }
-    const results = rollDays(list, { overwrite: !onlyEmpty, ...vorgaben });
+    // Ausdrücklicher Wurf für bestimmte Tage: da meint man genau diese Tage,
+    // auch wenn dafür schon eingekauft wurde.
+    const results = rollDays(list, {
+      overwrite: !onlyEmpty,
+      protectShopped: false,
+      ...vorgaben,
+    });
     syncPlanToMealie(list);
     return res.json({ results, plan: buildWeekView(weekOf(list[0])) });
   }
@@ -988,16 +1003,94 @@ app.post('/api/plan/:date/move', (req, res) => {
     return res.status(400).json({ error: 'Der Zieltag ist schon gekocht.' });
   }
 
+  // Was passiert mit dem Tag, auf den geschoben wird?
+  //   replace – sein Gericht fällt weg (bisheriges Verhalten)
+  //   shift   – es rückt mit auf, und alles dahinter ebenso, bis zum ersten
+  //             freien Tag. Es geht nichts verloren.
+  //   swap    – die beiden Tage tauschen
+  const mode = String(req.body?.mode || 'replace');
+  if (!['replace', 'shift', 'swap'].includes(mode)) {
+    return res.status(400).json({ error: 'mode muss replace, shift oder swap sein.' });
+  }
+
+  const beruehrt = [from, to];
+  let verschoben = [];
+  let verdraengt = null;
+
+  if (target?.recipe_id && mode === 'swap') {
+    setPlanEntry({
+      date: from,
+      recipe_id: target.recipe_id,
+      note: target.note,
+      status: target.status === 'leftovers' ? 'leftovers' : 'planned',
+      origin: target.origin || 'app',
+    });
+  } else if (target?.recipe_id && mode === 'shift') {
+    // Plätze ab dem Zieltag einsammeln, bis einer frei ist. Gekochte Tage sind
+    // keine Plätze – die bleiben liegen, geschoben wird um sie herum.
+    const plaetze = [];
+    let tag = to;
+    for (let i = 0; i < 60; i += 1) {
+      const e = getPlanEntry(tag);
+      if (e?.status === 'cooked') {
+        tag = addDays(tag, 1);
+        continue;
+      }
+      plaetze.push({ date: tag, entry: e });
+      if (!e?.recipe_id) break; // freier Platz – hier endet die Kette
+      tag = addDays(tag, 1);
+    }
+    // Von hinten nach vorn setzen, sonst überschreibt man sich selbst.
+    for (let i = plaetze.length - 2; i >= 0; i -= 1) {
+      const { date, entry: e } = plaetze[i];
+      const ziel = plaetze[i + 1].date;
+      setPlanEntry({
+        date: ziel,
+        recipe_id: e.recipe_id,
+        note: e.note,
+        status: e.status === 'leftovers' ? 'leftovers' : 'planned',
+        origin: e.origin || 'app',
+      });
+      if (e.shopped_at) setPlanShopped(ziel, true);
+      beruehrt.push(ziel);
+      verschoben.push({ from: date, to: ziel });
+    }
+  } else if (target?.recipe_id) {
+    verdraengt = { date: to, name: getRecipeById(target.recipe_id)?.name || '' };
+  }
+
   setPlanEntry({
     date: to,
     recipe_id: entry.recipe_id,
     note: entry.note,
-    status: 'planned',
+    status: entry.status === 'leftovers' ? 'leftovers' : 'planned',
     origin: entry.origin || 'app',
   });
-  deletePlanEntry(from);
-  syncPlanToMealie([from, to]);
-  res.json({ from, to, plan: buildWeekView(weekOf(to)) });
+  // Eingekauft ist eingekauft – die Markierung wandert mit dem Gericht mit.
+  if (entry.shopped_at) setPlanShopped(to, true);
+  if (mode !== 'swap') deletePlanEntry(from);
+
+  syncPlanToMealie([...new Set(beruehrt)]);
+  res.json({
+    from,
+    to,
+    mode,
+    verschoben,
+    verdraengt,
+    plan: buildWeekView(weekOf(to)),
+  });
+});
+
+// POST /api/plan/:date/shopped – body: { shopped: true|false }
+// Von Hand setzen oder zurücknehmen ("doch nichts gekauft").
+app.post('/api/plan/:date/shopped', (req, res) => {
+  const date = resolveDate(req.params.date);
+  if (!date) return res.status(400).json({ error: 'Ungültiges Datum.' });
+  if (!getPlanEntry(date)?.recipe_id) {
+    return res.status(400).json({ error: 'Für diesen Tag ist nichts eingeplant.' });
+  }
+  const entry = setPlanShopped(date, req.body?.shopped !== false);
+  res.json({ entry, plan: buildWeekView(weekOf(date)) });
 });
 
 // POST /api/plan/:date/status – body: { status: planned|cooked|skipped|leftovers }
@@ -1061,7 +1154,14 @@ app.post('/api/plan/shopping', async (req, res) => {
       return res.status(400).json({ error: 'Für diese Woche ist nichts eingeplant.' });
     }
     const imported = await importItemsToBring(listUuid, items);
-    res.json({ imported, recipes });
+    // Alle Tage, deren Zutaten mitgegangen sind, als eingekauft markieren.
+    const markiert = [];
+    for (const eintrag of recipes || []) {
+      if (!eintrag?.date) continue;
+      setPlanShopped(eintrag.date, true);
+      markiert.push(eintrag.date);
+    }
+    res.json({ imported, recipes, shopped: markiert });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
