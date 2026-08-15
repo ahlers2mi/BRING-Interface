@@ -879,3 +879,10 @@ details.log pre {
   color: var(--bring-orange);
   font-weight: 600;
 }
+
+/* Tag, für den die Zutaten schon in Bring liegen. */
+.badge-shopped {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}

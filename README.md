@@ -434,6 +434,31 @@ Reichen die Kandidaten nicht (kleine Sammlung), werden die Regeln
 schrittweise gelockert, statt gar nichts vorzuschlagen. Als **gekocht**
 markierte Tage bleiben beim Neuwürfeln unangetastet.
 
+### Einen Tag verschieben
+
+Der Knopf `→` schiebt das Gericht auf den nächsten Tag. Ist der schon belegt,
+kommt eine Rückfrage mit drei Möglichkeiten:
+
+| | |
+| --- | --- |
+| **Alles mitschieben** | Der Zieltag und alles dahinter rücken einen Tag auf, bis zum ersten freien Tag. Es geht nichts verloren. Gekochte Tage bleiben liegen, geschoben wird um sie herum. |
+| **Tauschen** | Die beiden Tage wechseln ihr Gericht. |
+| **… fällt weg** | Das Gericht des Zieltags entfällt (das bisherige Verhalten). |
+
+### „Dafür ist schon eingekauft"
+
+Sobald die Zutaten eines Tages nach Bring gehen – über `🛒` am Tag oder über
+den Wocheneinkauf – merkt sich der Plan das und zeigt am Tag `🛒 eingekauft`.
+
+Das hat Folgen: **der Wochenwurf lässt solche Tage in Ruhe.** Sonst kauft man
+ein, würfelt die Woche neu, und das Essen liegt im Kühlschrank, während im Plan
+etwas anderes steht. Ein ausdrücklicher Wurf für genau diesen Tag (`🎲` an der
+Tageskarte) geht weiterhin – wer dort drückt, meint es.
+
+Wechselt das Gericht des Tages, ist die Markierung automatisch hinfällig; beim
+Verschieben wandert sie mit dem Gericht mit. Von Hand setzen oder zurücknehmen
+geht über `POST /api/plan/<datum>/shopped` mit `{ "shopped": true|false }`.
+
 ### Ein Rezept von Hand einplanen
 
 Zwei Richtungen, je nachdem was schon feststeht:

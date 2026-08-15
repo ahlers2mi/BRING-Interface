@@ -1010,6 +1010,111 @@ test('ein Dip wird nicht als Abendessen gewürfelt', async () => {
   }
 });
 
+// ── Verschieben mit Rückfrage und "schon eingekauft" ──────────────────────────
+
+test('Verschieben: shift rueckt alles auf, replace laesst den Zieltag fallen', async () => {
+  const plan0 = (await api('/api/plan')).json;
+  const [a, b, c] = plan0.days.map((d) => d.date);
+  const rezepte = (await api('/api/recipes')).json.filter((r) => !r.blocked).slice(0, 3);
+  assert.ok(rezepte.length >= 3, 'drei Rezepte fuer den Test');
+
+  const setzen = async (datum, r) =>
+    api(`/api/plan/${datum}`, { method: 'PUT', body: { recipe_id: r.id } });
+  for (const [i, datum] of [a, b, c].entries()) await setzen(datum, rezepte[i]);
+
+  // shift: a -> b, dabei rueckt b auf c und c auf den Tag danach.
+  const geschoben = await api(`/api/plan/${a}/move`, {
+    method: 'POST',
+    body: { to: b, mode: 'shift' },
+  });
+  assert.equal(geschoben.status, 200, geschoben.text);
+  assert.ok(
+    geschoben.json.verschoben.length >= 2,
+    `mindestens die beiden Folgetage ruecken auf, waren: ${geschoben.json.verschoben.length}`
+  );
+  let plan = (await api('/api/plan')).json;
+  const am = (datum) => plan.days.find((d) => d.date === datum)?.recipe?.name ?? null;
+  assert.equal(am(a), null, 'Quelle ist leer');
+  assert.equal(am(b), rezepte[0].name);
+  assert.equal(am(c), rezepte[1].name, 'das alte b steht jetzt auf c');
+
+  // replace: der Zieltag verliert sein Gericht.
+  const ersetzt = await api(`/api/plan/${b}/move`, {
+    method: 'POST',
+    body: { to: c, mode: 'replace' },
+  });
+  assert.equal(ersetzt.json.verdraengt.name, rezepte[1].name);
+  plan = (await api('/api/plan')).json;
+  assert.equal(plan.days.find((d) => d.date === c).recipe.name, rezepte[0].name);
+
+  // swap: tauschen statt verdraengen.
+  await setzen(b, rezepte[2]);
+  await api(`/api/plan/${b}/move`, { method: 'POST', body: { to: c, mode: 'swap' } });
+  plan = (await api('/api/plan')).json;
+  assert.equal(plan.days.find((d) => d.date === b).recipe.name, rezepte[0].name);
+  assert.equal(plan.days.find((d) => d.date === c).recipe.name, rezepte[2].name);
+
+  assert.equal(
+    (await api(`/api/plan/${b}/move`, { method: 'POST', body: { to: c, mode: 'quatsch' } }))
+      .status,
+    400
+  );
+});
+
+test('eingekaufte Tage ueberlebt der Wochenwurf', async () => {
+  const plan0 = (await api('/api/plan')).json;
+  const tag = plan0.days.find((d) => d.date !== todayIso && d.status !== 'cooked').date;
+  const rezept = (await api('/api/recipes')).json.find((r) => !r.blocked);
+  await api(`/api/plan/${tag}`, { method: 'PUT', body: { recipe_id: rezept.id } });
+
+  const markiert = await api(`/api/plan/${tag}/shopped`, {
+    method: 'POST',
+    body: { shopped: true },
+  });
+  assert.equal(markiert.status, 200, markiert.text);
+  assert.equal(markiert.json.plan.days.find((d) => d.date === tag).shopped, true);
+
+  // Ganze Woche wuerfeln laesst den Tag in Ruhe ...
+  await api('/api/plan/roll', { method: 'POST', body: { week: 'current' } });
+  let plan = (await api('/api/plan')).json;
+  assert.equal(plan.days.find((d) => d.date === tag).recipe.id, rezept.id);
+
+  // ... ein ausdruecklicher Wurf fuer genau diesen Tag aber schon.
+  await api('/api/plan/roll', { method: 'POST', body: { date: tag } });
+  plan = (await api('/api/plan')).json;
+  assert.equal(
+    plan.days.find((d) => d.date === tag).shopped,
+    false,
+    'anderes Gericht -> Einkauf gilt nicht mehr'
+  );
+
+  // Zuruecknehmen geht auch.
+  await api(`/api/plan/${tag}`, { method: 'PUT', body: { recipe_id: rezept.id } });
+  await api(`/api/plan/${tag}/shopped`, { method: 'POST', body: { shopped: true } });
+  const zurueck = await api(`/api/plan/${tag}/shopped`, {
+    method: 'POST',
+    body: { shopped: false },
+  });
+  assert.equal(zurueck.json.plan.days.find((d) => d.date === tag).shopped, false);
+});
+
+test('die Einkauf-Markierung wandert beim Verschieben mit', async () => {
+  const plan0 = (await api('/api/plan')).json;
+  const frei = plan0.days.filter((d) => d.status !== 'cooked').map((d) => d.date);
+  const [a, b] = [frei[0], frei[1]];
+  const rezept = (await api('/api/recipes')).json.find((r) => !r.blocked);
+
+  await api(`/api/plan/${a}`, { method: 'PUT', body: { recipe_id: rezept.id } });
+  await api(`/api/plan/${a}/shopped`, { method: 'POST', body: { shopped: true } });
+  await api(`/api/plan/${b}`, { method: 'DELETE' });
+
+  const res = await api(`/api/plan/${a}/move`, { method: 'POST', body: { to: b } });
+  assert.equal(res.status, 200, res.text);
+  const ziel = res.json.plan.days.find((d) => d.date === b);
+  assert.equal(ziel.recipe.id, rezept.id);
+  assert.equal(ziel.shopped, true, 'eingekauft bleibt eingekauft');
+});
+
 test('unbekannte Status werden abgelehnt', async () => {
   const heute = new Date().toISOString().slice(0, 10);
   const res = await api(`/api/plan/${heute}/status`, {

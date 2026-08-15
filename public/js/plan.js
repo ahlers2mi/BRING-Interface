@@ -22,6 +22,8 @@ import { loadTaste } from './recipes.js';
 
 let currentWeek = 'current'; // wird nach dem ersten Laden zur echten KW
 let pickerDate = null; // Tag, für den das Auswahl-Modal offen ist
+let lastPlan = null; // zuletzt gezeichnete Woche – für den Blick auf den Zieltag
+let moveContext = null; // { from, to } während die Rückfrage offen ist
 
 const STATUS_LABEL = {
   planned: '',
@@ -47,6 +49,7 @@ export async function loadPlan(week = currentWeek) {
 }
 
 function renderPlan(plan) {
+  lastPlan = plan;
   el('planWeekLabel').textContent =
     `KW ${plan.week.slice(-2)} (${deDate(plan.from)} – ${deDate(plan.to)})`;
   el('planWeekLabel').dataset.from = plan.from;
@@ -99,6 +102,11 @@ function buildDayCard(day) {
       <b>${escHtml(day.label)}</b>
       <span class="hint">${escHtml(day.dateLabel)}</span>
       ${day.isToday ? '<span class="badge badge-today">heute</span>' : ''}
+      ${
+        day.shopped
+          ? '<span class="badge badge-shopped" title="Zutaten sind in Bring – der Wochenwurf lässt den Tag in Ruhe">🛒 eingekauft</span>'
+          : ''
+      }
       ${
         STATUS_LABEL[day.status]
           ? `<span class="badge">${STATUS_LABEL[day.status]}</span>`
@@ -174,21 +182,21 @@ function buildDayCard(day) {
   });
 
   // Heute wird es doch nichts: einen Tag weiterschieben, statt neu zu würfeln.
+  // Ist der Zieltag belegt, fragen wir vorher – sonst verschwindet dort
+  // stillschweigend ein Gericht.
   node.querySelector('[data-act="move"]')?.addEventListener('click', async (e) => {
-    setLoading(e.currentTarget, true);
-    try {
-      const morgen = new Date(`${day.date}T12:00:00Z`);
-      morgen.setUTCDate(morgen.getUTCDate() + 1);
-      const res = await apiFetch(`/api/plan/${day.date}/move`, {
-        method: 'POST',
-        body: JSON.stringify({ to: morgen.toISOString().slice(0, 10) }),
-      });
-      renderPlan(res.plan);
-      flash('planResult', `✓ auf ${escHtml(deDate(res.to))} verschoben.`);
-    } catch (err) {
-      flash('planResult', `Fehler: ${escHtml(err.message)}`, 'error');
-      setLoading(e.currentTarget, false);
+    const morgen = new Date(`${day.date}T12:00:00Z`);
+    morgen.setUTCDate(morgen.getUTCDate() + 1);
+    const ziel = morgen.toISOString().slice(0, 10);
+    const zielTag = (lastPlan?.days || []).find((d) => d.date === ziel);
+
+    if (zielTag?.recipe) {
+      openMoveDialog(day, zielTag);
+      return;
     }
+    setLoading(e.currentTarget, true);
+    await moveDay(day.date, ziel, 'replace');
+    setLoading(e.currentTarget, false);
   });
 
   node.querySelector('[data-act="leftovers"]').addEventListener('click', async (e) => {
@@ -212,7 +220,9 @@ function buildDayCard(day) {
     try {
       const res = await apiFetch(`/api/recipes/${recipe.id}/import`, {
         method: 'POST',
-        body: JSON.stringify({ listUuid }),
+        // Das Datum mitgeben: dann merkt sich der Plan, dass für diesen Tag
+        // eingekauft wurde, und der Würfel überschreibt ihn nicht mehr.
+        body: JSON.stringify({ listUuid, date: day.date }),
       });
       flash('planResult', `✓ ${res.imported.length} Zutaten in Bring übertragen.`);
     } catch (err) {
@@ -435,6 +445,49 @@ export function initPlan() {
 
   on('pickerSearch', 'input', renderPicker);
   on('pickerCloseBtn', 'click', () => closeModal('pickerModal'));
+
+  on('moveShiftBtn', 'click', () => moveFromDialog('shift'));
+  on('moveSwapBtn', 'click', () => moveFromDialog('swap'));
+  on('moveReplaceBtn', 'click', () => moveFromDialog('replace'));
+  on('moveCancelBtn', 'click', () => closeModal('moveModal'));
+}
+
+// ── Verschieben ───────────────────────────────────────────────────────────────
+
+async function moveDay(from, to, mode) {
+  try {
+    const res = await apiFetch(`/api/plan/${from}/move`, {
+      method: 'POST',
+      body: JSON.stringify({ to, mode }),
+    });
+    renderPlan(res.plan);
+    const teile = [`✓ auf ${escHtml(deDate(res.to))} verschoben`];
+    if (res.verschoben?.length) teile.push(`${res.verschoben.length} Tag(e) mit aufgerückt`);
+    if (res.verdraengt?.name) teile.push(`„${escHtml(res.verdraengt.name)}" ist entfallen`);
+    flash('planResult', `${teile.join(' · ')}.`);
+    return true;
+  } catch (err) {
+    flash('planResult', `Fehler: ${escHtml(err.message)}`, 'error');
+    return false;
+  }
+}
+
+function openMoveDialog(quelle, ziel) {
+  moveContext = { from: quelle.date, to: ziel.date };
+  el('moveTargetDay').textContent = `${ziel.label}, ${deDate(ziel.date)}`;
+  el('moveReplaceName').textContent = `„${ziel.recipe.name}"`;
+  el('moveInfo').innerHTML =
+    `Dort steht schon <b>${escHtml(ziel.recipe.name)}</b>` +
+    (ziel.shopped ? ' – und dafür wurde bereits eingekauft' : '') +
+    '. Was soll damit passieren?';
+  el('moveResult').innerHTML = '';
+  openModal('moveModal');
+}
+
+async function moveFromDialog(mode) {
+  if (!moveContext) return;
+  const { from, to } = moveContext;
+  if (await moveDay(from, to, mode)) closeModal('moveModal');
 }
 
 // Vorgaben für den nächsten Wurf (Zeitgrenze, Wetter). Leer = wie bisher.

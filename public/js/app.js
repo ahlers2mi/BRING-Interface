@@ -147,6 +147,7 @@ async function init() {
   wireModalDismiss('importModal');
   wireModalDismiss('pickerModal');
   wireModalDismiss('dayPickModal');
+  wireModalDismiss('moveModal');
 
   // Rezeptliste hängt am gemeinsamen Zwischenspeicher.
   onRecipesChanged(renderRecipeList);

@@ -99,6 +99,12 @@ const planColumns = db
 if (!planColumns.includes('origin')) {
   db.exec(`ALTER TABLE meal_plan ADD COLUMN origin TEXT NOT NULL DEFAULT 'app'`);
 }
+// Wann die Zutaten dieses Tages nach Bring geschoben wurden. Gesetzt heißt:
+// dafür ist schon eingekauft – der Würfel lässt den Tag beim Wochenwurf in
+// Ruhe, sonst liegt das Essen im Kühlschrank und steht nicht mehr im Plan.
+if (!planColumns.includes('shopped_at')) {
+  db.exec(`ALTER TABLE meal_plan ADD COLUMN shopped_at TEXT`);
+}
 
 // Doppelte Importe verhindern (external_id z. B. "chefkoch:1234").
 db.exec(
@@ -594,8 +600,26 @@ export function setPlanEntry({ date, recipe_id, note, status = 'planned', origin
        note = excluded.note,
        status = excluded.status,
        origin = excluded.origin,
+       -- Eingekauft gilt für ein bestimmtes Gericht: bleibt das Rezept, bleibt
+       -- die Markierung; kommt ein anderes, ist der Einkauf hinfällig.
+       -- (IS statt = , sonst greift der Vergleich bei NULL nicht.)
+       shopped_at = CASE
+         WHEN meal_plan.recipe_id IS excluded.recipe_id THEN meal_plan.shopped_at
+         ELSE NULL
+       END,
        updated_at = datetime('now')`
   ).run(date, recipe_id ?? null, note || null, status, origin);
+  return getPlanEntry(date);
+}
+
+/** Tag als eingekauft markieren (oder die Markierung nehmen). */
+export function setPlanShopped(date, shopped = true) {
+  db.prepare(
+    `UPDATE meal_plan
+        SET shopped_at = ${shopped ? "datetime('now')" : 'NULL'},
+            updated_at = datetime('now')
+      WHERE date = ?`
+  ).run(date);
   return getPlanEntry(date);
 }
 

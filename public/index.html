@@ -642,6 +642,24 @@
 </div>
 
 <!-- ─── Rezept-Auswahl für einen Tag ─────────────────────────────────────── -->
+<div id="moveModal" class="modal">
+  <div class="modal-box">
+    <h2>Verschieben auf <span id="moveTargetDay"></span></h2>
+    <p class="hint" id="moveInfo"></p>
+    <div class="btn-group" style="flex-direction:column; align-items:stretch;">
+      <button class="btn btn-primary" id="moveShiftBtn">
+        ↕ Alles mitschieben – nichts geht verloren
+      </button>
+      <button class="btn btn-secondary" id="moveSwapBtn">⇄ Die beiden Tage tauschen</button>
+      <button class="btn btn-danger" id="moveReplaceBtn">
+        ✕ <span id="moveReplaceName"></span> fällt weg
+      </button>
+      <button class="btn btn-secondary" id="moveCancelBtn">Abbrechen</button>
+    </div>
+    <div id="moveResult"></div>
+  </div>
+</div>
+
 <!-- Umgekehrter Weg: Rezept steht fest, Tag wird gewählt -->
 <div id="dayPickModal" class="modal">
   <div class="modal-box">
