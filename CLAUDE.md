@@ -138,6 +138,29 @@ in der Liste erwischen Zwiebelkuchen, Flammkuchen, Eisbein und Milchreis –
 deshalb stehen sie **nicht** drin. Was die Endung nicht trifft, fangen die
 Kategorien; im Zweifel wird gewürfelt.
 
+## Geschmacksprofil (`lib/taste.js`)
+
+Zwei getrennte Hebel, die man nicht verwechseln darf:
+
+- **Das Rezept selbst** – `ownRatingFactor`. `rating_count` zählt in
+  `ratingStats()` **nur gekochte Bewertungen mit Sternen**; ein bloß
+  aussortiertes Rezept steht dort auf 0. Der `rausgeflogen`-Abzug
+  (`0.25 ** anzahl`, Untergrenze 0.1) muss deshalb **vor** dem Neugier-Bonus
+  greifen – sonst bekommt ausgerechnet das weggeklickte Rezept die 1.3 für
+  „noch nie probiert" und wird nie seltener. Genau dieser Fehler steckte bis
+  v1.14.2 drin: 0/1/2 Absagen ergaben alle das Gewicht 1.300.
+- **Die Zutaten** – `buildTasteProfile`. Beleg wird in **Gewicht** gemessen,
+  nicht in Köpfen (`MIN_EVIDENCE = 1.5`, `confidence = weight/(weight+2)`).
+  Eine gekochte Bewertung wiegt 1.0, ein `rausgeflogen` nur 0.6. Zwei Absagen
+  sind also 1.2 und kommen gar nicht erst ins Profil, zwei gekochte
+  Bewertungen (2.0) schon. Sonst brandmarkt ein einziges Aufräumen am Abend
+  eine ganze Zutat („Wir mögen keine Gnocchi").
+
+Strukturelle Tags (`Hauptgerichte`, `Thermomix`, `Cookidoo` …) stehen in
+`IGNORED_TAGS` und sind vom Profil ausgenommen – sie hängen an fast jedem
+Rezept und würden bei einer einzigen Absage eine ganze Gattung abwerten. Die
+Gang-Listen kommen aus `course.js`, damit es nur eine Quelle gibt.
+
 ## Rezepte von fremden Koch-Seiten
 
 `site-import.js` sammelt Links einer Übersichtsseite ein, `site-job.js` legt sie
