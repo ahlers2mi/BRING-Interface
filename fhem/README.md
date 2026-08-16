@@ -118,6 +118,12 @@ hat, kann stattdessen `reading01JSON today` usw. verwenden.
 > Wandtablet will niemand freitags noch lesen, was es montags gab. Ein
 > Wochentag, der diese Woche schon vorbei ist, zeigt deshalb die **kommende**
 > Woche. Welcher Tag gemeint ist, steht in `mo_datum` … `so_datum`.
+>
+> Nebenbei behebt das einen Fehler: `morgen` wurde vorher nur innerhalb der
+> laufenden Woche gesucht. **Sonntags** liegt morgen aber schon in der nächsten
+> – das Reading blieb leer, und die Abend-Erinnerung
+> (`a_wochenplan_vorbereitung`) meldete sich ausgerechnet vor dem Wochenanfang
+> nicht.
 
 `STATE` ist über `stateFormat` „Heute: <Gericht>".
 

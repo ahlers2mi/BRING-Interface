@@ -1135,6 +1135,17 @@ test('die FHEM-Antwort beginnt bei heute und blickt nur nach vorn', async () => 
   // tag1 ist heute, die Reihenfolge stimmt.
   assert.equal(p[`${p.tag1_key}_datum`], todayIso);
   assert.equal(p.today, p[p.tag1_key], 'heute steht doppelt drin, aber gleich');
+
+  // Der eigentliche Anlass: an einem SONNTAG liegt morgen in der naechsten
+  // Woche. Vorher wurde "morgen" nur in der laufenden Woche gesucht und blieb
+  // deshalb sonntags leer - samt der Abend-Erinnerung, die daran haengt.
+  const morgenIso = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  assert.equal(p[`${p.tag2_key}_datum`], morgenIso, 'tag2 ist immer morgen');
+  assert.equal(
+    p.tomorrow,
+    p[p.tag2_key],
+    'das Reading "morgen" passt zum zweiten Tag des Fensters'
+  );
 });
 
 test('unbekannte Status werden abgelehnt', async () => {
