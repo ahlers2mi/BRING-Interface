@@ -90,6 +90,50 @@ test('recipeWeight sperrt Blockiertes und dämpft kürzlich Gekochtes', () => {
   assert.ok(rausgeflogen < alt);
 });
 
+test('"rausgeflogen" dämpft auch ein nie gekochtes Rezept', () => {
+  // `rating_count` zählt nur gekochte Bewertungen. Ein Rezept, das nur
+  // weggeklickt wurde, steht dort auf 0 – trotzdem muss es seltener kommen.
+  const profile = buildTasteProfile([], []);
+  const base = recipe(1, 'Gnocchi-Auflauf', ['Gnocchi', 'Mozzarella']);
+
+  const neu = recipeWeight(base, profile);
+  const einmal = recipeWeight({ ...base, rejected_count: 1 }, profile);
+  const zweimal = recipeWeight({ ...base, rejected_count: 2 }, profile);
+
+  assert.ok(einmal < neu / 3, `neu=${neu} einmal=${einmal}`);
+  assert.ok(zweimal < einmal, `einmal=${einmal} zweimal=${zweimal}`);
+  assert.ok(zweimal > 0, 'gesperrt wird nur per blocked');
+});
+
+test('zwei aussortierte Rezepte machen noch kein "mögen wir nicht"', () => {
+  const recipes = [
+    recipe(1, 'Gnocchi-Auflauf', ['Gnocchi', 'Mozzarella']),
+    recipe(2, 'Gnocchi-Pfanne', ['Gnocchi', 'Mozzarella']),
+    recipe(3, 'Gnocchi-Salat', ['Gnocchi', 'Rucola']),
+  ];
+  const weg = (id) => ({ recipe_id: id, kind: 'rejected' });
+
+  // Zweimal weggeklickt reicht als Beleg nicht.
+  const duenn = buildTasteProfile(recipes, [weg(1), weg(2)]);
+  assert.deepEqual(duenn.disliked, []);
+  assert.equal(tasteFactor(recipes[0], duenn), 1);
+
+  // Dreimal schon – dann ist es ein Muster.
+  const klar = buildTasteProfile(recipes, [weg(1), weg(2), weg(3)]);
+  assert.ok(
+    klar.disliked.some((e) => e.label.toLowerCase() === 'gnocchi'),
+    `erwartet Gnocchi in ${klar.disliked.map((e) => e.label)}`
+  );
+  assert.ok(tasteFactor(recipes[0], klar) < 1);
+
+  // Zwei gekochte Bewertungen wiegen schwerer als zwei Absagen.
+  const gekocht = buildTasteProfile(recipes, [
+    { recipe_id: 1, kind: 'cooked', stars: 1 },
+    { recipe_id: 2, kind: 'cooked', stars: 1 },
+  ]);
+  assert.ok(gekocht.disliked.some((e) => e.label.toLowerCase() === 'gnocchi'));
+});
+
 test('pickWeighted respektiert die Gewichte', () => {
   const items = ['a', 'b', 'c'];
   assert.equal(pickWeighted(items, [0, 1, 0], () => 0.99), 'b');

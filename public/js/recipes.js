@@ -527,6 +527,16 @@ export async function loadTaste() {
           <label>👎 Mögen wir nicht</label>
           <div class="chips">${chipList(t.disliked_ingredients, 'chip-bad')}</div>
           <div class="chips">${chipList(t.disliked_tags, 'chip-bad')}</div>
+          ${
+            // Ohne echte Bewertungen speist sich die Liste allein aus dem, was
+            // rausgeflogen ist. Das sollte dranstehen, sonst wundert man sich
+            // über eine volle Liste bei "0 bewertet".
+            t.rated_count === 0 && t.rejected_count > 0
+              ? `<p class="hint">Stammt aus ${t.rejected_count} rausgeflogenen
+                 Rezepten – noch keine gekochten Bewertungen. Zutaten, die in
+                 beiden vorkommen, landen hier automatisch.</p>`
+              : ''
+          }
         </div>
       </div>
       <div class="taste-grid">
