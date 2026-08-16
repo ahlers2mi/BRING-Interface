@@ -1115,6 +1115,28 @@ test('die Einkauf-Markierung wandert beim Verschieben mit', async () => {
   assert.equal(ziel.shopped, true, 'eingekauft bleibt eingekauft');
 });
 
+test('die FHEM-Antwort beginnt bei heute und blickt nur nach vorn', async () => {
+  const res = await api('/api/fhem/plan');
+  assert.equal(res.status, 200, res.text);
+  const p = res.json;
+
+  assert.equal(p.from, todayIso, 'das Fenster beginnt heute');
+  const in6 = new Date(Date.now() + 6 * 86400000).toISOString().slice(0, 10);
+  assert.equal(p.to, in6, 'und endet sechs Tage spaeter');
+
+  // Jeder Wochentag traegt ein Datum, und keines liegt in der Vergangenheit.
+  // Die Nutzdaten benutzen englische Schluessel; erst HTTPMOD macht daraus
+  // die Readings mo..so.
+  const keys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+  const daten = keys.map((k) => p[`${k}_datum`]);
+  assert.equal(new Set(daten).size, 7, 'sieben verschiedene Tage');
+  for (const d of daten) assert.ok(d >= todayIso, `${d} liegt in der Vergangenheit`);
+
+  // tag1 ist heute, die Reihenfolge stimmt.
+  assert.equal(p[`${p.tag1_key}_datum`], todayIso);
+  assert.equal(p.today, p[p.tag1_key], 'heute steht doppelt drin, aber gleich');
+});
+
 test('unbekannte Status werden abgelehnt', async () => {
   const heute = new Date().toISOString().slice(0, 10);
   const res = await api(`/api/plan/${heute}/status`, {

@@ -1902,19 +1902,29 @@ function fhemImageUrl(recipe, base, token) {
 function fhemPlanPayload(req = null) {
   const base = publicBase(req);
   const token = String(req?.query?.token || '');
-  const week = weekOf(todayIso());
+  // Rollendes Fenster ab heute statt starr Mo–So: an einem Freitag will
+  // niemand im Wandtablet noch lesen, was es am Montag gab. Die Reading-Namen
+  // bleiben die Wochentage – ein schon vergangener Wochentag zeigt jetzt die
+  // KOMMENDE Woche, nicht die vergangene.
+  const heute = todayIso();
+  const week = weekOf(heute);
   const view = buildWeekView(week);
-  const today = view.days.find((d) => d.isToday) || null;
-  const tomorrowDate = addDays(todayIso(), 1);
-  const tomorrow = view.days.find((d) => d.date === tomorrowDate) || null;
+  const naechste = buildWeekView(shiftWeek(week, 1));
+  const fenster = [...view.days, ...naechste.days]
+    .filter((d) => d.date >= heute)
+    .slice(0, 7);
+
+  const today = fenster[0] || null;
+  const tomorrowDate = addDays(heute, 1);
+  const tomorrow = fenster.find((d) => d.date === tomorrowDate) || null;
   const taste = tasteSummary();
 
   const payload = {
     week: view.week,
-    from: view.from,
-    to: view.to,
-    planned: view.planned,
-    empty: view.empty,
+    from: fenster[0]?.date || view.from,
+    to: fenster[fenster.length - 1]?.date || view.to,
+    planned: fenster.filter((d) => d.recipe).length,
+    empty: fenster.filter((d) => !d.recipe).length,
     today: today?.recipe?.name || '',
     today_id: today?.recipe?.id || 0,
     today_time: today?.recipe?.prep_time || '',
@@ -1935,11 +1945,15 @@ function fhemPlanPayload(req = null) {
     rated_count: taste.rated_count,
     updated: new Date().toISOString().replace('T', ' ').slice(0, 19),
   };
-  for (const day of view.days) {
+  for (const [i, day] of fenster.entries()) {
     payload[day.key] = day.recipe?.name || '';
     payload[`${day.key}_status`] = day.status;
     payload[`${day.key}_stars`] = day.rating?.stars || 0;
     payload[`${day.key}_img`] = fhemImageUrl(day.recipe, base, token);
+    // Datum dazu: sonst ist nicht erkennbar, ob "mo" diese oder nächste Woche
+    // meint – und die Kachel kann die Tage ab heute sortieren.
+    payload[`${day.key}_datum`] = day.date;
+    payload[`tag${i + 1}_key`] = day.key;
   }
   payload.state = payload.today ? `Heute: ${payload.today}` : 'Heute: nichts geplant';
   for (const [key, value] of Object.entries(payload)) payload[key] = fhemValue(value);

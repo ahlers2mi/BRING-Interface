@@ -127,6 +127,24 @@ attr HTTP.Wochenplan reading32Regex "sat_img":"([^"]*)"
 attr HTTP.Wochenplan reading33Name so_bild
 attr HTTP.Wochenplan reading33Regex "sun_img":"([^"]*)"
 
+# Datum je Wochentag. Die Antwort ist ein ROLLENDES Fenster ab heute: an einem
+# Freitag zeigt "mo" also den KOMMENDEN Montag, nicht den vergangenen. Ohne das
+# Datum sieht man dem Reading nicht an, welche Woche gemeint ist.
+attr HTTP.Wochenplan reading34Name mo_datum
+attr HTTP.Wochenplan reading34Regex "mon_datum":"([^"]*)"
+attr HTTP.Wochenplan reading35Name di_datum
+attr HTTP.Wochenplan reading35Regex "tue_datum":"([^"]*)"
+attr HTTP.Wochenplan reading36Name mi_datum
+attr HTTP.Wochenplan reading36Regex "wed_datum":"([^"]*)"
+attr HTTP.Wochenplan reading37Name do_datum
+attr HTTP.Wochenplan reading37Regex "thu_datum":"([^"]*)"
+attr HTTP.Wochenplan reading38Name fr_datum
+attr HTTP.Wochenplan reading38Regex "fri_datum":"([^"]*)"
+attr HTTP.Wochenplan reading39Name sa_datum
+attr HTTP.Wochenplan reading39Regex "sat_datum":"([^"]*)"
+attr HTTP.Wochenplan reading40Name so_datum
+attr HTTP.Wochenplan reading40Regex "sun_datum":"([^"]*)"
+
 # Vorlauf: was man am Vorabend noch anfangen muss (auftauen, einweichen).
 attr HTTP.Wochenplan reading25Name heute_vorbereitung
 attr HTTP.Wochenplan reading25Regex "today_prep":"([^"]*)"
