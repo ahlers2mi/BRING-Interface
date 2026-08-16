@@ -106,11 +106,24 @@ hat, kann stattdessen `reading01JSON today` usw. verwenden.
 | `heute_bewertung` | `1`–`5` oder `rausgeflogen`, leer solange unbewertet |
 | `heute_sterne` | Sterne als Zahl (0 = keine Bewertung) |
 | `heute_zeit` | voraussichtliche Zubereitungszeit |
-| `mo` … `so` | die sieben Tage der laufenden Woche |
+| `mo` … `so` | die nächsten sieben Tage **ab heute** (siehe unten) |
 | `mo_sterne` … `so_sterne` | Bewertung des jeweiligen Tages |
+| `mo_datum` … `so_datum` | Datum des jeweiligen Tages (`2026-08-17`) |
 | `woche` | Kalenderwoche, z. B. `2026-W32` |
-| `geplant`, `leere_tage` | wie viele Tage belegt bzw. frei sind |
+| `geplant`, `leere_tage` | wie viele der sieben Tage belegt bzw. frei sind |
 | `stand` | Zeitpunkt des letzten Abrufs |
+
+> **Das Fenster rollt mit.** Der Abruf liefert nicht starr Montag bis Sonntag
+> der laufenden Woche, sondern die **nächsten sieben Tage ab heute** – am
+> Wandtablet will niemand freitags noch lesen, was es montags gab. Ein
+> Wochentag, der diese Woche schon vorbei ist, zeigt deshalb die **kommende**
+> Woche. Welcher Tag gemeint ist, steht in `mo_datum` … `so_datum`.
+>
+> Nebenbei behebt das einen Fehler: `morgen` wurde vorher nur innerhalb der
+> laufenden Woche gesucht. **Sonntags** liegt morgen aber schon in der nächsten
+> – das Reading blieb leer, und die Abend-Erinnerung
+> (`a_wochenplan_vorbereitung`) meldete sich ausgerechnet vor dem Wochenanfang
+> nicht.
 
 `STATE` ist über `stateFormat` „Heute: <Gericht>".
 
