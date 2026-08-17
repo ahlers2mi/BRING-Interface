@@ -18,7 +18,7 @@ Web Interface für Bring APP
 - **Mealie-Anbindung** (optional) – [Mealie](https://mealie.io) als Rezeptquelle: Rezepte dort pflegen, hier spiegeln; Bewertungen wandern als `rating`/`lastMade` zurück, der Wochenplan wird mit Mealies Menüplan abgeglichen (beide Richtungen).
 - **Cookidoo-Anbindung** (optional) – Thermomix-Rezepte aus [Cookidoo](https://cookidoo.de) im Würfeltopf (Name, Zutaten, Zeiten, Link – gekocht wird am Gerät), und Cookidoos Einkaufsliste auf Knopfdruck nach Bring.
 - **Rezept per Link, auch vom Handy** – Adresse einwerfen und speichern, auch mit Mealie als Quelle. Unter **Android** trägt sich die installierte Web-App selbst ins Teilen-Menü ein, unter **iOS** geht es über einen Kurzbefehl.
-- **Rezept-Import** – einzelne Rezepte per Link (Chefkoch und alle Seiten mit schema.org-Daten) oder **Massenimport von chefkoch.de** (z. B. 200 Rezepte auf einmal, im Hintergrund mit Fortschrittsanzeige).
+- **Rezept-Import** – einzelne Rezepte per Link (Chefkoch und alle Seiten mit schema.org-Daten), **aus einem YouTube-Kochvideo** (Beschreibung bzw. Untertitel) oder **Massenimport von chefkoch.de** (z. B. 200 Rezepte auf einmal, im Hintergrund mit Fortschrittsanzeige).
 - **Eigener Tab „Import & Quellen"** – Mealie, Cookidoo, Chefkoch-Import und KI-Analyse liegen zusammen; der Rezepte-Tab bleibt Liste und Geschmacksprofil. Die Rezeptliste lässt sich nach Herkunft filtern (Chefkoch, Cookidoo, eigene).
 - **Reste-Küche** – eingeben, was noch im Kühlschrank liegt, und passende Rezepte nach Abdeckung sortiert finden; fehlende Zutaten wandern auf Wunsch direkt nach Bring.
 - **KI-Rezeptanalyse** – kompletten Rezepttext einfügen; ein KI-Modell (über [OpenRouter](https://openrouter.ai/)) extrahiert automatisch Name, Beschreibung und Zutaten (mit Mengen) zum Prüfen und Speichern.
@@ -708,6 +708,25 @@ bleiben.
 - **Einzelnes Rezept per Link**: liest die schema.org-Daten (`Recipe`) der Seite –
   funktioniert bei Chefkoch (dort zuerst über die JSON-API) und den meisten
   anderen Rezeptseiten. Optional als Rückfall die KI-Analyse des Seitentexts.
+- **Rezept aus einem Kochvideo** (YouTube): einfach die Videoadresse einwerfen –
+  `youtu.be/…`, `watch?v=…`, `/shorts/…`, der `?si=…`-Anhang aus dem
+  Teilen-Menü darf dranbleiben. Ein Video hat keine schema.org-Daten, deshalb
+  geht die App einen eigenen Weg:
+
+  1. **Videobeschreibung** lesen. Bei Kochkanälen steht das Rezept dort fast
+     immer komplett drin. Eigenwerbung und Kapitelmarken darunter fallen weg.
+  2. Steht dort keine Zutatenliste: die **Untertitel** dazunehmen (deutsche
+     Spur bevorzugt, automatische als letzter Rückfall).
+  3. Den Text strukturieren – mit der **KI-Analyse**, wenn ein
+     `OPENROUTER_API_KEY` gesetzt ist, sonst mit einem Zeilen-Leser, der eine
+     Zutatenliste („500 g Gnocchi") von Arbeitsschritten („20 Minuten bei 200
+     Grad backen") unterscheidet.
+
+  Titel, Kanal (als Tag) und das Vorschaubild kommen mit; als Quelle steht die
+  Videoadresse am Rezept. Die **Videolänge wird bewusst nicht als Kochzeit**
+  übernommen. Läuft Mealie, wird das Rezept dort angelegt – Mealie bleibt die
+  eine Quelle. Findet die App keine Zutatenliste, kommt der gesammelte Text
+  zurück und landet direkt im Feld „Rezepttext", wo die KI-Analyse dranmuss.
 - **Massenimport von chefkoch.de**: Suchbegriff (oder leer für beliebte Rezepte)
   und Anzahl angeben. Der Lauf passiert im Hintergrund mit Fortschritt und
   Protokoll, lässt sich abbrechen und überspringt bereits vorhandene Rezepte
@@ -786,6 +805,7 @@ lib/normalize.js   Zutaten normalisieren und vergleichen
 lib/taste.js       Geschmacksprofil und Würfelgewichte
 lib/mealplan.js    Wochenplan, Reste-Suche, Wocheneinkauf
 lib/recipe-import.js  Chefkoch-API, schema.org-Parser, Import-Job
+lib/video-import.js   Kochvideos: Beschreibung, Untertitel, Zutaten aus Zeilen
 lib/mealie.js      Mealie-Anbindung: Abgleich, Abbildung, Bewertungs-Rückschreibung
 public/js/*.js     Oberfläche je Tab (core, shopping, plan, recipes, fridge)
 fhem/              Fertiger FHEM-Block + Anleitung

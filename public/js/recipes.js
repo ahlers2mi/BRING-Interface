@@ -954,7 +954,21 @@ export async function initRecipes() {
       if (!res.duplicate) el('addUrl').value = '';
       await refreshAll();
     } catch (err) {
-      flash('addUrlResult', `Fehler: ${escHtml(err.message)}`, 'error');
+      // Bei einem Video schickt der Server den gesammelten Text mit, wenn keine
+      // Zutatenliste erkennbar war – direkt in die KI-Analyse legen, statt den
+      // Nutzer die Beschreibung selbst suchen zu lassen.
+      const text = err.data?.text;
+      if (text) {
+        el('recipeRawText').value = text;
+        flash(
+          'addUrlResult',
+          `${escHtml(err.message)} Der Text steht jetzt unten im Feld „Rezepttext".`,
+          'info'
+        );
+        el('recipeRawText').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        flash('addUrlResult', `Fehler: ${escHtml(err.message)}`, 'error');
+      }
     } finally {
       setLoading(btn, false);
     }
