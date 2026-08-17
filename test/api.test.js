@@ -696,17 +696,17 @@ test('mitkopierter Text hinter der Adresse wird abgeschnitten', async () => {
 
 // ── Kochvideo ─────────────────────────────────────────────────────────────────
 
-function fakeYoutubeFetch(beschreibung) {
+function fakeYoutubeFetch(beschreibung, id = 'smWgIBFuVRU') {
   const player = {
     videoDetails: {
-      videoId: 'smWgIBFuVRU',
+      videoId: id,
       title: 'Gnocchi-Auflauf | Rezept von Emmi',
       author: 'Emmi kocht einfach',
       lengthSeconds: '512',
       shortDescription: beschreibung,
       thumbnail: {
         thumbnails: [
-          { url: 'https://i.ytimg.com/vi/smWgIBFuVRU/maxresdefault.jpg', width: 1280 },
+          { url: `https://i.ytimg.com/vi/${id}/maxresdefault.jpg`, width: 1280 },
         ],
       },
     },
@@ -763,7 +763,7 @@ test('Rezept aus einem Kochvideo uebernehmen', async () => {
     // Die Videolaenge (8:32) darf nicht als Kochzeit durchgehen.
     assert.ok(!rezept.prep_time, `prep_time=${rezept.prep_time}`);
 
-    // Zweiter Versuch: dieselbe Adresse ist schon bekannt.
+    // Zweiter Versuch: dasselbe Video, andere Schreibweise -> Dublette.
     const again = await api('/api/recipes/add', {
       method: 'POST',
       body: { url: 'https://www.youtube.com/watch?v=smWgIBFuVRU' },
@@ -774,12 +774,99 @@ test('Rezept aus einem Kochvideo uebernehmen', async () => {
   }
 });
 
-test('Video ohne Zutatenliste gibt den Text zum Weiterarbeiten zurueck', async () => {
-  globalThis.fetch = fakeYoutubeFetch('Heute wird gekocht! Zutaten stehen im Video.');
+test('ein zweites Video ist keine Dublette des ersten', async () => {
+  // Vorher wurde die Adresse am "?" abgeschnitten: von "watch?v=..." blieb
+  // "https://www.youtube.com/watch" uebrig - und das steckt in jedem
+  // Video-Rezept, jedes weitere Video galt also als schon bekannt.
+  globalThis.fetch = fakeYoutubeFetch(
+    ['300 g Linsen', '1 Zwiebel', '', 'Alles koecheln lassen.'].join('\n'),
+    'zweitesVid0'
+  );
   try {
     const res = await api('/api/recipes/add', {
       method: 'POST',
-      body: { url: 'https://youtu.be/smWgIBFuVRU' },
+      body: { url: 'https://www.youtube.com/watch?v=zweitesVid0' },
+    });
+    assert.equal(res.status, 201, res.text);
+    assert.ok(!res.json.duplicate, 'zweites Video wurde angelegt');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('Anreichern fuellt Luecken, ohne Bewertungen anzufassen', async () => {
+  // Rezept wie von Hand angelegt: Name und Videoadresse, sonst nichts.
+  const angelegt = await api('/api/recipes', {
+    method: 'POST',
+    body: {
+      name: 'Neapolitanische Pizza',
+      source_url: 'https://youtu.be/PizzaBiga01',
+      ingredients: [{ name: 'Mehl', amount: '1 kg' }],
+    },
+  });
+  const id = angelegt.json.id;
+  // Bewertung dran, damit wir sehen: die bleibt.
+  await api(`/api/recipes/${id}/rate`, { method: 'POST', body: { rating: 'lecker' } });
+
+  globalThis.fetch = fakeYoutubeFetch(
+    [
+      '1000 g Mehl Typo1',
+      '650 ml Wasser',
+      '25 g Salz',
+      '2 g Hefe',
+      '',
+      'Biga 18 Stunden reifen lassen.',
+    ].join('\n'),
+    'PizzaBiga01'
+  );
+  try {
+    const res = await api(`/api/recipes/${id}/enrich`, { method: 'POST', body: {} });
+    assert.equal(res.status, 200, res.text);
+    assert.equal(res.json.outcome, 'enriched');
+    assert.match(res.json.message, /Video/);
+
+    const rezept = res.json.recipe;
+    assert.equal(rezept.name, 'Neapolitanische Pizza', 'Name bleibt – daran haengt alles');
+    assert.equal(rezept.ingredients.length, 4, 'mehr Zutaten als vorher');
+    assert.match(rezept.instructions, /Biga 18 Stunden/);
+    assert.match(rezept.image_url, /maxresdefault/);
+    assert.equal(rezept.rating_count, 1, 'Bewertung unberuehrt');
+    assert.equal(rezept.rejected_count, 0, 'nichts als "rausgeflogen" gebucht');
+
+    // Zweiter Lauf ohne overwrite: es steht schon alles da.
+    const nochmal = await api(`/api/recipes/${id}/enrich`, { method: 'POST', body: {} });
+    assert.equal(nochmal.json.outcome, 'not-needed', nochmal.text);
+    assert.equal(nochmal.json.recipe.ingredients.length, 4);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('Anreichern braucht eine Quelladresse', async () => {
+  const angelegt = await api('/api/recipes', {
+    method: 'POST',
+    body: { name: 'Nur ein Zettel', ingredients: [{ name: 'Mehl' }] },
+  });
+  const res = await api(`/api/recipes/${angelegt.json.id}/enrich`, {
+    method: 'POST',
+    body: {},
+  });
+  assert.equal(res.status, 400);
+  assert.match(res.json.error, /Quelladresse/);
+
+  const weg = await api('/api/recipes/999999/enrich', { method: 'POST', body: {} });
+  assert.equal(weg.status, 404);
+});
+
+test('Video ohne Zutatenliste gibt den Text zum Weiterarbeiten zurueck', async () => {
+  globalThis.fetch = fakeYoutubeFetch(
+    'Heute wird gekocht! Zutaten stehen im Video.',
+    'ohneListe00'
+  );
+  try {
+    const res = await api('/api/recipes/add', {
+      method: 'POST',
+      body: { url: 'https://youtu.be/ohneListe00' },
     });
     assert.equal(res.status, 422, res.text);
     assert.match(res.json.error, /keine erkennbare Zutatenliste/);
