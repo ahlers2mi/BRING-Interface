@@ -69,7 +69,14 @@ import {
 import { realIngredients } from './lib/normalize.js';
 import { renderPlanSvg } from './lib/plan-svg.js';
 import {
+  fetchVideoSource,
+  isVideoUrl,
+  recipeFromText,
+  videoRecipeBase,
+} from './lib/video-import.js';
+import {
   cancelChefkochJob,
+  createRecipeInMealie,
   deleteRecipeInMealie,
   fetchMealieImage,
   fetchRecipeDetail,
@@ -1191,6 +1198,66 @@ app.post('/api/fridge/search', (req, res) => {
 
 // ── Rezept-Import (URL + Massenimport) ────────────────────────────────────────
 
+// Ein Kochvideo auswerten. Zwei Schritte: erst Text besorgen (Beschreibung,
+// sonst Untertitel), dann strukturieren – mit der KI, wenn ein Schlüssel da ist,
+// sonst mit dem Zeilen-Leser aus `video-import.js`.
+async function recipeFromVideo(url, { ai = true } = {}) {
+  const source = await fetchVideoSource(url);
+  const base = videoRecipeBase(source);
+
+  let parsed = null;
+  let aiError = '';
+  if (ai && process.env.OPENROUTER_API_KEY) {
+    try {
+      parsed = await analyzeRecipeText(
+        [
+          'Rezept aus einem Kochvideo. Zutaten und Zubereitung stehen in der',
+          'Beschreibung bzw. im gesprochenen Text darunter.',
+          `Titel: ${source.title}`,
+          source.author ? `Kanal: ${source.author}` : '',
+          '',
+          source.text.slice(0, 12000),
+        ]
+          .filter(Boolean)
+          .join('\n')
+      );
+    } catch (err) {
+      aiError = err.message;
+    }
+  }
+
+  // Ohne KI (oder wenn sie nichts gefunden hat): Zutatenliste aus den Zeilen.
+  if (!parsed || !(parsed.ingredients || []).length) {
+    parsed = recipeFromText(source.text, { name: base.name });
+  }
+
+  if (!parsed || !(parsed.ingredients || []).length) {
+    const err = new Error(
+      `Im Video „${source.title}" steht keine erkennbare Zutatenliste ` +
+        `(ausgewertet: ${source.used}).` +
+        (aiError ? ` KI-Analyse: ${aiError}` : '') +
+        ' Der Text steht unten – hineinschauen, ergänzen und die KI-Analyse benutzen.'
+    );
+    err.status = 422;
+    err.videoText = source.text;
+    throw err;
+  }
+
+  return {
+    source,
+    recipe: {
+      ...parsed,
+      name: String(parsed.name || '').trim() || base.name,
+      description:
+        parsed.description ||
+        `Aus dem Video „${source.title}"${source.author ? ` von ${source.author}` : ''}.`,
+      source_url: base.source_url,
+      image_url: base.image_url,
+      tags: [...new Set([...(parsed.tags || []), ...base.tags])].slice(0, 12),
+    },
+  };
+}
+
 // POST /api/recipes/import/url – body: { url, save?, ai? }
 // Holt ein Rezept von einer Webseite (schema.org-Daten, bei Chefkoch die API).
 app.post('/api/recipes/import/url', blockWhenMealie, async (req, res) => {
@@ -1199,6 +1266,21 @@ app.post('/api/recipes/import/url', blockWhenMealie, async (req, res) => {
     return res.status(400).json({ error: 'Bitte eine vollständige http(s)-URL angeben.' });
   }
   try {
+    // Kochvideo: eigener Weg (Beschreibung/Untertitel statt schema.org).
+    if (isVideoUrl(url)) {
+      const { recipe, source } = await recipeFromVideo(url, { ai: req.body?.ai !== false });
+      if (req.body?.save) {
+        const existing = findRecipeByName(recipe.name);
+        if (existing) {
+          return res.json({ recipe: getRecipeById(existing.id), saved: false, duplicate: true });
+        }
+        return res
+          .status(201)
+          .json({ recipe: createRecipe({ ...recipe, source: 'video' }), saved: true, video: source.used });
+      }
+      return res.json({ recipe, saved: false, video: source.used });
+    }
+
     let recipe = await fetchRecipeFromUrl(url);
 
     // Fallback: Seitentext von der KI auswerten lassen (nur wenn gewünscht).
@@ -1231,7 +1313,9 @@ app.post('/api/recipes/import/url', blockWhenMealie, async (req, res) => {
     }
     res.json({ recipe, saved: false });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res
+      .status(err.status || 500)
+      .json({ error: err.message, ...(err.videoText ? { text: err.videoText } : {}) });
   }
 });
 
@@ -1328,6 +1412,43 @@ async function addRecipeByUrl(url) {
     };
   }
 
+  // Kochvideo: Mealies Importer kann YouTube nicht lesen (dort steckt kein
+  // schema.org-Recipe), also werten wir es selbst aus. Läuft Mealie, wird das
+  // Ergebnis trotzdem dort angelegt – Mealie bleibt die eine Quelle.
+  if (isVideoUrl(url)) {
+    const { recipe, source } = await recipeFromVideo(url);
+    if (mealieEnabled()) {
+      const slug = await createRecipeInMealie(recipe);
+      const detail = await fetchRecipeDetail(slug);
+      const mapped = mapMealieRecipe(detail, mealieConfig().url);
+      const saved = mapped ? upsertRecipeFromSource(mapped) : null;
+      return {
+        status: 201,
+        body: {
+          ok: true,
+          target: 'mealie',
+          name: saved?.name || recipe.name,
+          link: mealieRecipeUrl(slug),
+          message:
+            `Aus dem Video übernommen (${source.used}), ` +
+            `${recipe.ingredients.length} Zutaten: ${saved?.name || recipe.name}`,
+        },
+      };
+    }
+    const created = createRecipe({ ...recipe, source: 'video' });
+    return {
+      status: 201,
+      body: {
+        ok: true,
+        target: 'lokal',
+        name: created.name,
+        message:
+          `Aus dem Video übernommen (${source.used}), ` +
+          `${recipe.ingredients.length} Zutaten: ${created.name}`,
+      },
+    };
+  }
+
   if (mealieEnabled()) {
     const slug = await importUrlToMealie(url);
     if (!slug) throw new Error('Mealie hat kein Rezept angelegt.');
@@ -1371,7 +1492,11 @@ async function handleAddUrl(req, res) {
     const { status, body } = await addRecipeByUrl(url);
     res.status(status).json(body);
   } catch (err) {
-    res.status(502).json({ error: err.message });
+    // Beim Video liegt der gesammelte Text am Fehler: mitschicken, damit man
+    // ihn in die KI-Analyse kopieren kann statt ihn erneut zu suchen.
+    res
+      .status(err.status || 502)
+      .json({ error: err.message, ...(err.videoText ? { text: err.videoText } : {}) });
   }
 }
 

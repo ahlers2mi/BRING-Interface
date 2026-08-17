@@ -694,6 +694,101 @@ test('mitkopierter Text hinter der Adresse wird abgeschnitten', async () => {
   }
 });
 
+// ── Kochvideo ─────────────────────────────────────────────────────────────────
+
+function fakeYoutubeFetch(beschreibung) {
+  const player = {
+    videoDetails: {
+      videoId: 'smWgIBFuVRU',
+      title: 'Gnocchi-Auflauf | Rezept von Emmi',
+      author: 'Emmi kocht einfach',
+      lengthSeconds: '512',
+      shortDescription: beschreibung,
+      thumbnail: {
+        thumbnails: [
+          { url: 'https://i.ytimg.com/vi/smWgIBFuVRU/maxresdefault.jpg', width: 1280 },
+        ],
+      },
+    },
+  };
+  const seite = `<html><script>var ytInitialPlayerResponse = ${JSON.stringify(
+    player
+  )};</script></html>`;
+  return async (url, opts) => {
+    const href = String(url);
+    if (href.startsWith(base)) return realFetch(url, opts);
+    if (href.includes('youtube.com/watch')) {
+      return new Response(seite, { status: 200, headers: { 'content-type': 'text/html' } });
+    }
+    return new Response('weg', { status: 404 });
+  };
+}
+
+test('Rezept aus einem Kochvideo uebernehmen', async () => {
+  globalThis.fetch = fakeYoutubeFetch(
+    [
+      'Zutaten:',
+      '500 g Gnocchi',
+      '250 g Kirschtomaten',
+      '1 Kugel Mozzarella',
+      '',
+      'Zubereitung:',
+      'Alles mischen und in die Form geben.',
+      '20 Minuten bei 200 Grad backen.',
+      '',
+      'Instagram: @emmikochteinfach',
+    ].join('\n')
+  );
+  try {
+    const res = await api('/api/recipes/add', {
+      method: 'POST',
+      body: { url: 'https://youtu.be/smWgIBFuVRU?si=u2Opfb20Jf_uPqVb' },
+    });
+    assert.equal(res.status, 201, res.text);
+    assert.match(res.json.message, /Video/);
+
+    const rezept = (await api('/api/recipes')).json.find((r) => r.name === 'Gnocchi-Auflauf');
+    assert.ok(rezept, 'Titel ohne "| Rezept von Emmi"');
+    assert.equal(rezept.source, 'video');
+    assert.equal(rezept.source_url, 'https://www.youtube.com/watch?v=smWgIBFuVRU');
+    assert.match(rezept.image_url, /maxresdefault/);
+    assert.deepEqual(rezept.ingredients.map((i) => i.name), [
+      'Gnocchi',
+      'Kirschtomaten',
+      'Mozzarella',
+    ]);
+    assert.match(rezept.instructions, /Alles mischen/);
+    assert.doesNotMatch(rezept.instructions, /Instagram/);
+    assert.ok(rezept.tags.includes('Video'), `Tags: ${rezept.tags}`);
+    // Die Videolaenge (8:32) darf nicht als Kochzeit durchgehen.
+    assert.ok(!rezept.prep_time, `prep_time=${rezept.prep_time}`);
+
+    // Zweiter Versuch: dieselbe Adresse ist schon bekannt.
+    const again = await api('/api/recipes/add', {
+      method: 'POST',
+      body: { url: 'https://www.youtube.com/watch?v=smWgIBFuVRU' },
+    });
+    assert.equal(again.json.duplicate, true, again.text);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('Video ohne Zutatenliste gibt den Text zum Weiterarbeiten zurueck', async () => {
+  globalThis.fetch = fakeYoutubeFetch('Heute wird gekocht! Zutaten stehen im Video.');
+  try {
+    const res = await api('/api/recipes/add', {
+      method: 'POST',
+      body: { url: 'https://youtu.be/smWgIBFuVRU' },
+    });
+    assert.equal(res.status, 422, res.text);
+    assert.match(res.json.error, /keine erkennbare Zutatenliste/);
+    assert.match(res.json.text, /Heute wird gekocht/, 'Text fuer die KI-Analyse dabei');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
 test('Einzelimport per URL liest schema.org-Daten', async () => {
   const html = `<script type="application/ld+json">
     {"@type":"Recipe","name":"Ofengemüse","recipeIngredient":["3 Karotten","1 Zucchini"],
@@ -1082,11 +1177,9 @@ test('eingekaufte Tage ueberlebt der Wochenwurf', async () => {
   // ... ein ausdruecklicher Wurf fuer genau diesen Tag aber schon.
   await api('/api/plan/roll', { method: 'POST', body: { date: tag } });
   plan = (await api('/api/plan')).json;
-  assert.equal(
-    plan.days.find((d) => d.date === tag).shopped,
-    false,
-    'anderes Gericht -> Einkauf gilt nicht mehr'
-  );
+  const danach = plan.days.find((d) => d.date === tag);
+  assert.notEqual(danach.recipe.id, rezept.id, 'derselbe Tag bekommt etwas anderes');
+  assert.equal(danach.shopped, false, 'anderes Gericht -> Einkauf gilt nicht mehr');
 
   // Zuruecknehmen geht auch.
   await api(`/api/plan/${tag}`, { method: 'PUT', body: { recipe_id: rezept.id } });

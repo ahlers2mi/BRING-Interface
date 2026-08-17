@@ -176,6 +176,42 @@ das beim Prüfen ohnehin gelesene Rezept direkt angelegt (`source: web`).
 Der `dryRun` ist wichtig: gegen eine unbekannte Seite ist er die einzige
 ehrliche Auskunft, ob sie sich einlesen lässt.
 
+## Rezepte aus Kochvideos (`lib/video-import.js`)
+
+YouTube liefert **kein** schema.org-`Recipe` – der normale Importer und auch
+Mealies `recipe-scrapers` laufen dort ins Leere. Zu holen ist trotzdem viel:
+
+- Titel, Kanal, Länge und Vorschaubild stehen im `ytInitialPlayerResponse` der
+  Watch-Seite. Geschnitten wird das mit `sliceJsonObject()` (**Klammern zählen**,
+  kein `/\{.*\}/` – der Block enthält selbst Klammern in Zeichenketten).
+- Die **Beschreibung** (`videoDetails.shortDescription`) ist die beste Quelle:
+  bei Kochkanälen steht das Rezept dort meist vollständig. Rückfall, falls
+  YouTube das Objekt umbaut: dieselbe Zeichenkette per Regex aus dem Quelltext.
+- Ohne Zutatenliste in der Beschreibung kommen die **Untertitel** dazu
+  (`captions.playerCaptionsTracklistRenderer.captionTracks[].baseUrl` + `&fmt=json3`).
+  Deutsch vor Englisch, selbst geschriebene Spur vor `kind: 'asr'`. Scheitert
+  der Abruf, ist das kein Fehler – Untertitel sind Beigabe.
+- Das XML-Format der Untertitel ist **doppelt maskiert** (`&amp;#39;` für ein
+  Apostroph), deshalb nach `stripHtml` noch ein `decodeEntities`.
+
+Zwei Fallen, die beim Bauen zugeschnappt sind:
+
+- **Die Videolänge ist keine Kochzeit.** `videoRecipeBase()` setzt bewusst kein
+  `prep_time` – sonst wäre ein 9-Minuten-Video ein 9-Minuten-Gericht und würde
+  das Zeitlimit beim Würfeln verfälschen.
+- **„20 Minuten bei 200 Grad backen" fängt genauso mit einer Zahl an wie
+  „500 g Gnocchi".** `looksLikeIngredientLine()` prüft deshalb die **Rohzeile**
+  auf Zeit-/Temperaturangaben, nicht das Ergebnis von `splitAmount`: das hält
+  bei „200 Grad" das „G" für Gramm und lässt „rad Umluft vorheizen" übrig.
+
+Strukturiert wird der Text mit `analyzeRecipeText()` (OpenRouter), wenn ein
+Schlüssel da ist, sonst mit `recipeFromText()`. Findet keiner der beiden eine
+Liste, wirft `recipeFromVideo()` einen Fehler mit `status 422` **und dem Text am
+Fehlerobjekt** – `apiFetch` hängt den ganzen Antwortkörper an den Fehler, die
+Oberfläche legt den Text ins Feld „Rezepttext". Läuft Mealie, wird das Ergebnis
+mit `createRecipeInMealie()` dort angelegt (POST nur mit Namen, alles andere per
+PATCH), damit Mealie die eine Quelle bleibt.
+
 ## Mealie
 
 - Läuft im selben Stack (Profil `mealie`), Oberfläche unter

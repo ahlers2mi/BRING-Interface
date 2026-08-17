@@ -61,7 +61,14 @@ export async function apiFetch(url, options = {}) {
     throw new Error('Nicht angemeldet.');
   }
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  if (!res.ok) {
+    // Der ganze Antwortkörper hängt am Fehler: manche Routen liefern neben der
+    // Meldung noch Material zum Weiterarbeiten (z. B. den Videotext, wenn im
+    // Video keine Zutatenliste gefunden wurde).
+    const err = new Error(data.error || `HTTP ${res.status}`);
+    err.data = data;
+    throw err;
+  }
   return data;
 }
 
