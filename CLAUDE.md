@@ -204,6 +204,20 @@ Zwei Fallen, die beim Bauen zugeschnappt sind:
   auf Zeit-/Temperaturangaben, nicht das Ergebnis von `splitAmount`: das hält
   bei „200 Grad" das „G" für Gramm und lässt „rad Umluft vorheizen" übrig.
 
+**Dublettenschlüssel:** `addRecipeByUrl` nimmt beim Video die **Video-Kennung**,
+nicht die Adresse. Der alte `url.split('?')[0]` ließ von `watch?v=…` nur
+`https://www.youtube.com/watch` übrig – das steckt in jedem Video-Rezept, jedes
+weitere Video galt also als „kennen wir schon". Die Kennung fängt umgekehrt
+`youtu.be/<id>` und `watch?v=<id>` als dasselbe Video.
+
+**Nachträglich anreichern:** `POST /api/recipes/:id/enrich` liest die Quelle des
+Rezepts erneut (Video, Chefkoch, schema.org) und füllt Lücken; `overwrite: true`
+ersetzt. Der **Name wird bewusst nicht überschrieben** – daran hängen Plan,
+Bewertungen und die Wiedererkennung. Bei Mealie-Rezepten geht das über
+`enrichRecipeInMealie()` (PATCH + Bild-POST), danach wird der Spiegel sofort
+aufgefrischt. Das alte `/api/mealie/repair` bleibt für den Sammellauf über die
+PLUS-Anrisse, kann aber nur Chefkoch.
+
 Strukturiert wird der Text mit `analyzeRecipeText()` (OpenRouter), wenn ein
 Schlüssel da ist, sonst mit `recipeFromText()`. Findet keiner der beiden eine
 Liste, wirft `recipeFromVideo()` einen Fehler mit `status 422` **und dem Text am

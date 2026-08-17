@@ -73,11 +73,13 @@ import {
   isVideoUrl,
   recipeFromText,
   videoRecipeBase,
+  youtubeId,
 } from './lib/video-import.js';
 import {
   cancelChefkochJob,
   createRecipeInMealie,
   deleteRecipeInMealie,
+  enrichRecipeInMealie,
   fetchMealieImage,
   fetchRecipeDetail,
   getChefkochJob,
@@ -796,6 +798,112 @@ app.delete('/api/recipes/:id/ratings/:ratingId', (req, res) => {
   res.json(getRecipeById(recipe.id));
 });
 
+// POST /api/recipes/:id/enrich – body: { url?, overwrite? }
+// Ein vorhandenes Rezept aus seiner Quelle nachfüllen: Video, Chefkoch oder
+// jede Seite mit schema.org-Daten. Ohne `url` wird `source_url` genommen.
+// Standard ist "nur Lücken füllen" – von Hand Gepflegtes bleibt stehen.
+// Bewertungen, Plan und Kennung bleiben immer unberührt.
+app.post('/api/recipes/:id/enrich', async (req, res) => {
+  const recipe = getRecipeById(Number(req.params.id));
+  if (!recipe) return res.status(404).json({ error: 'Rezept nicht gefunden.' });
+
+  const url = String(req.body?.url || recipe.source_url || '')
+    .trim()
+    .split(/\s+/)[0];
+  if (!/^https?:\/\//i.test(url)) {
+    return res.status(400).json({
+      error:
+        'Am Rezept steht keine Quelladresse. Adresse mitschicken (oder in Mealie ' +
+        'unter „Original URL" eintragen), dann kann ich dort nachlesen.',
+    });
+  }
+  const overwrite = Boolean(req.body?.overwrite);
+
+  try {
+    // Quelle lesen – Video oder normale Seite.
+    let incoming = null;
+    let herkunft = 'Seite';
+    if (isVideoUrl(url)) {
+      const { recipe: fromVideo, source } = await recipeFromVideo(url);
+      incoming = fromVideo;
+      herkunft = `Video (${source.used})`;
+    } else {
+      incoming = await fetchRecipeFromUrl(url);
+    }
+    if (!incoming) {
+      return res.status(422).json({
+        error: `Unter ${url} stehen keine auswertbaren Rezeptdaten.`,
+      });
+    }
+    // Der Name bleibt: daran hängen Plan, Bewertungen und die Wiedererkennung.
+    delete incoming.name;
+
+    if (recipe.source_slug && mealieEnabled()) {
+      const { outcome, detail, changed } = await enrichRecipeInMealie(
+        recipe.source_slug,
+        incoming,
+        { overwrite }
+      );
+      if (outcome === 'not-needed') {
+        return res.json({
+          recipe,
+          outcome,
+          message: `Nichts nachzutragen – in Mealie steht schon alles (${herkunft} gelesen).`,
+        });
+      }
+      const mapped = detail ? mapMealieRecipe(detail, mealieConfig().url) : null;
+      const saved = mapped ? upsertRecipeFromSource(mapped) : recipe;
+      return res.json({
+        recipe: saved,
+        outcome,
+        message: `Aus dem ${herkunft} nachgetragen: ${changed.join(', ')}.`,
+      });
+    }
+
+    // Örtliches Rezept: dieselbe Regel, nur direkt in der Datenbank.
+    const fields = {};
+    const changed = [];
+    const vorhanden = realIngredients(recipe.ingredients || []).length;
+    if (
+      (incoming.ingredients || []).length &&
+      (overwrite || incoming.ingredients.length > vorhanden)
+    ) {
+      fields.ingredients = incoming.ingredients;
+      changed.push(`${incoming.ingredients.length} Zutaten`);
+    }
+    for (const [key, label] of [
+      ['instructions', 'Zubereitung'],
+      ['description', 'Beschreibung'],
+      ['prep_time', 'Zeit'],
+      ['servings', 'Portionen'],
+      ['image_url', 'Bild'],
+      ['source_url', 'Quelle'],
+    ]) {
+      const wert = incoming[key];
+      if (!wert) continue;
+      if (!overwrite && String(recipe[key] || '').trim()) continue;
+      fields[key] = wert;
+      changed.push(label);
+    }
+    if (!changed.length) {
+      return res.json({
+        recipe,
+        outcome: 'not-needed',
+        message: `Nichts nachzutragen – es steht schon alles da (${herkunft} gelesen).`,
+      });
+    }
+    return res.json({
+      recipe: updateRecipe(recipe.id, fields),
+      outcome: 'enriched',
+      message: `Aus dem ${herkunft} nachgetragen: ${changed.join(', ')}.`,
+    });
+  } catch (err) {
+    res
+      .status(err.status || 502)
+      .json({ error: err.message, ...(err.videoText ? { text: err.videoText } : {}) });
+  }
+});
+
 // POST /api/recipes/:id/block – body: { blocked: true|false }
 app.post('/api/recipes/:id/block', (req, res) => {
   const recipe = getRecipeById(Number(req.params.id));
@@ -1402,8 +1510,16 @@ async function addRecipeByUrl(url) {
     return { status: 400, body: { error: 'Bitte eine vollständige http(s)-Adresse angeben.' } };
   }
 
-  // Schon da? Bei Chefkoch ist die Rezept-Nummer eindeutig, sonst die ganze URL.
-  const key = /chefkoch\.de\/rezepte\/(\d+)\//.exec(url)?.[0] || url.split('?')[0];
+  // Schon da? Bei Chefkoch ist die Rezept-Nummer eindeutig, beim Video die
+  // Video-Kennung, sonst die Adresse ohne Anhang.
+  //
+  // Die Kennung ist hier Pflicht: bei `watch?v=…` bliebe vom Abschneiden am `?`
+  // nur `https://www.youtube.com/watch` übrig – und das steckt in JEDEM
+  // Video-Rezept, jedes zweite Video wäre also fälschlich eine Dublette. Die
+  // Kennung fängt umgekehrt auch `youtu.be/<id>` und `watch?v=<id>` als
+  // dasselbe Video.
+  const key =
+    /chefkoch\.de\/rezepte\/(\d+)\//.exec(url)?.[0] || youtubeId(url) || url.split('?')[0];
   const known = findRecipeBySourceUrlPart(key);
   if (known) {
     return {

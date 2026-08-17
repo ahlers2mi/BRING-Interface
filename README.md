@@ -727,6 +727,13 @@ bleiben.
   übernommen. Läuft Mealie, wird das Rezept dort angelegt – Mealie bleibt die
   eine Quelle. Findet die App keine Zutatenliste, kommt der gesammelte Text
   zurück und landet direkt im Feld „Rezepttext", wo die KI-Analyse dranmuss.
+- **Anreichern** (`🩹` an der Rezeptkarte): liest die **Quelle des Rezepts**
+  nochmal und füllt, was fehlt – Zutaten, Zubereitung, Bild, Zeit, Portionen.
+  Funktioniert für Videos genauso wie für normale Rezeptseiten und Chefkoch.
+  Standard ist „nur Lücken füllen"; steht schon eine Zubereitung da, kommt eine
+  Rückfrage, ob ersetzt werden soll (Umschalttaste beim Klick ersetzt direkt).
+  **Name, Bewertungen und Plan bleiben unangetastet** – Anreichern ist niemals
+  ein Löschen-und-neu-Anlegen. Läuft Mealie, wird dort ergänzt.
 - **Massenimport von chefkoch.de**: Suchbegriff (oder leer für beliebte Rezepte)
   und Anzahl angeben. Der Lauf passiert im Hintergrund mit Fortschritt und
   Protokoll, lässt sich abbrechen und überspringt bereits vorhandene Rezepte

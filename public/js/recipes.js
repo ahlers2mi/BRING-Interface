@@ -114,7 +114,7 @@ function formPayload() {
 
 // providerOf/PROVIDER_LABEL liegen in core.js – die Reste-Küche braucht sie
 // genauso.
-const PROVIDER_MODES = new Set(['chefkoch', 'cookidoo', 'other']);
+const PROVIDER_MODES = new Set(['chefkoch', 'cookidoo', 'video', 'other']);
 
 function filteredRecipes() {
   const query = (el('recipeSearch')?.value || '').trim().toLowerCase();
@@ -274,8 +274,11 @@ function buildRecipeCard(recipe) {
           : '<button class="btn btn-secondary btn-sm" data-action="edit">✏️ Bearbeiten</button>'
       }
       ${
-        recipe.incomplete && mealieLink
-          ? '<button class="btn btn-secondary btn-sm" data-action="repair" title="Zutaten und Zubereitung aus der Chefkoch-API nachtragen">🩹 Anreichern</button>'
+        recipe.source_url
+          ? `<button class="btn btn-secondary btn-sm" data-action="enrich"
+               title="Aus der Quelle (${escHtml(
+                 providerOf(recipe) === 'video' ? 'Video' : 'Seite'
+               )}) nachlesen und Lücken füllen – Bewertungen bleiben">🩹 Anreichern</button>`
           : ''
       }
       <button class="btn btn-secondary btn-sm" data-action="course" title="${
@@ -305,15 +308,43 @@ function buildRecipeCard(recipe) {
   node
     .querySelector('[data-action="edit"]')
     ?.addEventListener('click', () => editRecipe(recipe));
-  node.querySelector('[data-action="repair"]')?.addEventListener('click', async (e) => {
+  // Aus der Quelle nachlesen. Standard: nur Lücken füllen. Mit gedrückter
+  // Umschalttaste (bzw. nach Rückfrage) wird überschrieben – dafür fragen wir,
+  // weil dabei von Hand Gepflegtes verloren geht.
+  node.querySelector('[data-action="enrich"]')?.addEventListener('click', async (e) => {
     const btn = e.currentTarget;
+    const overwrite =
+      e.shiftKey ||
+      (Boolean(String(recipe.instructions || '').trim()) &&
+        confirm(
+          `„${recipe.name}" hat schon eine Zubereitung.\n\n` +
+            'OK = alles aus der Quelle ersetzen\n' +
+            'Abbrechen = nur fehlende Angaben ergänzen'
+        ));
     setLoading(btn, true);
     try {
-      const res = await apiFetch(`/api/mealie/repair/${recipe.id}`, { method: 'POST' });
-      flash('mealieResult', escHtml(res.message), res.outcome === 'repaired' ? 'success' : 'info');
+      const res = await apiFetch(`/api/recipes/${recipe.id}/enrich`, {
+        method: 'POST',
+        body: JSON.stringify({ overwrite }),
+      });
+      flash(
+        'recipeFormResult',
+        escHtml(res.message),
+        res.outcome === 'enriched' ? 'success' : 'info'
+      );
       await refreshAll();
     } catch (err) {
-      flash('mealieResult', `Fehler: ${escHtml(err.message)}`, 'error');
+      // Beim Video kommt der gesammelte Text mit, wenn nichts erkennbar war.
+      if (err.data?.text) {
+        el('recipeRawText').value = err.data.text;
+        flash(
+          'recipeFormResult',
+          `${escHtml(err.message)} Der Text steht jetzt unten im Feld „Rezepttext".`,
+          'info'
+        );
+      } else {
+        flash('recipeFormResult', `Fehler: ${escHtml(err.message)}`, 'error');
+      }
       setLoading(btn, false);
     }
   });
