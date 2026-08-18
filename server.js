@@ -68,13 +68,13 @@ import {
 } from './lib/recipe-import.js';
 import { realIngredients } from './lib/normalize.js';
 import { renderPlanSvg } from './lib/plan-svg.js';
+import { recipeFromText } from './lib/video-import.js';
 import {
-  fetchVideoSource,
-  isVideoUrl,
-  recipeFromText,
-  videoRecipeBase,
-  youtubeId,
-} from './lib/video-import.js';
+  fetchSocialSource,
+  isSocialUrl,
+  socialKey,
+  socialRecipeBase,
+} from './lib/social-import.js';
 import {
   cancelChefkochJob,
   createRecipeInMealie,
@@ -823,10 +823,10 @@ app.post('/api/recipes/:id/enrich', async (req, res) => {
     // Quelle lesen – Video oder normale Seite.
     let incoming = null;
     let herkunft = 'Seite';
-    if (isVideoUrl(url)) {
+    if (isSocialUrl(url)) {
       const { recipe: fromVideo, source } = await recipeFromVideo(url);
       incoming = fromVideo;
-      herkunft = `Video (${source.used})`;
+      herkunft = source.platform === 'instagram' ? 'Instagram' : `Video (${source.used})`;
     } else {
       incoming = await fetchRecipeFromUrl(url);
     }
@@ -1306,12 +1306,13 @@ app.post('/api/fridge/search', (req, res) => {
 
 // ── Rezept-Import (URL + Massenimport) ────────────────────────────────────────
 
-// Ein Kochvideo auswerten. Zwei Schritte: erst Text besorgen (Beschreibung,
-// sonst Untertitel), dann strukturieren – mit der KI, wenn ein Schlüssel da ist,
-// sonst mit dem Zeilen-Leser aus `video-import.js`.
+// Einen Beitrag ohne schema.org-Daten auswerten – Kochvideo (YouTube) oder
+// Instagram. Zwei Schritte: erst Text besorgen (Beschreibung, sonst Untertitel
+// bzw. die volle Bildunterschrift), dann strukturieren – mit der KI, wenn ein
+// Schlüssel da ist, sonst mit dem Zeilen-Leser aus `video-import.js`.
 async function recipeFromVideo(url, { ai = true } = {}) {
-  const source = await fetchVideoSource(url);
-  const base = videoRecipeBase(source);
+  const source = await fetchSocialSource(url);
+  const base = socialRecipeBase(source);
 
   let parsed = null;
   let aiError = '';
@@ -1319,8 +1320,9 @@ async function recipeFromVideo(url, { ai = true } = {}) {
     try {
       parsed = await analyzeRecipeText(
         [
-          'Rezept aus einem Kochvideo. Zutaten und Zubereitung stehen in der',
-          'Beschreibung bzw. im gesprochenen Text darunter.',
+          source.platform === 'instagram'
+            ? 'Rezept aus einem Instagram-Beitrag. Zutaten und Zubereitung stehen in der Bildunterschrift, dazwischen steht Werbung und Eigenwerbung.'
+            : 'Rezept aus einem Kochvideo. Zutaten und Zubereitung stehen in der Beschreibung bzw. im gesprochenen Text darunter.',
           `Titel: ${source.title}`,
           source.author ? `Kanal: ${source.author}` : '',
           '',
@@ -1341,7 +1343,7 @@ async function recipeFromVideo(url, { ai = true } = {}) {
 
   if (!parsed || !(parsed.ingredients || []).length) {
     const err = new Error(
-      `Im Video „${source.title}" steht keine erkennbare Zutatenliste ` +
+      `In „${source.title}" steht keine erkennbare Zutatenliste ` +
         `(ausgewertet: ${source.used}).` +
         (aiError ? ` KI-Analyse: ${aiError}` : '') +
         ' Der Text steht unten – hineinschauen, ergänzen und die KI-Analyse benutzen.'
@@ -1361,6 +1363,9 @@ async function recipeFromVideo(url, { ai = true } = {}) {
         `Aus dem Video „${source.title}"${source.author ? ` von ${source.author}` : ''}.`,
       source_url: base.source_url,
       image_url: base.image_url,
+      // Portionen: was im Text steht, sonst die Angabe aus der Quelle
+      // ("Zutaten für 4 Portionen" in der Instagram-Bildunterschrift).
+      servings: parsed.servings || base.servings || '',
       tags: [...new Set([...(parsed.tags || []), ...base.tags])].slice(0, 12),
     },
   };
@@ -1374,17 +1379,20 @@ app.post('/api/recipes/import/url', blockWhenMealie, async (req, res) => {
     return res.status(400).json({ error: 'Bitte eine vollständige http(s)-URL angeben.' });
   }
   try {
-    // Kochvideo: eigener Weg (Beschreibung/Untertitel statt schema.org).
-    if (isVideoUrl(url)) {
+    // Video/Instagram: eigener Weg (Beschreibung, Untertitel oder
+    // Bildunterschrift statt schema.org).
+    if (isSocialUrl(url)) {
       const { recipe, source } = await recipeFromVideo(url, { ai: req.body?.ai !== false });
       if (req.body?.save) {
         const existing = findRecipeByName(recipe.name);
         if (existing) {
           return res.json({ recipe: getRecipeById(existing.id), saved: false, duplicate: true });
         }
-        return res
-          .status(201)
-          .json({ recipe: createRecipe({ ...recipe, source: 'video' }), saved: true, video: source.used });
+        return res.status(201).json({
+          recipe: createRecipe({ ...recipe, source: source.platform }),
+          saved: true,
+          video: source.used,
+        });
       }
       return res.json({ recipe, saved: false, video: source.used });
     }
@@ -1510,8 +1518,8 @@ async function addRecipeByUrl(url) {
     return { status: 400, body: { error: 'Bitte eine vollständige http(s)-Adresse angeben.' } };
   }
 
-  // Schon da? Bei Chefkoch ist die Rezept-Nummer eindeutig, beim Video die
-  // Video-Kennung, sonst die Adresse ohne Anhang.
+  // Schon da? Bei Chefkoch ist die Rezept-Nummer eindeutig, bei Video und
+  // Instagram die Kennung des Beitrags, sonst die Adresse ohne Anhang.
   //
   // Die Kennung ist hier Pflicht: bei `watch?v=…` bliebe vom Abschneiden am `?`
   // nur `https://www.youtube.com/watch` übrig – und das steckt in JEDEM
@@ -1519,7 +1527,7 @@ async function addRecipeByUrl(url) {
   // Kennung fängt umgekehrt auch `youtu.be/<id>` und `watch?v=<id>` als
   // dasselbe Video.
   const key =
-    /chefkoch\.de\/rezepte\/(\d+)\//.exec(url)?.[0] || youtubeId(url) || url.split('?')[0];
+    /chefkoch\.de\/rezepte\/(\d+)\//.exec(url)?.[0] || socialKey(url) || url.split('?')[0];
   const known = findRecipeBySourceUrlPart(key);
   if (known) {
     return {
@@ -1531,8 +1539,12 @@ async function addRecipeByUrl(url) {
   // Kochvideo: Mealies Importer kann YouTube nicht lesen (dort steckt kein
   // schema.org-Recipe), also werten wir es selbst aus. Läuft Mealie, wird das
   // Ergebnis trotzdem dort angelegt – Mealie bleibt die eine Quelle.
-  if (isVideoUrl(url)) {
+  if (isSocialUrl(url)) {
     const { recipe, source } = await recipeFromVideo(url);
+    const woher =
+      source.platform === 'instagram'
+        ? 'Aus dem Instagram-Beitrag'
+        : `Aus dem Video (${source.used})`;
     if (mealieEnabled()) {
       const slug = await createRecipeInMealie(recipe);
       const detail = await fetchRecipeDetail(slug);
@@ -1546,12 +1558,12 @@ async function addRecipeByUrl(url) {
           name: saved?.name || recipe.name,
           link: mealieRecipeUrl(slug),
           message:
-            `Aus dem Video übernommen (${source.used}), ` +
+            `${woher} übernommen, ` +
             `${recipe.ingredients.length} Zutaten: ${saved?.name || recipe.name}`,
         },
       };
     }
-    const created = createRecipe({ ...recipe, source: 'video' });
+    const created = createRecipe({ ...recipe, source: source.platform });
     return {
       status: 201,
       body: {
@@ -1559,7 +1571,7 @@ async function addRecipeByUrl(url) {
         target: 'lokal',
         name: created.name,
         message:
-          `Aus dem Video übernommen (${source.used}), ` +
+          `${woher} übernommen, ` +
           `${recipe.ingredients.length} Zutaten: ${created.name}`,
       },
     };

@@ -114,7 +114,7 @@ function formPayload() {
 
 // providerOf/PROVIDER_LABEL liegen in core.js – die Reste-Küche braucht sie
 // genauso.
-const PROVIDER_MODES = new Set(['chefkoch', 'cookidoo', 'video', 'other']);
+const PROVIDER_MODES = new Set(['chefkoch', 'cookidoo', 'video', 'instagram', 'other']);
 
 function filteredRecipes() {
   const query = (el('recipeSearch')?.value || '').trim().toLowerCase();
@@ -277,7 +277,7 @@ function buildRecipeCard(recipe) {
         recipe.source_url
           ? `<button class="btn btn-secondary btn-sm" data-action="enrich"
                title="Aus der Quelle (${escHtml(
-                 providerOf(recipe) === 'video' ? 'Video' : 'Seite'
+                 { video: 'Video', instagram: 'Instagram' }[providerOf(recipe)] || 'Seite'
                )}) nachlesen und Lücken füllen – Bewertungen bleiben">🩹 Anreichern</button>`
           : ''
       }

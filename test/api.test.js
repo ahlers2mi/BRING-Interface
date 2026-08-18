@@ -749,7 +749,7 @@ test('Rezept aus einem Kochvideo uebernehmen', async () => {
 
     const rezept = (await api('/api/recipes')).json.find((r) => r.name === 'Gnocchi-Auflauf');
     assert.ok(rezept, 'Titel ohne "| Rezept von Emmi"');
-    assert.equal(rezept.source, 'video');
+    assert.equal(rezept.source, 'youtube');
     assert.equal(rezept.source_url, 'https://www.youtube.com/watch?v=smWgIBFuVRU');
     assert.match(rezept.image_url, /maxresdefault/);
     assert.deepEqual(rezept.ingredients.map((i) => i.name), [
@@ -789,6 +789,79 @@ test('ein zweites Video ist keine Dublette des ersten', async () => {
     });
     assert.equal(res.status, 201, res.text);
     assert.ok(!res.json.duplicate, 'zweites Video wurde angelegt');
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('Rezept aus einem Instagram-Reel uebernehmen', async () => {
+  // Der Fall aus der Praxis: Mealies Scraper liest nur die Meta-Daten, und
+  // Instagram kuerzt die mitten im Satz ("... Zutaten fuer 4 Portionen 150").
+  // Genau dort faengt die Liste an - deshalb kam vorher ein Rezept ohne
+  // Zutaten heraus. Die Einbettungs-Seite hat den vollen Text.
+  const caption = [
+    'Cremiges Bircher Müsli über Nacht – in 15 Minuten vorbereitet! 🥣🍎 Du suchst ein gesundes Frühstück?',
+    '',
+    'Zutaten für 4 Portionen',
+    '150 g Haferflocken',
+    '400 g Joghurt',
+    '1 Apfel',
+    '50 g Nüsse',
+    '',
+    'Zubereitung',
+    'Apfel reiben und alles verrühren.',
+    'Über Nacht kühl stellen.',
+    '',
+    '#frühstück #mealprep',
+  ].join('\n');
+
+  globalThis.fetch = async (url, opts) => {
+    const href = String(url);
+    if (href.startsWith(base)) return realFetch(url, opts);
+    if (!href.includes('/embed/captioned/')) return new Response('weg', { status: 404 });
+    return new Response(
+      `<html><head>
+         <meta property="og:image" content="https://scontent.example/bircher.jpg" />
+       </head><body><script>window.__additionalDataLoaded('extra',
+         {"owner":{"username":"familienkost"},"edge_media_to_caption":{"edges":[{"node":{"text":${JSON.stringify(
+           caption
+         )}}}]}});</script></body></html>`,
+      { status: 200, headers: { 'content-type': 'text/html' } }
+    );
+  };
+  try {
+    const res = await api('/api/recipes/add', {
+      method: 'POST',
+      body: { url: 'https://www.instagram.com/reel/DcFt7BnDY4U/?igsh=abc' },
+    });
+    assert.equal(res.status, 201, res.text);
+    assert.match(res.json.message, /Instagram/);
+
+    const rezept = (await api('/api/recipes')).json.find(
+      (r) => r.name === 'Cremiges Bircher Müsli über Nacht'
+    );
+    assert.ok(rezept, 'Name aus dem Aufhaenger, ohne Emoji und Untertitel');
+    assert.equal(rezept.source, 'instagram');
+    assert.equal(rezept.source_url, 'https://www.instagram.com/reel/DcFt7BnDY4U/');
+    assert.equal(rezept.servings, '4 Portionen');
+    assert.match(rezept.image_url, /bircher\.jpg/);
+    assert.deepEqual(rezept.ingredients.map((i) => i.name), [
+      'Haferflocken',
+      'Joghurt',
+      'Apfel',
+      'Nüsse',
+    ]);
+    assert.match(rezept.instructions, /Apfel reiben/);
+    assert.doesNotMatch(rezept.instructions, /frühstück|mealprep/);
+    assert.ok(rezept.tags.includes('Instagram'), `Tags: ${rezept.tags}`);
+    assert.ok(rezept.tags.includes('familienkost'));
+
+    // Derselbe Beitrag als /p/-Adresse ist keine zweite Sache.
+    const again = await api('/api/recipes/add', {
+      method: 'POST',
+      body: { url: 'https://www.instagram.com/p/DcFt7BnDY4U/' },
+    });
+    assert.equal(again.json.duplicate, true, again.text);
   } finally {
     globalThis.fetch = realFetch;
   }

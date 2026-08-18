@@ -189,6 +189,28 @@ test('recipeFromText liest die Zutatenliste aus einer Videobeschreibung', () => 
   assert.equal(rezept.prep_time, '');
 });
 
+test('recipeFromText schneidet Eigenwerbung aus einer Instagram-Bildunterschrift', () => {
+  const caption = [
+    'Zutaten für 4 Portionen',
+    '150 g Haferflocken',
+    '400 g Joghurt',
+    '',
+    'Zubereitung',
+    'Alles verruehren und kuehl stellen.',
+    '',
+    'Speicher dir das @familienkost Rezept fuers naechste Meal-Prep!',
+    '#frühstück #mealprep',
+  ].join('\n');
+
+  const rezept = recipeFromText(caption, { name: 'Bircher' });
+  assert.equal(rezept.ingredients.length, 2);
+  assert.equal(rezept.instructions, 'Alles verruehren und kuehl stellen.');
+  // Beides hat vorher in der Zubereitung gestanden: die Erwaehnung, weil keine
+  // Regel darauf passte, und die Hashtag-Zeile, weil \w kein "ü" kennt.
+  assert.doesNotMatch(rezept.instructions, /familienkost/);
+  assert.doesNotMatch(rezept.instructions, /frühstück|mealprep/);
+});
+
 test('recipeFromText gibt auf, wenn keine Liste da ist', () => {
   assert.equal(recipeFromText('Heute machen wir Nudeln. Das schmeckt gut.'), null);
   assert.equal(recipeFromText('500 g Gnocchi'), null, 'eine Zutat ist keine Liste');

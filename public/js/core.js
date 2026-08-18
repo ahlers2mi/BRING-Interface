@@ -109,7 +109,11 @@ export function providerOf(recipe) {
   if (/chefkoch\.de/i.test(recipe.source_url || '')) return 'chefkoch';
   // `source` ist bei Mealie-Rezepten 'mealie', auch wenn sie aus einem Video
   // kommen – die Adresse ist deshalb das verlässlichere Merkmal.
+  if (recipe.source === 'instagram' || /instagram\.com\//i.test(recipe.source_url || '')) {
+    return 'instagram';
+  }
   if (
+    recipe.source === 'youtube' ||
     recipe.source === 'video' ||
     /(?:youtube\.com|youtu\.be)\//i.test(recipe.source_url || '')
   ) {
@@ -122,6 +126,7 @@ export const PROVIDER_LABEL = {
   cookidoo: '🍲 Cookidoo',
   chefkoch: '🥄 Chefkoch',
   video: '▶️ Video',
+  instagram: '📷 Instagram',
   other: 'eigene Quelle',
 };
 
