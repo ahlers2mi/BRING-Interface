@@ -226,6 +226,42 @@ Oberfläche legt den Text ins Feld „Rezepttext". Läuft Mealie, wird das Ergeb
 mit `createRecipeInMealie()` dort angelegt (POST nur mit Namen, alles andere per
 PATCH), damit Mealie die eine Quelle bleibt.
 
+## Rezepte aus Instagram (`lib/social-import.js`)
+
+Mealies `recipe-scrapers` liefert bei einem Reel Titel und Beschreibung, aber
+**keine Zutaten** – weil Instagram die Bildunterschrift in `og:description`
+mitten im Satz kürzt. Beobachtet an einem Bircher-Müsli-Reel: der Text endete
+bei „… Zutaten für 4 Portionen 150", und genau ab dort fängt die Liste an.
+
+Die **vollständige** Bildunterschrift steht auf der Einbettungs-Seite
+`/reel/<code>/embed/captioned/`. Die braucht keine Anmeldung – die normale
+Beitragsseite zeigt Rechenzentren eine Anmeldewand. Drei Quellen in dieser
+Reihenfolge:
+
+1. `"edge_media_to_caption":{"edges":[{"node":{"text":"…"` aus dem JSON der
+   Einbettung (vollständig),
+2. der Text im Markup zwischen `class="Caption"` und dem Geschwister-Block
+   `CaptionComments` (der Benutzername steht als eigener Link davor und muss
+   raus),
+3. `og:description` als Notnagel – **gekürzt**, taugt nur für „besser als
+   nichts".
+
+- `titleFromCaption()` macht aus dem Aufhänger einen Namen: Emoji weg, alles ab
+  dem ersten `!`/`?` weg, angehängter Untertitel nach `–` weg. Aus „Cremiges
+  Bircher Müsli über Nacht – in 15 Minuten vorbereitet! 🥣🍎 Du suchst …" wird
+  „Cremiges Bircher Müsli über Nacht". Der `og:title` taugt dafür nicht, der
+  fängt mit „<Name> on Instagram: " an.
+- `servingsFromText()` liest „Zutaten für 4 Portionen" mit.
+- **Eigenwerbung abschneiden:** `CUTOFF` in `video-import.js` beendet den
+  Rezepttext bei einer reinen Hashtag-Zeile oder einer `@erwähnung`. Falle: das
+  Hashtag-Muster darf **kein `\w`** benutzen – „#frühstück" rutscht sonst
+  durch, `\w` kennt keine Umlaute.
+
+`isSocialUrl()` / `fetchSocialSource()` / `socialKey()` / `socialRecipeBase()`
+sind die gemeinsame Einfahrt für YouTube **und** Instagram; `server.js` kennt
+nur diese vier. In der Spalte `source` steht `youtube` bzw. `instagram`,
+`providerOf()` im Browser macht daraus die Filter `▶️ Video` und `📷 Instagram`.
+
 ## Mealie
 
 - Läuft im selben Stack (Profil `mealie`), Oberfläche unter

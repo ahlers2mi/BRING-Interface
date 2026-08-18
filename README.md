@@ -18,7 +18,7 @@ Web Interface für Bring APP
 - **Mealie-Anbindung** (optional) – [Mealie](https://mealie.io) als Rezeptquelle: Rezepte dort pflegen, hier spiegeln; Bewertungen wandern als `rating`/`lastMade` zurück, der Wochenplan wird mit Mealies Menüplan abgeglichen (beide Richtungen).
 - **Cookidoo-Anbindung** (optional) – Thermomix-Rezepte aus [Cookidoo](https://cookidoo.de) im Würfeltopf (Name, Zutaten, Zeiten, Link – gekocht wird am Gerät), und Cookidoos Einkaufsliste auf Knopfdruck nach Bring.
 - **Rezept per Link, auch vom Handy** – Adresse einwerfen und speichern, auch mit Mealie als Quelle. Unter **Android** trägt sich die installierte Web-App selbst ins Teilen-Menü ein, unter **iOS** geht es über einen Kurzbefehl.
-- **Rezept-Import** – einzelne Rezepte per Link (Chefkoch und alle Seiten mit schema.org-Daten), **aus einem YouTube-Kochvideo** (Beschreibung bzw. Untertitel) oder **Massenimport von chefkoch.de** (z. B. 200 Rezepte auf einmal, im Hintergrund mit Fortschrittsanzeige).
+- **Rezept-Import** – einzelne Rezepte per Link (Chefkoch und alle Seiten mit schema.org-Daten), **aus einem YouTube-Kochvideo** (Beschreibung bzw. Untertitel), **aus einem Instagram-Reel** (volle Bildunterschrift über die Einbettungs-Seite) oder **Massenimport von chefkoch.de** (z. B. 200 Rezepte auf einmal, im Hintergrund mit Fortschrittsanzeige).
 - **Eigener Tab „Import & Quellen"** – Mealie, Cookidoo, Chefkoch-Import und KI-Analyse liegen zusammen; der Rezepte-Tab bleibt Liste und Geschmacksprofil. Die Rezeptliste lässt sich nach Herkunft filtern (Chefkoch, Cookidoo, eigene).
 - **Reste-Küche** – eingeben, was noch im Kühlschrank liegt, und passende Rezepte nach Abdeckung sortiert finden; fehlende Zutaten wandern auf Wunsch direkt nach Bring.
 - **KI-Rezeptanalyse** – kompletten Rezepttext einfügen; ein KI-Modell (über [OpenRouter](https://openrouter.ai/)) extrahiert automatisch Name, Beschreibung und Zutaten (mit Mengen) zum Prüfen und Speichern.
@@ -727,6 +727,13 @@ bleiben.
   übernommen. Läuft Mealie, wird das Rezept dort angelegt – Mealie bleibt die
   eine Quelle. Findet die App keine Zutatenliste, kommt der gesammelte Text
   zurück und landet direkt im Feld „Rezepttext", wo die KI-Analyse dranmuss.
+- **Rezept aus einem Instagram-Reel**: Adresse einwerfen (`/reel/…`, `/p/…`, der
+  `?igsh=…`-Anhang darf dranbleiben). Mealies Importer scheitert hier, weil
+  Instagram die Bildunterschrift in den Meta-Daten mitten im Satz kürzt – und
+  zwar genau dort, wo die Zutatenliste anfängt. Die App liest deshalb die
+  **Einbettungs-Seite**, die den vollen Text liefert, und baut daraus Name
+  (ohne Emoji und Werbe-Untertitel), Portionen, Zutaten, Zubereitung, Foto und
+  den Kanal als Tag. Eigenwerbung und Hashtags am Ende fallen weg.
 - **Anreichern** (`🩹` an der Rezeptkarte): liest die **Quelle des Rezepts**
   nochmal und füllt, was fehlt – Zutaten, Zubereitung, Bild, Zeit, Portionen.
   Funktioniert für Videos genauso wie für normale Rezeptseiten und Chefkoch.
@@ -813,6 +820,7 @@ lib/taste.js       Geschmacksprofil und Würfelgewichte
 lib/mealplan.js    Wochenplan, Reste-Suche, Wocheneinkauf
 lib/recipe-import.js  Chefkoch-API, schema.org-Parser, Import-Job
 lib/video-import.js   Kochvideos: Beschreibung, Untertitel, Zutaten aus Zeilen
+lib/social-import.js  Instagram + gemeinsame Einfahrt für Quellen ohne schema.org
 lib/mealie.js      Mealie-Anbindung: Abgleich, Abbildung, Bewertungs-Rückschreibung
 public/js/*.js     Oberfläche je Tab (core, shopping, plan, recipes, fridge)
 fhem/              Fertiger FHEM-Block + Anleitung
