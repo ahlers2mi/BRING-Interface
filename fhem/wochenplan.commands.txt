@@ -183,18 +183,28 @@ attr a_wochenplan_abgleich room Küche
 # Damit bevorzugt der Wuerfel bei Kaelte Eintopf und bei Hitze Salat. Der Wert
 # gilt fuer heute und morgen; weiter voraus entscheidet der Monat.
 # Quelle anpassen - hier der vorhandene Sensor Mobil3data.
-define a_wochenplan_wetter at +*01:00:00 { GetFileFromURL("http://192.168.69.10:8095/api/fhem/weather?temp=".ReadingsVal("Mobil3data","temperature",15)."&token=DEINTOKEN") }
+# Die Adresse steht in EINFACHEN Anfuehrungszeichen: enthaelt der Token ein @
+# (z. B. "geheim@BRING"), haelt Perl in doppelten Anfuehrungszeichen "@BRING"
+# fuer ein Array und setzt einen Leerstring ein - der Aufruf kommt dann mit
+# halbem Token an und wird mit 401 abgewiesen.
+define a_wochenplan_wetter at +*01:00:00 { GetFileFromURL('http://192.168.69.10:8095/api/fhem/weather?temp='.ReadingsVal("Mobil3data","temperature",15).'&token=DEINTOKEN') }
 attr a_wochenplan_wetter alias Wochenplan Wetter melden
 attr a_wochenplan_wetter room Küche
 
 # ── Optional: abends an den Vorlauf erinnern ─────────────────────────────────
 # Meldet sich nur, wenn morgen wirklich etwas vorzubereiten ist.
-define a_wochenplan_vorbereitung at *20:00:00 { my $v = ReadingsVal("HTTP.Wochenplan","morgen_vorbereitung","");; my $m = ReadingsVal("HTTP.Wochenplan","morgen","");; if ($v ne "") { send_to_all("S", "Morgen gibt es $m - heute noch $v", "Wochenplan") } }
+#
+# ACHTUNG Reihenfolge: send_to_all($prio, $titel, $text) - vertauscht man die
+# beiden letzten, steht in Telegram "Morgen gibt es X: Wochenplan".
+# Die Prio entscheidet, OB zugestellt wird: " " und "S" nur, wenn die Person
+# als anwesend gilt (attr benachrichtigen on) und kein Gast schlaeft (d_gast),
+# "X" immer. Nur an eine Person: send_to_one("<person>", " ", $titel, $text).
+define a_wochenplan_vorbereitung at *20:00:00 { my $v = ReadingsVal("HTTP.Wochenplan","morgen_vorbereitung","");; my $m = ReadingsVal("HTTP.Wochenplan","morgen","");; if ($v ne "") { send_to_all(" ", "Wochenplan", ($m ne "" ? "Morgen: $m. " : "") . "Heute noch: $v") } }
 attr a_wochenplan_vorbereitung alias Wochenplan Vorbereitung
 attr a_wochenplan_vorbereitung room Küche
 
 # ── Optional: morgens ansagen, was es heute gibt ─────────────────────────────
 # send_to_all ist die vorhandene Hausfunktion (siehe andere Notifys).
-define a_wochenplan_ansage at *07:30:00 { my $e = ReadingsVal("HTTP.Wochenplan","heute","");; if ($e ne "") { send_to_all("S", "Heute gibt es: $e", "Wochenplan") } }
+define a_wochenplan_ansage at *07:30:00 { my $e = ReadingsVal("HTTP.Wochenplan","heute","");; if ($e ne "") { send_to_all("S", "Wochenplan", "Heute gibt es: $e") } }
 attr a_wochenplan_ansage alias Wochenplan Ansage
 attr a_wochenplan_ansage room Küche

@@ -188,8 +188,13 @@ Freitag nichts. Es ist eine Neigung, kein Filter – der Auflauf im Juli bleibt
 möglich, er kommt nur seltener.
 
 ```
-define a_wochenplan_wetter at +*01:00:00 { GetFileFromURL("http://192.168.69.10:8095/api/fhem/weather?temp=".ReadingsVal("<dein Sensor>","temperature",15)."&token=DEINTOKEN") }
+define a_wochenplan_wetter at +*01:00:00 { GetFileFromURL('http://192.168.69.10:8095/api/fhem/weather?temp='.ReadingsVal("<dein Sensor>","temperature",15).'&token=DEINTOKEN') }
 ```
+
+> Die Adresse steht in **einfachen** Anführungszeichen. Enthält der Token ein
+> `@` (`geheim@BRING`), hält Perl in doppelten Anführungszeichen `@BRING` für
+> ein Array und setzt einen Leerstring ein – der Aufruf kommt mit halbem Token
+> an und wird mit `401` abgewiesen.
 
 **Vorlauf.** Die App liest aus Zubereitung und Tags heraus, ob etwas am Vortag
 anzufangen ist (auftauen, einweichen, marinieren, Teig gehen lassen) und stellt
@@ -200,8 +205,15 @@ Abend – sie meldet sich nur, wenn wirklich etwas zu tun ist:
 attr HTTP.Wochenplan reading26Name morgen_vorbereitung
 attr HTTP.Wochenplan reading26Regex "tomorrow_prep":"([^"]*)"
 
-define a_wochenplan_vorbereitung at *20:00:00 { my $v = ReadingsVal("HTTP.Wochenplan","morgen_vorbereitung","");; my $m = ReadingsVal("HTTP.Wochenplan","morgen","");; if ($v ne "") { send_to_all("S", "Morgen gibt es $m - heute noch $v", "Wochenplan") } }
+define a_wochenplan_vorbereitung at *20:00:00 { my $v = ReadingsVal("HTTP.Wochenplan","morgen_vorbereitung","");; my $m = ReadingsVal("HTTP.Wochenplan","morgen","");; if ($v ne "") { send_to_all(" ", "Wochenplan", ($m ne "" ? "Morgen: $m. " : "") . "Heute noch: $v") } }
 ```
+
+> `send_to_all` nimmt **`($prio, $titel, $text)`** – in dieser Reihenfolge.
+> Vertauscht man die beiden letzten, steht in Telegram „Morgen gibt es X:
+> Wochenplan". Und die Prio entscheidet, **ob** überhaupt zugestellt wird:
+> `" "` und `"S"` nur, wenn die Person als anwesend gilt und kein Gast
+> schläft, `"X"` immer. An genau eine Person geht
+> `send_to_one("<person>", " ", $titel, $text)`.
 
 > Im `Commands`-Block muss ein literales Semikolon **`;;`** heißen – jede Zeile
 > ist dort ein eigener Befehl. Im FHEMWEB-DEF-Editor schreibt man stattdessen
