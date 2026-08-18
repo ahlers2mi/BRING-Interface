@@ -210,13 +210,31 @@ nicht die Adresse. Der alte `url.split('?')[0]` ließ von `watch?v=…` nur
 weitere Video galt also als „kennen wir schon". Die Kennung fängt umgekehrt
 `youtu.be/<id>` und `watch?v=<id>` als dasselbe Video.
 
-**Nachträglich anreichern:** `POST /api/recipes/:id/enrich` liest die Quelle des
-Rezepts erneut (Video, Chefkoch, schema.org) und füllt Lücken; `overwrite: true`
-ersetzt. Der **Name wird bewusst nicht überschrieben** – daran hängen Plan,
-Bewertungen und die Wiedererkennung. Bei Mealie-Rezepten geht das über
-`enrichRecipeInMealie()` (PATCH + Bild-POST), danach wird der Spiegel sofort
-aufgefrischt. Das alte `/api/mealie/repair` bleibt für den Sammellauf über die
-PLUS-Anrisse, kann aber nur Chefkoch.
+**Nachträglich anreichern:** `enrichOneRecipe()` in `server.js` ist die eine
+Regel dafür, benutzt von `POST /api/recipes/:id/enrich` (ein Rezept) und
+`POST /api/recipes/enrich/thin` (Sammellauf über alle dünnen). Beide lesen die
+Quelle des Rezepts erneut – Video, Instagram, Chefkoch oder schema.org.
+
+- Der **Name wird nie überschrieben** – daran hängen Plan, Bewertungen und die
+  Wiedererkennung.
+- Beschreibung, Zeit, Portionen, Bild: nur wenn leer. Zutaten: wenn die Quelle
+  mehr hat. **Zubereitung: wenn die Quelle mehr Schritte hat** (`preferLonger`)
+  – genau der Anriss-Fall „ein Satz gegen die vollständige Anleitung".
+  `overwrite: true` ersetzt alles.
+- Eine gesperrte Quelle (Chefkoch PLUS antwortet mit `403`) wird zu **422 mit
+  Grund**, nicht zu einem rohen HTTP-Fehler: „gibt nichts her" ist eine Antwort.
+- Bei Mealie-Rezepten läuft es über `enrichRecipeInMealie()` (PATCH +
+  Bild-POST), danach wird der Spiegel sofort aufgefrischt – auf ein
+  hochgezähltes `updatedAt` ist nach einem PATCH kein Verlass.
+- **Platzhalter zählen nicht als Inhalt:** `realStepCount()` wirft Mealies
+  „Instructions not provided." weg, `realIngredientCount()` den PLUS-Platzhalter.
+  Ohne das gilt ein Anriss als gepflegt und bleibt stehen.
+
+Der Sammellauf ist **gedeckelt** (Standard 25 je Klick, jedes Rezept ist ein
+Abruf im Netz) und meldet `remaining`; dazwischen 300 ms Pause, weil mehrere
+Chefkoch-Rezepte hintereinander der Normalfall sind. Die alten
+Chefkoch-only-Routen `/api/mealie/repair(/:id)` sind entfallen;
+`repairThinMealieRecipe()` lebt nur noch im Chefkoch→Mealie-Massenimport.
 
 Strukturiert wird der Text mit `analyzeRecipeText()` (OpenRouter), wenn ein
 Schlüssel da ist, sonst mit `recipeFromText()`. Findet keiner der beiden eine

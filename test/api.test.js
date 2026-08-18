@@ -915,6 +915,121 @@ test('Anreichern fuellt Luecken, ohne Bewertungen anzufassen', async () => {
   }
 });
 
+test('Sammellauf ergaenzt duenne Rezepte aus verschiedenen Quellen', async () => {
+  // Vorher konnte der Sammellauf nur Chefkoch. Hier sind es drei duenne
+  // Rezepte mit drei verschiedenen Quellen – alle drei muessen ergaenzt werden.
+  const duenn = [];
+  for (const [name, url] of [
+    ['Duenn per Video', 'https://youtu.be/sammelVid01'],
+    ['Duenn per Instagram', 'https://www.instagram.com/reel/sammelInsta/'],
+    ['Duenn per Blog', 'https://sammel.example/rezept/'],
+  ]) {
+    const res = await api('/api/recipes', {
+      method: 'POST',
+      body: { name, source_url: url, ingredients: [{ name: 'Mehl' }] },
+    });
+    assert.equal(res.status, 201, res.text);
+    duenn.push(res.json.id);
+  }
+  // Ein viertes ohne Quelle darf der Lauf nicht anfassen.
+  const ohneQuelle = (
+    await api('/api/recipes', {
+      method: 'POST',
+      body: { name: 'Duenn ohne Quelle', ingredients: [{ name: 'Mehl' }] },
+    })
+  ).json;
+
+  const zutaten = ['500 g Nudeln', '200 g Sahne', '1 Zwiebel', '2 EL Öl'];
+  globalThis.fetch = async (url, opts) => {
+    const href = String(url);
+    if (href.startsWith(base)) return realFetch(url, opts);
+    if (href.includes('youtube.com/watch')) {
+      return new Response(
+        `<html><script>var ytInitialPlayerResponse = ${JSON.stringify({
+          videoDetails: {
+            videoId: 'sammelVid01',
+            title: 'Nudeln aus dem Video',
+            author: 'Kanal',
+            lengthSeconds: '300',
+            shortDescription: `${zutaten.join('\n')}\n\nAlles zusammen kochen.`,
+          },
+        })};</script></html>`,
+        { status: 200, headers: { 'content-type': 'text/html' } }
+      );
+    }
+    if (href.includes('/embed/captioned/')) {
+      return new Response(
+        `<html><body><script>window.__additionalDataLoaded('extra',
+           {"edge_media_to_caption":{"edges":[{"node":{"text":${JSON.stringify(
+             `${zutaten.join('\n')}\n\nAlles zusammen kochen.`
+           )}}}]}});</script></body></html>`,
+        { status: 200, headers: { 'content-type': 'text/html' } }
+      );
+    }
+    if (href.includes('sammel.example')) {
+      return new Response(
+        `<script type="application/ld+json">${JSON.stringify({
+          '@type': 'Recipe',
+          name: 'Nudeln von der Seite',
+          recipeIngredient: zutaten,
+          recipeInstructions: 'Alles zusammen kochen.',
+        })}</script>`,
+        { status: 200, headers: { 'content-type': 'text/html' } }
+      );
+    }
+    return new Response('weg', { status: 404 });
+  };
+
+  try {
+    const res = await api('/api/recipes/enrich/thin', { method: 'POST', body: { limit: 100 } });
+    assert.equal(res.status, 200, res.text);
+    assert.ok(res.json.enriched >= 3, JSON.stringify(res.json));
+
+    const liste = (await api('/api/recipes')).json;
+    for (const id of duenn) {
+      const r = liste.find((x) => x.id === id);
+      assert.equal(r.ingredients.length, 4, `${r.name}: ${JSON.stringify(r.ingredients)}`);
+      assert.match(r.instructions, /Alles zusammen kochen/, r.name);
+      // Der Name bleibt in jedem Fall – daran haengen Plan und Bewertungen.
+      assert.match(r.name, /^Duenn per /);
+    }
+    // Ohne Quelladresse bleibt es unangetastet.
+    const unberuehrt = liste.find((x) => x.id === ohneQuelle.id);
+    assert.equal(unberuehrt.ingredients.length, 1);
+    assert.ok(!unberuehrt.instructions);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test('Sammellauf ist gedeckelt und sagt, was offen bleibt', async () => {
+  globalThis.fetch = async (url, opts) => {
+    const href = String(url);
+    if (href.startsWith(base)) return realFetch(url, opts);
+    return new Response('weg', { status: 404 }); // jede Quelle scheitert
+  };
+  try {
+    // Zwei duenne Rezepte anlegen, aber nur eines pro Lauf zulassen.
+    for (const name of ['Deckel A', 'Deckel B']) {
+      await api('/api/recipes', {
+        method: 'POST',
+        body: { name, source_url: 'https://deckel.example/x/', ingredients: [{ name: 'Mehl' }] },
+      });
+    }
+    const res = await api('/api/recipes/enrich/thin', { method: 'POST', body: { limit: 1 } });
+    assert.equal(res.status, 200, res.text);
+    assert.equal(res.json.checked, 1, 'nur eines angefasst');
+    assert.ok(res.json.thin >= 2, JSON.stringify(res.json));
+    assert.ok(res.json.remaining >= 1, 'der Rest wird gemeldet');
+    assert.match(res.json.message, /noch offen/);
+    // Eine gescheiterte Quelle ist kein Absturz, sondern eine Zeile im Bericht.
+    assert.equal(res.json.failed, 1);
+    assert.equal(res.json.errors.length, 1);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
 test('Anreichern braucht eine Quelladresse', async () => {
   const angelegt = await api('/api/recipes', {
     method: 'POST',

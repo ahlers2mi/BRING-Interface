@@ -85,7 +85,6 @@ import {
   getChefkochJob,
   importUrlToMealie,
   mapMealieRecipe,
-  repairThinMealieRecipe,
   getSyncState,
   mealieAbout,
   mealieEnabled,
@@ -798,29 +797,28 @@ app.delete('/api/recipes/:id/ratings/:ratingId', (req, res) => {
   res.json(getRecipeById(recipe.id));
 });
 
-// POST /api/recipes/:id/enrich – body: { url?, overwrite? }
-// Ein vorhandenes Rezept aus seiner Quelle nachfüllen: Video, Chefkoch oder
-// jede Seite mit schema.org-Daten. Ohne `url` wird `source_url` genommen.
-// Standard ist "nur Lücken füllen" – von Hand Gepflegtes bleibt stehen.
-// Bewertungen, Plan und Kennung bleiben immer unberührt.
-app.post('/api/recipes/:id/enrich', async (req, res) => {
-  const recipe = getRecipeById(Number(req.params.id));
-  if (!recipe) return res.status(404).json({ error: 'Rezept nicht gefunden.' });
-
-  const url = String(req.body?.url || recipe.source_url || '')
+// Ein vorhandenes Rezept aus seiner Quelle nachfüllen: Video, Instagram,
+// Chefkoch oder jede Seite mit schema.org-Daten. Standard ist "nur Lücken
+// füllen" – von Hand Gepflegtes bleibt stehen. Name, Bewertungen, Plan und
+// Kennung bleiben in jedem Fall unberührt.
+//
+// Wird von der Einzel-Route und vom Sammellauf benutzt, damit es genau eine
+// Regel gibt. Fehler tragen `status` (und beim Video den gesammelten Text).
+async function enrichOneRecipe(recipe, { url: rawUrl, overwrite = false } = {}) {
+  const url = String(rawUrl || recipe.source_url || '')
     .trim()
     .split(/\s+/)[0];
   if (!/^https?:\/\//i.test(url)) {
-    return res.status(400).json({
-      error:
-        'Am Rezept steht keine Quelladresse. Adresse mitschicken (oder in Mealie ' +
-        'unter „Original URL" eintragen), dann kann ich dort nachlesen.',
-    });
+    const err = new Error(
+      'Am Rezept steht keine Quelladresse. Adresse mitschicken (oder in Mealie ' +
+        'unter „Original URL" eintragen), dann kann ich dort nachlesen.'
+    );
+    err.status = 400;
+    throw err;
   }
-  const overwrite = Boolean(req.body?.overwrite);
 
-  try {
-    // Quelle lesen – Video oder normale Seite.
+  {
+    // Quelle lesen – Video/Instagram oder normale Seite.
     let incoming = null;
     let herkunft = 'Seite';
     if (isSocialUrl(url)) {
@@ -828,12 +826,24 @@ app.post('/api/recipes/:id/enrich', async (req, res) => {
       incoming = fromVideo;
       herkunft = source.platform === 'instagram' ? 'Instagram' : `Video (${source.used})`;
     } else {
-      incoming = await fetchRecipeFromUrl(url);
+      // Eine gesperrte oder verschwundene Quelle ist eine Antwort („mehr gibt
+      // es nicht"), kein Serverfehler – sonst kommt beim PLUS-Anriss ein roher
+      // HTTP-Fehler zurück statt eines Grundes.
+      try {
+        incoming = await fetchRecipeFromUrl(url);
+      } catch (err) {
+        const gescheitert = new Error(
+          `Die Quelle gibt nichts her (${err.message}). Bei Chefkoch-PLUS-Rezepten ` +
+            'ist das der Normalfall – dort hilft nur löschen oder von Hand ergänzen.'
+        );
+        gescheitert.status = 422;
+        throw gescheitert;
+      }
     }
     if (!incoming) {
-      return res.status(422).json({
-        error: `Unter ${url} stehen keine auswertbaren Rezeptdaten.`,
-      });
+      const err = new Error(`Unter ${url} stehen keine auswertbaren Rezeptdaten.`);
+      err.status = 422;
+      throw err;
     }
     // Der Name bleibt: daran hängen Plan, Bewertungen und die Wiedererkennung.
     delete incoming.name;
@@ -845,19 +855,23 @@ app.post('/api/recipes/:id/enrich', async (req, res) => {
         { overwrite }
       );
       if (outcome === 'not-needed') {
-        return res.json({
+        return {
           recipe,
           outcome,
+          herkunft,
+          changed: [],
           message: `Nichts nachzutragen – in Mealie steht schon alles (${herkunft} gelesen).`,
-        });
+        };
       }
       const mapped = detail ? mapMealieRecipe(detail, mealieConfig().url) : null;
       const saved = mapped ? upsertRecipeFromSource(mapped) : recipe;
-      return res.json({
+      return {
         recipe: saved,
         outcome,
+        herkunft,
+        changed,
         message: `Aus dem ${herkunft} nachgetragen: ${changed.join(', ')}.`,
-      });
+      };
     }
 
     // Örtliches Rezept: dieselbe Regel, nur direkt in der Datenbank.
@@ -871,8 +885,21 @@ app.post('/api/recipes/:id/enrich', async (req, res) => {
       fields.ingredients = incoming.ingredients;
       changed.push(`${incoming.ingredients.length} Zutaten`);
     }
+    // Zubereitung: dieselbe Regel wie in Mealie – eine ausführlichere Fassung
+    // aus der Quelle gewinnt, sonst wird nur eine Lücke gefüllt.
+    const zeilen = (text) =>
+      String(text || '')
+        .split(/\r?\n/)
+        .map((t) => t.trim())
+        .filter(Boolean).length;
+    if (
+      incoming.instructions &&
+      (overwrite || zeilen(incoming.instructions) > zeilen(recipe.instructions))
+    ) {
+      fields.instructions = incoming.instructions;
+      changed.push('Zubereitung');
+    }
     for (const [key, label] of [
-      ['instructions', 'Zubereitung'],
       ['description', 'Beschreibung'],
       ['prep_time', 'Zeit'],
       ['servings', 'Portionen'],
@@ -886,17 +913,45 @@ app.post('/api/recipes/:id/enrich', async (req, res) => {
       changed.push(label);
     }
     if (!changed.length) {
-      return res.json({
+      return {
         recipe,
         outcome: 'not-needed',
+        herkunft,
+        changed: [],
         message: `Nichts nachzutragen – es steht schon alles da (${herkunft} gelesen).`,
-      });
+      };
     }
-    return res.json({
+    return {
       recipe: updateRecipe(recipe.id, fields),
       outcome: 'enriched',
+      herkunft,
+      changed,
       message: `Aus dem ${herkunft} nachgetragen: ${changed.join(', ')}.`,
+    };
+  }
+}
+
+// Sieht bei einem Rezept kaum etwas drin aus? `incomplete` fängt zusätzlich die
+// PLUS-Anrisse: die haben scheinbar genug Zutaten, aber eine davon ist nur der
+// Platzhalter „Zutaten für dieses Rezept …".
+function looksThinHere(recipe) {
+  return (
+    !String(recipe.instructions || '').trim() ||
+    Boolean(recipe.incomplete) ||
+    realIngredients(recipe.ingredients || []).length <= 3
+  );
+}
+
+// POST /api/recipes/:id/enrich – body: { url?, overwrite? }
+app.post('/api/recipes/:id/enrich', async (req, res) => {
+  const recipe = getRecipeById(Number(req.params.id));
+  if (!recipe) return res.status(404).json({ error: 'Rezept nicht gefunden.' });
+  try {
+    const { recipe: saved, outcome, message } = await enrichOneRecipe(recipe, {
+      url: req.body?.url,
+      overwrite: Boolean(req.body?.overwrite),
     });
+    res.json({ recipe: saved, outcome, message });
   } catch (err) {
     res
       .status(err.status || 502)
@@ -1843,99 +1898,61 @@ app.get('/api/mealie/image/:id', async (req, res) => {
   }
 });
 
-// POST /api/mealie/repair – schon vorhandene, unvollständig importierte
-// Chefkoch-Rezepte aus der Chefkoch-API nachtragen. Betrifft nur Rezepte mit
-// Chefkoch-Quelle, bei denen Zubereitung oder Zutaten fehlen.
-app.post('/api/mealie/repair', async (_req, res) => {
-  if (!mealieEnabled()) {
-    return res.status(400).json({ error: 'Mealie ist nicht konfiguriert.' });
-  }
-  const candidates = getAllRecipes({ withIngredients: true }).filter(
-    (r) =>
-      r.source_slug &&
-      !r.source_missing &&
-      /chefkoch\.de\/rezepte\/\d+\//.test(r.source_url || '') &&
-      // `incomplete` fängt die PLUS-Anrisse: die haben scheinbar genug Zutaten,
-      // aber eine davon ist nur der Platzhalter.
-      (!String(r.instructions || '').trim() ||
-        r.incomplete ||
-        realIngredients(r.ingredients).length <= 3)
-  );
+// POST /api/recipes/enrich/thin – body: { limit?, overwrite? }
+// Sammellauf: jedes dünne Rezept aus SEINER Quelle nachfüllen. Vorher konnte
+// das nur Chefkoch (über die Chefkoch-API) – ein dünnes Rezept aus einem Video,
+// aus Instagram oder von einer anderen Seite wurde übersprungen. Jetzt läuft es
+// über denselben `enrichOneRecipe` wie der Knopf an der Karte.
+//
+// Absichtlich gedeckelt und ohne Hintergrund-Job: jedes Rezept ist ein Abruf im
+// Netz. Was nicht mehr in den Lauf passt, steht in `remaining` – dann einfach
+// noch einmal drücken.
+app.post('/api/recipes/enrich/thin', async (req, res) => {
+  const limit = Math.min(100, Math.max(1, Number(req.body?.limit) || 25));
+  const overwrite = Boolean(req.body?.overwrite);
 
-  const result = { checked: candidates.length, repaired: 0, unchanged: 0, failed: 0, names: [] };
-  for (const recipe of candidates) {
+  const duenn = getAllRecipes({ withIngredients: true }).filter(
+    (r) => !r.source_missing && String(r.source_url || '').trim() && looksThinHere(r)
+  );
+  const dran = duenn.slice(0, limit);
+
+  const result = {
+    checked: dran.length,
+    thin: duenn.length,
+    remaining: Math.max(0, duenn.length - dran.length),
+    enriched: 0,
+    unchanged: 0,
+    failed: 0,
+    names: [],
+    errors: [],
+  };
+
+  for (const [i, recipe] of dran.entries()) {
     try {
-      const { outcome, detail } = await repairThinMealieRecipe({
-        slug: recipe.source_slug,
-        sourceUrl: recipe.source_url,
-      });
-      if (outcome === 'repaired') {
-        result.repaired += 1;
-        result.names.push(recipe.name);
-        // Direkt auffrischen: auf ein hochgezähltes `updatedAt` in Mealie ist
-        // kein Verlass, der inkrementelle Abgleich würde das Rezept sonst
-        // überspringen.
-        const mapped = detail && mapMealieRecipe(detail, mealieConfig().url);
-        if (mapped) upsertRecipeFromSource(mapped);
+      const { outcome, changed, herkunft } = await enrichOneRecipe(recipe, { overwrite });
+      if (outcome === 'enriched') {
+        result.enriched += 1;
+        result.names.push(`${recipe.name} (${herkunft}: ${changed.join(', ')})`);
       } else {
         result.unchanged += 1;
       }
-    } catch {
+    } catch (err) {
       result.failed += 1;
+      // Höchstens ein paar Gründe mitschicken – sonst wird die Antwort zur Wand.
+      if (result.errors.length < 10) {
+        result.errors.push(`${recipe.name}: ${err.message}`);
+      }
     }
+    // Nicht im Sekundentakt auf dieselbe Seite: mehrere Chefkoch-Rezepte
+    // hintereinander sind der Normalfall.
+    if (i + 1 < dran.length) await new Promise((r) => setTimeout(r, 300));
   }
+
+  result.message = result.checked
+    ? `${result.enriched} ergänzt, ${result.unchanged} ohne Änderung, ${result.failed} fehlgeschlagen` +
+      (result.remaining ? ` – ${result.remaining} noch offen, nochmal drücken.` : '.')
+    : 'Kein dünnes Rezept mit Quelladresse gefunden.';
   res.json(result);
-});
-
-// POST /api/mealie/repair/:id – dasselbe für ein einzelnes Rezept, mit einer
-// Antwort, die sagt was passiert ist. Die Sammel-Route meldet nur Zahlen; wer
-// ein bestimmtes Rezept anreichern will, braucht den Grund, wenn es nicht geht.
-app.post('/api/mealie/repair/:id', async (req, res) => {
-  if (!mealieEnabled()) {
-    return res.status(400).json({ error: 'Mealie ist nicht konfiguriert.' });
-  }
-  const recipe = getRecipeById(Number(req.params.id));
-  if (!recipe) return res.status(404).json({ error: 'Rezept nicht gefunden.' });
-  if (!recipe.source_slug || recipe.source !== 'mealie') {
-    return res.status(400).json({ error: 'Das Rezept kommt nicht aus Mealie.' });
-  }
-  if (!/chefkoch\.de\/rezepte\/\d+\//.test(recipe.source_url || '')) {
-    return res.status(400).json({
-      error:
-        'Nachschlagen geht nur bei Chefkoch-Rezepten – hier fehlt eine Chefkoch-Quelle.',
-    });
-  }
-
-  try {
-    const { outcome, detail } = await repairThinMealieRecipe({
-      slug: recipe.source_slug,
-      sourceUrl: recipe.source_url,
-    });
-    // In beiden Fällen den Spiegel auffrischen: `updatedAt` zählt Mealie nach
-    // einem PATCH nicht hoch, der inkrementelle Abgleich würde das überspringen.
-    const mapped = detail && mapMealieRecipe(detail, mealieConfig().url);
-    if (mapped) upsertRecipeFromSource(mapped);
-
-    if (outcome === 'repaired') {
-      return res.json({
-        outcome,
-        message: 'Zutaten und Zubereitung aus der Chefkoch-API nachgetragen.',
-        recipe: getRecipeById(recipe.id),
-      });
-    }
-    res.json({
-      outcome,
-      message:
-        outcome === 'not-needed'
-          ? 'Das Rezept ist in Mealie bereits vollständig – der Spiegel wurde aufgefrischt.'
-          : 'Chefkoch gibt nicht mehr her als den Anriss. Solche Rezepte stehen ' +
-            'hinter der PLUS-Schranke; da hilft nur, sie zu löschen oder von Hand ' +
-            'in Mealie zu vervollständigen.',
-      recipe: getRecipeById(recipe.id),
-    });
-  } catch (err) {
-    res.status(502).json({ error: err.message });
-  }
 });
 
 // GET /api/mealie/orphans – was die Quelle nicht mehr kennt (Vorschau).
