@@ -244,6 +244,31 @@ Oberfläche legt den Text ins Feld „Rezepttext". Läuft Mealie, wird das Ergeb
 mit `createRecipeInMealie()` dort angelegt (POST nur mit Namen, alles andere per
 PATCH), damit Mealie die eine Quelle bleibt.
 
+## Rezept aus Screenshots (KI-Rückfall)
+
+Wenn eine Seite sich nicht auslesen lässt, bleibt das Abfotografieren.
+`POST /api/recipes/analyze` nimmt deshalb `{ text?, images?, save? }` –
+`images` sind **Data-URLs**, höchstens vier, und gehen als eigene
+`image_url`-Blöcke an OpenRouter (`analyzeRecipe()` in `server.js`).
+
+- **Mehrere Bilder sind der Normalfall:** ein Rezept passt selten in einen
+  Screenshot. Der Textblock davor sagt dem Modell ausdrücklich, dass die Bilder
+  **ein** Rezept in Teilen zeigen und jede Zutat nur einmal ausgegeben werden
+  soll – sonst kommen Zutaten doppelt zurück.
+- Das Standardmodell `openai/gpt-4o-mini` kann Bilder. Steht in
+  `OPENROUTER_MODEL` ein Text-Modell, kommt der Fehler von OpenRouter.
+- Verkleinert wird **im Browser** (`fileToResizedDataUrl`, jetzt in `core.js`
+  statt in `shopping.js`, weil zwei Tabs es brauchen). `maxDim` ist 1600 und
+  nicht 1280: bei einem Screenshot muss die Zutatenliste noch lesbar sein, sonst
+  rät das Modell. `express.json` erlaubt 12 MB, vier Bilder liegen darunter.
+- **`save: true` ist wichtig, wenn Mealie läuft:** `POST /api/recipes` ist dann
+  über `blockWhenMealie` gesperrt, das Formular könnte das Erkannte also nicht
+  speichern. Mit `save` legt die Route es über `createRecipeInMealie()` dort an.
+  Darum hat die Karte zwei Knöpfe – „Analysieren" füllt das Formular,
+  „Erkennen und anlegen" speichert.
+- Erkennt das Modell nichts (leerer Name **und** keine Zutaten), kommt **422**
+  mit dem Hinweis auf einen schärferen Ausschnitt – nicht ein leeres Formular.
+
 ## Rezepte aus Instagram (`lib/social-import.js`)
 
 Mealies `recipe-scrapers` liefert bei einem Reel Titel und Beschreibung, aber

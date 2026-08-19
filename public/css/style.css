@@ -155,6 +155,7 @@ input[type='password'],
 input[type='url'],
 input[type='number'],
 input[type='date'],
+input[type='file'],
 textarea {
   width: 100%;
   padding: 0.55rem 0.75rem;
@@ -195,6 +196,28 @@ select {
   background-position: right 0.7rem center;
   background-size: 1rem;
   cursor: pointer;
+}
+
+/* Dateifelder: der native Knopf sieht in jedem Browser anders aus. Rahmen und
+   Polsterung kommen von oben, hier wird nur der Knopf selbst angeglichen. */
+input[type='file'] {
+  padding: 0.4rem 0.5rem;
+  cursor: pointer;
+}
+input[type='file']::file-selector-button {
+  margin-right: 0.75rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+input[type='file']::file-selector-button:hover {
+  border-color: var(--bring-orange);
+  color: var(--bring-orange);
 }
 
 /* Zahlenfelder: die Pfeilchen stören in den engen Zeilen mehr, als sie nützen. */
