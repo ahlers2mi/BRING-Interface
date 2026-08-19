@@ -249,13 +249,46 @@ async function callOpenRouter({ system, content, schemaName, schema }) {
   return parseJsonContent(answer);
 }
 
-function analyzeRecipeText(text) {
+// Rezept aus Freitext und/oder Bildern (Screenshots, Fotos einer Kochbuchseite).
+// Mehrere Bilder sind der Normalfall: ein Rezept passt selten in einen
+// Screenshot, meist ist eines die Zutatenliste und eines die Zubereitung.
+function analyzeRecipe({ text = '', images = [] } = {}) {
+  const bilder = (Array.isArray(images) ? images : [images]).filter(Boolean);
+  if (!bilder.length) {
+    return callOpenRouter({
+      system: RECIPE_SYSTEM_PROMPT,
+      content: String(text || ''),
+      schemaName: 'recipe',
+      schema: RECIPE_SCHEMA,
+    });
+  }
+
+  const blocks = [
+    {
+      type: 'text',
+      text:
+        (bilder.length > 1
+          ? `Die ${bilder.length} Bilder zeigen EIN Rezept in mehreren Teilen ` +
+            '(z. B. Zutatenliste und Zubereitung getrennt). Setze sie zu einem ' +
+            'Rezept zusammen und gib jede Zutat nur einmal aus.'
+          : 'Das Bild zeigt ein Rezept.') +
+        ' Lies Zutaten und Zubereitung ab, erfinde nichts und ergänze nichts, ' +
+        'was nicht zu sehen ist. Ist etwas unlesbar, lass das Feld leer.' +
+        (text ? `\n\nZusätzliche Angaben des Nutzers:\n${text}` : ''),
+    },
+    ...bilder.map((url) => ({ type: 'image_url', image_url: { url } })),
+  ];
   return callOpenRouter({
     system: RECIPE_SYSTEM_PROMPT,
-    content: text,
+    content: blocks,
     schemaName: 'recipe',
     schema: RECIPE_SCHEMA,
   });
+}
+
+// Der Video-/Instagram-Weg schickt nur Text.
+function analyzeRecipeText(text) {
+  return analyzeRecipe({ text });
 }
 
 // Analysiert Text und/oder ein Bild (Data-URL) zu einer Artikelliste.
@@ -570,16 +603,71 @@ app.get('/api/recipes', (_req, res) => {
   res.json(getAllRecipes());
 });
 
-// POST /api/recipes/analyze – body: { text } – analysiert Freitext per OpenRouter
+// Höchstens so viele Bilder je Analyse. Vier reichen für Zutaten + Zubereitung
+// mit Reserve; jedes weitere kostet Token und bringt selten etwas.
+const MAX_ANALYZE_IMAGES = 4;
+
+// POST /api/recipes/analyze – body: { text?, image?, images?, save? }
+// Freitext und/oder Screenshots per OpenRouter zu einem Rezept machen. Ohne
+// `save` kommt das Ergebnis nur zurück (die Oberfläche füllt damit das
+// Formular); mit `save` wird es angelegt – in Mealie, wenn das die Quelle ist.
 app.post('/api/recipes/analyze', async (req, res) => {
-  const text = (req.body.text || '').trim();
-  if (!text) return res.status(400).json({ error: 'Kein Rezepttext übergeben.' });
+  const text = String(req.body.text || '').trim();
+  const roh = req.body.images ?? req.body.image;
+  const images = (Array.isArray(roh) ? roh : [roh]).filter(Boolean).map(String);
+
+  if (!text && !images.length) {
+    return res.status(400).json({
+      error: 'Bitte einen Rezepttext einfügen oder mindestens ein Bild hochladen.',
+    });
+  }
+  if (images.length > MAX_ANALYZE_IMAGES) {
+    return res.status(400).json({
+      error: `Höchstens ${MAX_ANALYZE_IMAGES} Bilder auf einmal – ` +
+        'bei mehr wird die Analyse teuer und schlechter.',
+    });
+  }
+  const falsch = images.find((url) => !/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(url));
+  if (falsch) {
+    return res.status(400).json({
+      error: 'Bilder bitte als Data-URL (data:image/…;base64,…) übergeben.',
+    });
+  }
 
   try {
-    const recipe = await analyzeRecipeText(text);
-    res.json(recipe);
+    const recipe = await analyzeRecipe({ text, images });
+    if (!recipe?.name && !(recipe?.ingredients || []).length) {
+      return res.status(422).json({
+        error:
+          'Aus der Vorlage war kein Rezept zu lesen. Bei Screenshots hilft ' +
+          'meist ein schärferer Ausschnitt von Zutaten und Zubereitung.',
+      });
+    }
+    if (!req.body.save) return res.json(recipe);
+
+    // Anlegen: mit Mealie als Quelle gehört es dorthin, sonst hierher.
+    if (mealieEnabled()) {
+      const slug = await createRecipeInMealie(recipe);
+      const detail = await fetchRecipeDetail(slug);
+      const mapped = mapMealieRecipe(detail, mealieConfig().url);
+      const saved = mapped ? upsertRecipeFromSource(mapped) : null;
+      return res.status(201).json({
+        recipe: saved,
+        saved: true,
+        target: 'mealie',
+        link: mealieRecipeUrl(slug),
+        message: `In Mealie angelegt: ${saved?.name || recipe.name}`,
+      });
+    }
+    const created = createRecipe({ ...recipe, source: images.length ? 'bild' : 'manuell' });
+    return res.status(201).json({
+      recipe: created,
+      saved: true,
+      target: 'lokal',
+      message: `Gespeichert: ${created.name}`,
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 

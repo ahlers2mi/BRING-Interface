@@ -21,7 +21,7 @@ Web Interface für Bring APP
 - **Rezept-Import** – einzelne Rezepte per Link (Chefkoch und alle Seiten mit schema.org-Daten), **aus einem YouTube-Kochvideo** (Beschreibung bzw. Untertitel), **aus einem Instagram-Reel** (volle Bildunterschrift über die Einbettungs-Seite) oder **Massenimport von chefkoch.de** (z. B. 200 Rezepte auf einmal, im Hintergrund mit Fortschrittsanzeige).
 - **Eigener Tab „Import & Quellen"** – Mealie, Cookidoo, Chefkoch-Import und KI-Analyse liegen zusammen; der Rezepte-Tab bleibt Liste und Geschmacksprofil. Die Rezeptliste lässt sich nach Herkunft filtern (Chefkoch, Cookidoo, eigene).
 - **Reste-Küche** – eingeben, was noch im Kühlschrank liegt, und passende Rezepte nach Abdeckung sortiert finden; fehlende Zutaten wandern auf Wunsch direkt nach Bring.
-- **KI-Rezeptanalyse** – kompletten Rezepttext einfügen; ein KI-Modell (über [OpenRouter](https://openrouter.ai/)) extrahiert automatisch Name, Beschreibung und Zutaten (mit Mengen) zum Prüfen und Speichern.
+- **KI-Rezeptanalyse** – kompletten Rezepttext einfügen **oder Screenshots/Fotos hochladen** (bis zu vier, die zusammen ein Rezept zeigen); ein KI-Modell (über [OpenRouter](https://openrouter.ai/)) liest Name, Beschreibung, Zutaten (mit Mengen) und Zubereitung heraus. Der Rückfall für Seiten, die sich nicht auslesen lassen – läuft Mealie, wird das Ergebnis direkt dort angelegt.
 - **FHEM/FHEMVIZ-Anbindung** – Wochenplan als HTTPMOD-Gerät mit Readings, Würfeln und Bewerten per `set`; siehe [`fhem/README.md`](fhem/README.md).
 
 ## Voraussetzungen

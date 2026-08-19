@@ -794,6 +794,130 @@ test('ein zweites Video ist keine Dublette des ersten', async () => {
   }
 });
 
+// ── Rezept aus Screenshots (KI-Rueckfall) ─────────────────────────────────────
+
+// Ein 1x1-PNG als Data-URL – Inhalt egal, geprueft wird die Verdrahtung.
+const BILD =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==';
+
+test('Analyse weist Unfug ab, bevor es die KI kostet', async () => {
+  // Nichts dabei.
+  const leer = await api('/api/recipes/analyze', { method: 'POST', body: {} });
+  assert.equal(leer.status, 400);
+  assert.match(leer.json.error, /Rezepttext|Bild/);
+
+  // Zu viele Bilder.
+  const zuviel = await api('/api/recipes/analyze', {
+    method: 'POST',
+    body: { images: [BILD, BILD, BILD, BILD, BILD] },
+  });
+  assert.equal(zuviel.status, 400);
+  assert.match(zuviel.json.error, /4 Bilder/);
+
+  // Keine Data-URL, sondern eine Adresse – die wuerde das Modell nicht laden.
+  const falsch = await api('/api/recipes/analyze', {
+    method: 'POST',
+    body: { images: ['https://example.org/rezept.png'] },
+  });
+  assert.equal(falsch.status, 400);
+  assert.match(falsch.json.error, /Data-URL/);
+});
+
+test('Analyse aus Screenshots: Bilder gehen als Blöcke an die KI', async () => {
+  const alterKey = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = 'test-key';
+  let gesendet = null;
+
+  globalThis.fetch = async (url, opts) => {
+    const href = String(url);
+    if (href.startsWith(base)) return realFetch(url, opts);
+    if (!href.includes('openrouter.ai')) return new Response('weg', { status: 404 });
+    gesendet = JSON.parse(opts.body);
+    return new Response(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                name: 'Omas Kartoffelsuppe',
+                description: 'Vom Foto abgelesen.',
+                instructions: '1. Gemüse würfeln.\n2. Köcheln lassen.',
+                prep_time: 'ca. 40 Min.',
+                ingredients: [
+                  { name: 'Kartoffeln', amount: '750 g' },
+                  { name: 'Möhren', amount: '2' },
+                ],
+              }),
+            },
+          },
+        ],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } }
+    );
+  };
+
+  try {
+    // Ohne `save`: Ergebnis geht nur zurueck, damit die Oberflaeche das
+    // Formular fuellen kann.
+    const res = await api('/api/recipes/analyze', {
+      method: 'POST',
+      body: { images: [BILD, BILD], text: 'für 6 Personen' },
+    });
+    assert.equal(res.status, 200, res.text);
+    assert.equal(res.json.name, 'Omas Kartoffelsuppe');
+    assert.equal(res.json.ingredients.length, 2);
+
+    // Die Anfrage muss beide Bilder als eigene Blöcke enthalten – und den
+    // Hinweis, dass sie zusammengehoeren.
+    const blocks = gesendet.messages.at(-1).content;
+    assert.ok(Array.isArray(blocks), 'Content-Blöcke statt eines Strings');
+    assert.equal(blocks.filter((b) => b.type === 'image_url').length, 2);
+    assert.match(blocks[0].text, /2 Bilder zeigen EIN Rezept/);
+    assert.match(blocks[0].text, /für 6 Personen/, 'Zusatztext wandert mit');
+
+    // Mit `save`: es landet in der Sammlung (Mealie ist im Test aus).
+    const gespeichert = await api('/api/recipes/analyze', {
+      method: 'POST',
+      body: { images: [BILD], save: true },
+    });
+    assert.equal(gespeichert.status, 201, gespeichert.text);
+    assert.equal(gespeichert.json.target, 'lokal');
+    assert.equal(gespeichert.json.recipe.source, 'bild');
+    assert.equal(gespeichert.json.recipe.name, 'Omas Kartoffelsuppe');
+    assert.match(gespeichert.json.recipe.instructions, /Gemüse würfeln/);
+    // Ein einzelnes Bild bekommt den anderen Hinweis.
+    assert.match(gesendet.messages.at(-1).content[0].text, /Das Bild zeigt ein Rezept/);
+  } finally {
+    globalThis.fetch = realFetch;
+    if (alterKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = alterKey;
+  }
+});
+
+test('Analyse meldet verstaendlich, wenn im Bild kein Rezept steht', async () => {
+  const alterKey = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = 'test-key';
+  globalThis.fetch = async (url, opts) => {
+    const href = String(url);
+    if (href.startsWith(base)) return realFetch(url, opts);
+    return new Response(
+      JSON.stringify({
+        choices: [{ message: { content: JSON.stringify({ name: '', ingredients: [] }) } }],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } }
+    );
+  };
+  try {
+    const res = await api('/api/recipes/analyze', { method: 'POST', body: { images: [BILD] } });
+    assert.equal(res.status, 422, res.text);
+    assert.match(res.json.error, /kein Rezept zu lesen/);
+  } finally {
+    globalThis.fetch = realFetch;
+    if (alterKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = alterKey;
+  }
+});
+
 test('Rezept aus einem Instagram-Reel uebernehmen', async () => {
   // Der Fall aus der Praxis: Mealies Scraper liest nur die Meta-Daten, und
   // Instagram kuerzt die mitten im Satz ("... Zutaten fuer 4 Portionen 150").

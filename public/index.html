@@ -576,9 +576,22 @@
           placeholder="z. B.&#10;Spaghetti Bolognese&#10;&#10;Ein Klassiker der italienischen Küche.&#10;&#10;Zutaten:&#10;500 g Hackfleisch&#10;1 Zwiebel&#10;2 Dosen Tomaten&#10;Salz, Pfeffer&#10;Spaghetti"
         ></textarea>
       </div>
+      <div class="form-group">
+        <label for="recipeImages">
+          Oder <b>Screenshots/Fotos</b> des Rezepts – der Rückfall, wenn eine Seite
+          sich nicht auslesen lässt. Mehrere Bilder gehören zusammen (z.&nbsp;B.
+          Zutaten und Zubereitung getrennt), höchstens vier.
+        </label>
+        <input type="file" id="recipeImages" accept="image/*" multiple />
+        <div class="hint" id="recipeImagesInfo"></div>
+      </div>
       <div class="btn-group">
         <button class="btn btn-primary" id="analyzeBtn">
           <span>✨</span> Analysieren
+        </button>
+        <button class="btn btn-secondary" id="analyzeSaveBtn"
+          title="Erkennen und direkt anlegen – mit Mealie als Quelle dort">
+          <span>💾</span> Erkennen und anlegen
         </button>
         <button class="btn btn-secondary" id="clearRawBtn">Leeren</button>
       </div>

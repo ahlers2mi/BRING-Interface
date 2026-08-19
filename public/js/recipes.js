@@ -9,6 +9,7 @@ import {
   mealieActive,
   mealieRecipeLink,
   escHtml,
+  fileToResizedDataUrl,
   flash,
   on,
   openModal,
@@ -968,8 +969,28 @@ function renderShortcutUrl() {
   node.textContent = state.status?.apiTokenEnabled ? `${base}&token=DEIN_API_TOKEN` : base;
 }
 
+// Ohne OPENROUTER_API_KEY kann die Analyse nichts – dann sagen wir das hier,
+// statt den Nutzer in einen Fehler laufen zu lassen.
+function renderAiHint() {
+  if (state.status && state.status.aiEnabled === false) {
+    for (const id of ['analyzeBtn', 'analyzeSaveBtn']) {
+      const btn = el(id);
+      if (btn) {
+        btn.disabled = true;
+        btn.title = 'Dafür fehlt der OPENROUTER_API_KEY in den Stack-Variablen.';
+      }
+    }
+    flash(
+      'analyzeResult',
+      'Die KI-Analyse ist aus: es fehlt der <code>OPENROUTER_API_KEY</code>.',
+      'info'
+    );
+  }
+}
+
 export async function initRecipes() {
   renderShortcutUrl();
+  renderAiHint();
 
   on('addUrlBtn', 'click', async (e) => {
     const url = el('addUrl').value.trim();
@@ -1041,36 +1062,74 @@ export async function initRecipes() {
     }
   });
 
-  // KI-Analyse eines eingefügten Rezepttexts
+  // KI-Analyse: Rezepttext und/oder Screenshots. Die Bilder sind der Rueckfall,
+  // wenn sich eine Seite nicht auslesen laesst.
+  const MAX_BILDER = 4;
+
   on('clearRawBtn', 'click', () => {
     el('recipeRawText').value = '';
+    el('recipeImages').value = '';
+    el('recipeImagesInfo').textContent = '';
     el('analyzeResult').innerHTML = '';
   });
 
-  on('analyzeBtn', 'click', async () => {
-    const btn = el('analyzeBtn');
+  on('recipeImages', 'change', (e) => {
+    const dateien = [...(e.target.files || [])];
+    el('recipeImagesInfo').textContent = dateien.length
+      ? `${dateien.length} Bild(er): ${dateien.map((f) => f.name).join(', ')}` +
+        (dateien.length > MAX_BILDER ? ` – nur die ersten ${MAX_BILDER} werden benutzt` : '')
+      : '';
+  });
+
+  // Ein Weg fuer beide Knoepfe: `speichern` entscheidet nur, ob das Ergebnis
+  // ins Formular oder direkt in die Sammlung (bzw. nach Mealie) geht.
+  async function analysieren(btn, speichern) {
     const resultEl = el('analyzeResult');
     const text = el('recipeRawText').value.trim();
-    if (!text) return flash(resultEl, 'Bitte zuerst einen Rezepttext einfügen.', 'error');
+    const dateien = [...(el('recipeImages').files || [])].slice(0, MAX_BILDER);
+    if (!text && !dateien.length) {
+      return flash(resultEl, 'Bitte einen Rezepttext einfügen oder Bilder wählen.', 'error');
+    }
 
     setLoading(btn, true);
     try {
-      const recipe = await apiFetch('/api/recipes/analyze', {
+      if (dateien.length) {
+        flash(resultEl, `Lese ${dateien.length} Bild(er) …`, 'info');
+      }
+      const images = await Promise.all(dateien.map((f) => fileToResizedDataUrl(f)));
+      const antwort = await apiFetch('/api/recipes/analyze', {
         method: 'POST',
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, images, save: speichern }),
       });
+
+      if (speichern) {
+        flash(resultEl, escHtml(antwort.message || 'Gespeichert.'));
+        el('recipeRawText').value = '';
+        el('recipeImages').value = '';
+        el('recipeImagesInfo').textContent = '';
+        await refreshAll();
+        return;
+      }
+
       resetRecipeForm();
-      fillForm(recipe);
+      fillForm(antwort);
+      const woher = dateien.length ? `${dateien.length} Bild(er)` : 'Text';
       flash(
         resultEl,
-        `✓ ${(recipe.ingredients || []).length} Zutaten erkannt. Bitte unten prüfen und speichern.`
+        `✓ Aus ${woher}: ${(antwort.ingredients || []).length} Zutaten erkannt. ` +
+          (mealieActive()
+            ? 'Rezepte werden in Mealie gepflegt – zum Anlegen „Erkennen und anlegen" nehmen.'
+            : 'Bitte unten prüfen und speichern.')
       );
     } catch (err) {
       flash(resultEl, `Fehler bei der Analyse: ${escHtml(err.message)}`, 'error');
     } finally {
       setLoading(btn, false);
     }
-  });
+  }
+
+  on('analyzeBtn', 'click', () => analysieren(el('analyzeBtn'), false));
+  on('analyzeSaveBtn', 'click', () => analysieren(el('analyzeSaveBtn'), true));
 
   // Import per URL
   on('urlImportBtn', 'click', async () => {
