@@ -667,7 +667,10 @@ ul.plain li { padding: 0.1rem 0; }
 
 /* ── Rezeptliste ──────────────────────────────────────────────────────────── */
 
-.recipe-item.is-blocked { opacity: 0.6; }
+/* Gesperrt, unvollständig oder in Mealie verschwunden: der INHALT tritt zurück,
+   die Knöpfe nicht. Mit Opazität über die ganze Karte sah ausgerechnet
+   „Entsperren" aus wie deaktiviert – also der Knopf, den man dort braucht. */
+.recipe-item.is-blocked > *:not(.recipe-actions) { opacity: 0.55; }
 
 /* Vorschaubild links in Rezeptliste und Reste-Küche. Feste Breite, damit die
    Karten untereinander eine Kante bilden – auch wenn ein Bild fehlt. */
