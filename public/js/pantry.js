@@ -95,6 +95,29 @@ function buildRow(item) {
   return row;
 }
 
+// Gekauftes übernehmen. Bekommt die Bring-Listen, wie sie gerade geladen
+// wurden – abgehakt wird in der Bring-App, hier kommt nur der Zustand an.
+// Läuft still im Hintergrund: schlägt es fehl, ist das kein Grund, dem Nutzer
+// beim Öffnen der Einkaufsliste einen Fehler hinzuwerfen.
+export async function checkPantryAgainst(data) {
+  if (!items.length) return; // keine Vorräte gepflegt, nichts zu prüfen
+  try {
+    const res = await apiFetch('/api/pantry/check', {
+      method: 'POST',
+      body: JSON.stringify({
+        purchase: data?.purchase || [],
+        recently: data?.recently || data?.recent || [],
+      }),
+    });
+    if (!res.bought.length) return;
+    items = res.items || items;
+    render();
+    flash('pantryResult', `✓ ${escHtml(res.message)}`, 'success');
+  } catch (err) {
+    console.warn('Vorräte konnten nicht abgeglichen werden:', err.message);
+  }
+}
+
 export async function loadPantry() {
   try {
     const data = await apiFetch('/api/pantry');
