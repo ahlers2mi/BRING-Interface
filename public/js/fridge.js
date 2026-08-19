@@ -190,6 +190,20 @@ export function initFridge() {
           '<div class="alert alert-info">Kein Rezept enthält diese Zutaten. ' +
           'Mehr Rezepte importieren oder andere Begriffe versuchen.</div>';
       }
+      // Womit gerechnet wurde: sonst ist nicht erkennbar, warum Öl in einem
+      // Rezept plötzlich als fehlend auftaucht (weil es im Vorrat leer steht).
+      if (el('fridgePantry').checked && res.pantry) {
+        const info = document.createElement('div');
+        info.className = 'hint';
+        info.textContent =
+          res.pantry.source === 'liste'
+            ? `Als vorhanden gerechnet: ${res.pantry.available} Vorräte auf „da"` +
+              (res.pantry.missing
+                ? ` – ${res.pantry.missing} auf „knapp"/„leer" zählen als fehlend.`
+                : '.')
+            : 'Als vorhanden gerechnet: die Standardliste (noch keine Vorräte gepflegt).';
+        listEl.appendChild(info);
+      }
       for (const item of res.results) listEl.appendChild(buildResultCard(item));
     } catch (err) {
       listEl.innerHTML = `<div class="alert alert-error">Fehler: ${escHtml(

@@ -1880,3 +1880,52 @@ test('Vorraete: check verlangt Liste oder Listen-Inhalt', async () => {
   assert.equal(res.status, 400);
   assert.match(res.json.error, /listUuid/);
 });
+
+test('Reste-Kueche rechnet mit der gepflegten Vorratsliste', async () => {
+  // Rezept mit einer Zutat aus dem Kuehlschrank und zwei Vorraeten.
+  const rezept = (
+    await api('/api/recipes', {
+      method: 'POST',
+      body: {
+        name: 'Zucchini in Öl',
+        ingredients: [{ name: 'Zucchini' }, { name: 'Öl' }, { name: 'Salz' }],
+      },
+    })
+  ).json;
+
+  // 1. Vorraete gepflegt und alles da -> Öl und Salz gelten als vorhanden.
+  await api('/api/pantry/all', { method: 'POST', body: { status: 'have' } });
+  let res = await api('/api/fridge/search', {
+    method: 'POST',
+    body: { items: ['Zucchini'] },
+  });
+  assert.equal(res.status, 200, res.text);
+  assert.equal(res.json.pantry.source, 'liste');
+  let treffer = res.json.results.find((r) => r.recipe.id === rezept.id);
+  assert.ok(treffer, 'Rezept gefunden');
+  assert.deepEqual(treffer.missing, [], 'nichts fehlt');
+
+  // 2. Öl auf "leer" -> es fehlt jetzt, obwohl es ein Vorrat ist. Genau das war
+  //    mit der festen Liste nicht moeglich.
+  const oel = (await api('/api/pantry')).json.items.find((i) => i.name === 'Öl');
+  await api(`/api/pantry/${oel.id}`, { method: 'PUT', body: { status: 'out' } });
+
+  res = await api('/api/fridge/search', { method: 'POST', body: { items: ['Zucchini'] } });
+  treffer = res.json.results.find((r) => r.recipe.id === rezept.id);
+  assert.deepEqual(
+    treffer.missing.map((m) => m.name),
+    ['Öl'],
+    JSON.stringify(treffer.missing)
+  );
+  assert.equal(res.json.pantry.missing, 1);
+
+  // 3. Ohne Haken zaehlt gar kein Vorrat als vorhanden.
+  res = await api('/api/fridge/search', {
+    method: 'POST',
+    body: { items: ['Zucchini'], assumePantry: false },
+  });
+  treffer = res.json.results.find((r) => r.recipe.id === rezept.id);
+  assert.deepEqual(treffer.missing.map((m) => m.name).sort(), ['Salz', 'Öl']);
+
+  await api(`/api/recipes/${rezept.id}`, { method: 'DELETE' });
+});

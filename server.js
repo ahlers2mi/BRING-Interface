@@ -1617,12 +1617,27 @@ app.post('/api/fridge/search', (req, res) => {
   if (!list.length) {
     return res.status(400).json({ error: 'Bitte mindestens eine Zutat eingeben.' });
   }
-  res.json(
-    fridgeSearch(list, {
+  // „Vorräte annehmen" bezieht sich auf die **gepflegte** Vorratsliste: als
+  // vorhanden gilt, was dort auf „da" steht. Knapp und leer gelten NICHT als
+  // vorhanden – sonst schlägt die Reste-Küche ein Rezept vor, dessen Öl gerade
+  // fehlt. Ist keine Vorratsliste gepflegt, greift die feste Liste in
+  // normalize.js, damit der Haken auch dann etwas tut.
+  const vorrat = getPantry();
+  const daNamen = vorrat.filter((i) => i.status === 'have').map((i) => i.name);
+  const quelle = vorrat.length ? 'liste' : 'standard';
+
+  res.json({
+    ...fridgeSearch(list, {
       assumePantry: req.body?.assumePantry !== false,
       limit: Math.min(50, Number(req.body?.limit) || 20),
-    })
-  );
+      pantryNames: vorrat.length ? daNamen : null,
+    }),
+    pantry: {
+      source: quelle,
+      available: quelle === 'liste' ? daNamen.length : null,
+      missing: quelle === 'liste' ? vorrat.length - daNamen.length : null,
+    },
+  });
 });
 
 // ── Rezept-Import (URL + Massenimport) ────────────────────────────────────────

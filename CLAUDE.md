@@ -249,13 +249,27 @@ PATCH), damit Mealie die eine Quelle bleibt.
 Was im Haus sein **soll**, mit Zustand `have` / `low` / `out`. Knapp und leer
 wandern per Knopf auf die Bring-Liste.
 
-**Nicht zu verwechseln mit `PANTRY_ITEMS` in `normalize.js`:** die Liste dort ist
-im Code festgelegt und sagt nur „das zählt bei der Reste-Suche nicht als
-fehlend" bzw. „das gehört nicht ins Geschmacksprofil". Die `pantry`-Tabelle
-gehört dem Haushalt und ändert sich täglich. Berührungspunkt ist einzig
-`POST /api/pantry/seed`: der Grundstock kommt aus `PANTRY_ITEMS`, aber
-**groß geschrieben** (auf einer Einkaufsliste liest niemand gern „salz") und
-ohne `wasser` und `ei` (Wasser kauft man nicht, `ei` ist neben `eier` doppelt).
+**Verhältnis zu `PANTRY_ITEMS` in `normalize.js`:** die Liste dort ist im Code
+festgelegt; die `pantry`-Tabelle gehört dem Haushalt und ändert sich täglich.
+Zwei Berührungspunkte:
+
+- `POST /api/pantry/seed` – der Grundstock kommt aus `PANTRY_ITEMS`, aber
+  **groß geschrieben** (auf einer Einkaufsliste liest niemand gern „salz") und
+  ohne `wasser` und `ei` (Wasser kauft man nicht, `ei` ist neben `eier` doppelt).
+- **Die Reste-Küche rechnet mit der Tabelle, nicht mit der Code-Liste.** Der
+  Haken „Vorräte annehmen" heißt: als vorhanden gilt, was dort auf `have` steht.
+  Knapp und leer gelten **nicht** als vorhanden – sonst schlägt die Reste-Suche
+  ein Rezept vor, dessen Öl gerade fehlt. `matchRecipeToFridge` nimmt dafür
+  `pantryNames`; ohne gepflegte Tabelle greift weiter `isPantryItem()`, damit
+  der Haken auch dann etwas tut. Verglichen wird mit `ingredientMatches`, also
+  passt „Zwiebel" im Vorrat auch auf „Zwiebeln" im Rezept.
+- Die Antwort von `/api/fridge/search` sagt in `pantry.source`, womit gerechnet
+  wurde (`liste` oder `standard`) – die Oberfläche schreibt es unter die
+  Ergebnisse, sonst ist nicht erklärbar, warum Öl plötzlich als fehlend
+  auftaucht.
+
+`PANTRY_ITEMS` bleibt zusätzlich die Sperre fürs **Geschmacksprofil** (siehe
+`taste.js`) – das hat mit dem Bestand nichts zu tun.
 
 - `name` ist **UNIQUE**; `addPantryItem` ist ein UPSERT, ein zweites Anlegen
   frischt den Eintrag auf statt ihn zu verdoppeln. `seedPantry` benutzt dagegen
