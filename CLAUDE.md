@@ -244,6 +244,46 @@ Oberfläche legt den Text ins Feld „Rezepttext". Läuft Mealie, wird das Ergeb
 mit `createRecipeInMealie()` dort angelegt (POST nur mit Namen, alles andere per
 PATCH), damit Mealie die eine Quelle bleibt.
 
+## Zutaten aus Freitext trennen (`splitIngredientText`)
+
+Mealie legt Zutaten ohne `quantity`/`unit` als **eine Zeichenkette** in `note` ab
+(so kommen sie aus `recipe-scrapers` und so schreiben wir sie auch zurück).
+Ungetrennt hat das zwei Folgen, eine sichtbare und eine stille:
+
+- Auf der **Bring-Liste** heißt der Artikel „400 g Hähnchenbrustfilet(s)" – das
+  findet Bring in seinem Katalog nicht, und das Mengenfeld bleibt leer.
+- Die **Portions-Umrechnung greift gar nicht**: `scaleIngredients` rechnet nur am
+  `amount`-Feld. Mit 2,5 statt 4 Portionen blieb alles stehen, wie es war.
+
+`mapMealieIngredient` trennt deshalb per `splitIngredientText`. Vier Eigenheiten
+der Quellen werden dabei geglättet, alle an echten Zeilen gefunden:
+
+| aus der Quelle | Artikel | Menge |
+|---|---|---|
+| `400 g Hähnchenbrustfilet(s)` | Hähnchenbrustfilet | 400 g |
+| `0.25 Salatgurke(n)` | Salatgurke | 1/4 |
+| `n. B. Reis` (nach Bedarf) | Reis | – |
+| `1 kleine Zwiebel(n)` | Zwiebel | 1 kleine |
+| `1 Dose/n Kokosmilch (ca. 400 g)` | Kokosmilch | 1 Dose oder 400 g |
+
+Größenwörter (klein/groß) wandern zur Menge, weil Bring „Zwiebel" kennt und
+„kleine Zwiebel" nicht. **Farb- und Sortenwörter bleiben am Namen** („Paprikaschote,
+rote") – die bezeichnen ein anderes Produkt. Eine Klammer, die keine Menge ist,
+bleibt ebenfalls stehen (`Nudeln (Spirelli)`).
+
+Die „A oder B"-Menge muss `scaleAmountText` kennen, sonst fällt beim Umrechnen
+die zweite Angabe weg (`1 Dose oder 400 g` × 0,5 → `1/2 Dose oder 200 g`).
+
+**Falle in `splitAmount`, jahrelang drin:** die Einheit war nicht ans Wortende
+gebunden. Das `g` für Gramm griff in „**G**las", das `l` in „**L**iter", das `st`
+in „**St**angen" – aus „1 Glas Rotkohl" wurde Menge „1 G" und Artikel
+„las Rotkohl". Der Lookahead `(?=[\s,;]|$)` hinter der Einheit erledigt beides:
+Wortgrenze, und die längere Einheit gewinnt (`gramm` vor `g`), weil die kurze
+Alternative am Lookahead scheitert und zurückgesetzt wird.
+
+Der Spiegel wird bei jedem Abgleich neu geschrieben – die Korrektur wirkt also
+nach dem nächsten Sync auf alle vorhandenen Rezepte, ohne Migration.
+
 ## Rezept aus Screenshots (KI-Rückfall)
 
 Wenn eine Seite sich nicht auslesen lässt, bleibt das Abfotografieren.
