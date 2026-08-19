@@ -1761,3 +1761,99 @@ test('absolute Bild-Adressen (Cookidoo) bleiben unverändert', async () => {
   const payload = (await api(`/api/fhem/plan?token=${TOKEN}`)).json;
   assert.equal(payload.today_img, 'https://assets.tmecosys.com/bild.jpg');
 });
+
+// ── Vorratskammer ─────────────────────────────────────────────────────────────
+
+test('Vorraete: Grundstock anlegen, Zustand setzen, Fehlendes finden', async () => {
+  const leer = await api('/api/pantry');
+  assert.equal(leer.status, 200, leer.text);
+  assert.deepEqual(leer.json.items, []);
+
+  // Grundstock. Zweiter Klick darf nichts doppelt anlegen.
+  const seed = await api('/api/pantry/seed', { method: 'POST' });
+  assert.equal(seed.status, 200, seed.text);
+  assert.ok(seed.json.added > 20, JSON.stringify(seed.json.added));
+  // Gross geschrieben - auf einer Einkaufsliste liest niemand gern "salz".
+  assert.ok(seed.json.items.some((i) => i.name === 'Salz'), 'Salz mit grossem S');
+  assert.ok(seed.json.items.some((i) => i.name === 'Öl'), 'Umlaut wird auch gross');
+  // Wasser kauft man nicht, und "ei" ist neben "eier" doppelt.
+  assert.ok(!seed.json.items.some((i) => i.name.toLowerCase() === 'wasser'));
+  assert.ok(!seed.json.items.some((i) => i.name === 'Ei'));
+
+  const nochmal = await api('/api/pantry/seed', { method: 'POST' });
+  assert.equal(nochmal.json.added, 0, 'zweiter Klick legt nichts doppelt an');
+  assert.equal(nochmal.json.items.length, seed.json.items.length);
+
+  // Eigener Vorrat mit Menge.
+  const eigen = await api('/api/pantry', {
+    method: 'POST',
+    body: { name: 'Backpapier', amount: '1 Rolle' },
+  });
+  assert.equal(eigen.status, 201, eigen.text);
+  assert.equal(eigen.json.status, 'have');
+
+  // Derselbe Name legt keinen zweiten Eintrag an.
+  await api('/api/pantry', { method: 'POST', body: { name: 'Backpapier' } });
+  const alle = (await api('/api/pantry')).json;
+  assert.equal(alle.items.filter((i) => i.name === 'Backpapier').length, 1);
+  assert.equal(alle.counts.total, alle.items.length);
+  assert.equal(alle.counts.have, alle.items.length, 'am Anfang ist alles da');
+
+  // Zustand setzen: knapp und leer.
+  const salz = alle.items.find((i) => i.name === 'Salz');
+  const mehl = alle.items.find((i) => i.name === 'Mehl');
+  await api(`/api/pantry/${salz.id}`, { method: 'PUT', body: { status: 'low' } });
+  await api(`/api/pantry/${mehl.id}`, {
+    method: 'PUT',
+    body: { status: 'out', amount: '1 kg' },
+  });
+
+  const nachher = (await api('/api/pantry')).json;
+  assert.equal(nachher.counts.low, 1);
+  assert.equal(nachher.counts.out, 1);
+  assert.equal(nachher.items.find((i) => i.id === mehl.id).amount, '1 kg');
+
+  // Ein unbekannter Zustand aendert nichts kaputt.
+  const quatsch = await api(`/api/pantry/${salz.id}`, {
+    method: 'PUT',
+    body: { status: 'vielleicht' },
+  });
+  assert.equal(quatsch.json.status, 'low', 'unbekannter Zustand wird ignoriert');
+
+  // Alles wieder da.
+  const zurueck = await api('/api/pantry/all', { method: 'POST', body: { status: 'have' } });
+  assert.ok(zurueck.json.changed >= 2, JSON.stringify(zurueck.json));
+  assert.equal((await api('/api/pantry')).json.counts.have, nachher.counts.total);
+
+  // Loeschen.
+  const weg = await api(`/api/pantry/${eigen.json.id}`, { method: 'DELETE' });
+  assert.equal(weg.status, 200, weg.text);
+  assert.ok(!(await api('/api/pantry')).json.items.some((i) => i.name === 'Backpapier'));
+  assert.equal((await api('/api/pantry/999999', { method: 'DELETE' })).status, 404);
+});
+
+test('Vorraete: ohne Namen und ohne Liste gibt es klare Absagen', async () => {
+  const ohneName = await api('/api/pantry', { method: 'POST', body: { amount: '1 kg' } });
+  assert.equal(ohneName.status, 400);
+  assert.match(ohneName.json.error, /Namen/);
+
+  const ohneListe = await api('/api/pantry/shopping', { method: 'POST', body: {} });
+  assert.equal(ohneListe.status, 400);
+  assert.match(ohneListe.json.error, /listUuid/);
+
+  const weg = await api('/api/pantry/999999', { method: 'PUT', body: { status: 'low' } });
+  assert.equal(weg.status, 404);
+});
+
+test('Vorraete: nichts knapp -> nichts auf die Liste (ohne Bring-Aufruf)', async () => {
+  // Alles steht auf "da", also darf die Route gar nicht bei Bring anklopfen –
+  // sonst braeuchte dieser Test ein Konto.
+  await api('/api/pantry/all', { method: 'POST', body: { status: 'have' } });
+  const res = await api('/api/pantry/shopping', {
+    method: 'POST',
+    body: { listUuid: 'egal-kein-bring-aufruf' },
+  });
+  assert.equal(res.status, 200, res.text);
+  assert.deepEqual(res.json.imported, []);
+  assert.match(res.json.message, /Nichts knapp/);
+});

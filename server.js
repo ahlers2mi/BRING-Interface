@@ -31,8 +31,14 @@ import {
   setPlanEntry,
   deletePlanEntry,
   updatePlanStatus,
+  addPantryItem,
+  deletePantryItem,
+  getPantry,
   getSetting,
+  seedPantry,
+  setAllPantryStatus,
   setSetting,
+  updatePantryItem,
   currentCourseConfig,
 } from './database.js';
 import {
@@ -66,7 +72,7 @@ import {
   startImportJob,
   stripHtml,
 } from './lib/recipe-import.js';
-import { realIngredients, tidyItems } from './lib/normalize.js';
+import { PANTRY_ITEMS, realIngredients, tidyItems } from './lib/normalize.js';
 import { renderPlanSvg } from './lib/plan-svg.js';
 import { recipeFromText } from './lib/video-import.js';
 import {
@@ -635,6 +641,103 @@ app.delete('/api/lists/:uuid/items/:name', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── Vorratskammer ─────────────────────────────────────────────────────────────
+//
+// Was im Haus sein SOLLTE, mit Zustand: da / knapp / leer. Knapp und leer
+// wandern auf Knopfdruck auf die Bring-Liste. Die Liste ist bewusst getrennt von
+// `PANTRY_ITEMS` in normalize.js: die dortige Liste sagt nur „das zählt bei der
+// Reste-Suche nicht als fehlend" und ist im Code festgelegt – diese hier gehört
+// dem Haushalt und ändert sich.
+
+app.get('/api/pantry', (_req, res) => {
+  const items = getPantry();
+  res.json({
+    items,
+    counts: {
+      total: items.length,
+      have: items.filter((i) => i.status === 'have').length,
+      low: items.filter((i) => i.status === 'low').length,
+      out: items.filter((i) => i.status === 'out').length,
+    },
+  });
+});
+
+// POST /api/pantry – body: { name, amount?, status? }
+app.post('/api/pantry', (req, res) => {
+  const item = addPantryItem({
+    name: req.body?.name,
+    amount: req.body?.amount,
+    status: req.body?.status,
+  });
+  if (!item) return res.status(400).json({ error: 'Bitte einen Namen angeben.' });
+  res.status(201).json(item);
+});
+
+// POST /api/pantry/seed – Grundstock anlegen (Salz, Pfeffer, Mehl …).
+// Vorhandene Einträge bleiben, wie sie sind – der Knopf darf mehrfach gedrückt
+// werden, ohne den Zustand zu überschreiben.
+//
+// Der Grundstock kommt aus `PANTRY_ITEMS` – die Liste ist dort klein
+// geschrieben, weil sie zum Vergleichen dient. Auf einer Einkaufsliste will
+// niemand „salz" lesen, deshalb der große Anfangsbuchstabe. Zwei Einträge fallen
+// raus: Wasser kauft man nicht, und „ei" ist neben „eier" doppelt.
+const PANTRY_SEED_SKIP = new Set(['wasser', 'ei']);
+const PANTRY_SEED = PANTRY_ITEMS.filter((n) => !PANTRY_SEED_SKIP.has(n)).map(
+  (n) => n.charAt(0).toUpperCase() + n.slice(1)
+);
+
+app.post('/api/pantry/seed', (_req, res) => {
+  const added = seedPantry(PANTRY_SEED);
+  res.json({ added, skipped: PANTRY_SEED.length - added, items: getPantry() });
+});
+
+// POST /api/pantry/all – body: { status } – alles auf einmal setzen.
+app.post('/api/pantry/all', (req, res) => {
+  const changed = setAllPantryStatus(String(req.body?.status || ''));
+  if (!changed && !getPantry().length) {
+    return res.status(400).json({ error: 'Die Vorratsliste ist leer.' });
+  }
+  res.json({ changed, items: getPantry() });
+});
+
+// POST /api/pantry/shopping – body: { listUuid }
+// Alles Knappe und Leere auf die Bring-Liste. Der Zustand bleibt stehen: gekauft
+// ist es erst, wenn du es auf „da" setzt.
+app.post('/api/pantry/shopping', async (req, res) => {
+  const { listUuid } = req.body || {};
+  if (!listUuid) return res.status(400).json({ error: 'listUuid fehlt.' });
+  const fehlt = getPantry().filter((i) => i.status === 'low' || i.status === 'out');
+  if (!fehlt.length) {
+    return res.json({ imported: [], message: 'Nichts knapp oder leer – nichts zu tun.' });
+  }
+  try {
+    const imported = await importItemsToBring(
+      listUuid,
+      fehlt.map((i) => ({ name: i.name, amount: i.amount || '' }))
+    );
+    res.json({
+      imported,
+      message: `${imported.length} Vorräte auf die Liste geschoben.`,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/pantry/:id – body: { status?, amount?, name? }
+app.put('/api/pantry/:id', (req, res) => {
+  const item = updatePantryItem(Number(req.params.id), req.body || {});
+  if (!item) return res.status(404).json({ error: 'Vorrat nicht gefunden.' });
+  res.json(item);
+});
+
+app.delete('/api/pantry/:id', (req, res) => {
+  if (!deletePantryItem(Number(req.params.id))) {
+    return res.status(404).json({ error: 'Vorrat nicht gefunden.' });
+  }
+  res.json({ success: true });
 });
 
 // ── Recipe API routes ─────────────────────────────────────────────────────────

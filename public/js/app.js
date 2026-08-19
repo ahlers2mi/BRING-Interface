@@ -14,6 +14,7 @@ import { initShopping, loadCurrentItems } from './shopping.js';
 import { applyMealieMode, initRecipes, loadTaste, renderRecipeList } from './recipes.js';
 import { initPlan, loadPlan } from './plan.js';
 import { initFridge } from './fridge.js';
+import { initPantry, loadPantry } from './pantry.js';
 import { applyCookidooMode, initCookidoo } from './cookidoo.js';
 
 // ── Status ────────────────────────────────────────────────────────────────────
@@ -143,6 +144,7 @@ async function init() {
   initShopping();
   initPlan();
   initFridge();
+  initPantry();
   initCookidoo();
   wireModalDismiss('importModal');
   wireModalDismiss('pickerModal');
@@ -159,7 +161,7 @@ async function init() {
   await loadBringLists();
   await initRecipes();
   await refreshRecipes();
-  await Promise.all([loadPlan('current'), loadTaste()]);
+  await Promise.all([loadPlan('current'), loadTaste(), loadPantry()]);
 }
 
 init();

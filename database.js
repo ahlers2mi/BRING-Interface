@@ -56,6 +56,19 @@ db.exec(`
     FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE SET NULL
   );
 
+  -- Vorratskammer: was im Haus sein SOLLTE, mit Zustand. 'have' = da,
+  -- 'low' = knapp, 'out' = leer. Knapp und leer wandern auf Knopfdruck auf die
+  -- Bring-Liste. Bewusst eine eigene Tabelle und keine Einstellung: der Zustand
+  -- ändert sich täglich, die Liste selten.
+  CREATE TABLE IF NOT EXISTS pantry (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'have',
+    amount TEXT,
+    sortby INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   CREATE INDEX IF NOT EXISTS idx_ingredients_recipe ON ingredients(recipe_id);
   CREATE INDEX IF NOT EXISTS idx_ratings_recipe ON ratings(recipe_id);
   CREATE INDEX IF NOT EXISTS idx_plan_recipe ON meal_plan(recipe_id);
@@ -117,6 +130,81 @@ db.exec(
 export function getSetting(key) {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
   return row ? row.value : null;
+}
+
+// ── Vorratskammer ─────────────────────────────────────────────────────────────
+
+const PANTRY_STATUS = ['have', 'low', 'out'];
+
+export function getPantry() {
+  return db
+    .prepare('SELECT * FROM pantry ORDER BY sortby, name COLLATE NOCASE')
+    .all()
+    .map((row) => ({ ...row, status: PANTRY_STATUS.includes(row.status) ? row.status : 'have' }));
+}
+
+export function addPantryItem({ name, amount = '', status = 'have' }) {
+  const clean = String(name || '').trim();
+  if (!clean) return null;
+  const zustand = PANTRY_STATUS.includes(status) ? status : 'have';
+  // Denselben Vorrat nicht zweimal: ein zweites Anlegen frischt ihn auf.
+  db.prepare(
+    `INSERT INTO pantry (name, amount, status, updated_at)
+          VALUES (?, ?, ?, datetime('now'))
+     ON CONFLICT(name) DO UPDATE SET
+          amount = COALESCE(NULLIF(excluded.amount, ''), pantry.amount),
+          status = excluded.status,
+          updated_at = datetime('now')`
+  ).run(clean, amount || null, zustand);
+  return db.prepare('SELECT * FROM pantry WHERE name = ?').get(clean);
+}
+
+export function updatePantryItem(id, fields) {
+  const current = db.prepare('SELECT * FROM pantry WHERE id = ?').get(id);
+  if (!current) return null;
+  const status = PANTRY_STATUS.includes(fields.status) ? fields.status : current.status;
+  const name = String(fields.name ?? current.name).trim() || current.name;
+  const amount = Object.prototype.hasOwnProperty.call(fields, 'amount')
+    ? String(fields.amount || '').trim() || null
+    : current.amount;
+  db.prepare(
+    `UPDATE pantry SET name = ?, amount = ?, status = ?, updated_at = datetime('now')
+      WHERE id = ?`
+  ).run(name, amount, status, id);
+  return db.prepare('SELECT * FROM pantry WHERE id = ?').get(id);
+}
+
+export function deletePantryItem(id) {
+  return db.prepare('DELETE FROM pantry WHERE id = ?').run(id).changes > 0;
+}
+
+// Alles auf einmal auf einen Zustand setzen – nach dem Einkauf ist der
+// Normalfall „alles wieder da".
+export function setAllPantryStatus(status) {
+  if (!PANTRY_STATUS.includes(status)) return 0;
+  return db
+    .prepare(`UPDATE pantry SET status = ?, updated_at = datetime('now')`)
+    .run(status).changes;
+}
+
+// Grundstock anlegen. Vorhandene Einträge bleiben unangetastet – der Knopf darf
+// mehrfach gedrückt werden, ohne den Zustand zu überschreiben.
+export function seedPantry(names) {
+  const insert = db.prepare(
+    `INSERT INTO pantry (name, status, sortby, updated_at)
+          VALUES (?, 'have', ?, datetime('now'))
+     ON CONFLICT(name) DO NOTHING`
+  );
+  const run = db.transaction(() => {
+    let added = 0;
+    for (const [i, name] of names.entries()) {
+      const clean = String(name || '').trim();
+      if (!clean) continue;
+      added += insert.run(clean, (i + 1) * 10).changes;
+    }
+    return added;
+  });
+  return run();
 }
 
 export function setSetting(key, value) {
