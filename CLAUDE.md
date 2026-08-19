@@ -264,15 +264,17 @@ der Quellen werden dabei geglättet, alle an echten Zeilen gefunden:
 | `0.25 Salatgurke(n)` | Salatgurke | 1/4 |
 | `n. B. Reis` (nach Bedarf) | Reis | – |
 | `1 kleine Zwiebel(n)` | Zwiebel | 1 kleine |
-| `1 Dose/n Kokosmilch (ca. 400 g)` | Kokosmilch | 1 Dose oder 400 g |
+| `1 Dose/n Kokosmilch (ca. 400 g)` | Kokosmilch | 1 Dose |
 
 Größenwörter (klein/groß) wandern zur Menge, weil Bring „Zwiebel" kennt und
 „kleine Zwiebel" nicht. **Farb- und Sortenwörter bleiben am Namen** („Paprikaschote,
 rote") – die bezeichnen ein anderes Produkt. Eine Klammer, die keine Menge ist,
 bleibt ebenfalls stehen (`Nudeln (Spirelli)`).
 
-Die „A oder B"-Menge muss `scaleAmountText` kennen, sonst fällt beim Umrechnen
-die zweite Angabe weg (`1 Dose oder 400 g` × 0,5 → `1/2 Dose oder 200 g`).
+Es gilt **eine** Menge, nicht zwei: bei „1 Dose … (ca. 400 g)" gewinnt die
+**Packungseinheit** – die legt man in den Wagen, das Gewicht ist nur zum
+Vergleichen. Steht sonst keine Menge da („Kokosmilch (ca. 400 g)"), tritt das
+Gewicht an ihre Stelle. `ca.`/`etwa`/`je` in der Klammer gehören dazu.
 
 **Falle in `splitAmount`, jahrelang drin:** die Einheit war nicht ans Wortende
 gebunden. Das `g` für Gramm griff in „**G**las", das `l` in „**L**iter", das `st`

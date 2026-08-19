@@ -73,15 +73,17 @@ test('splitIngredientText raeumt Freitext-Zutaten auf', () => {
     name: 'Paprikaschote, rote',
   });
 
-  // Gewicht in Klammern gehoert zur Menge, nicht in den Artikelnamen.
+  // Gewicht in Klammern gehoert nicht in den Artikelnamen. Es gilt EINE Menge:
+  // die Packungseinheit, denn die legt man in den Wagen.
   assert.deepEqual(f('1 Dose/n Kokosmilch (ca. 400 g)'), {
-    amount: '1 Dose oder 400 g',
+    amount: '1 Dose',
     name: 'Kokosmilch',
   });
-  assert.deepEqual(f('1 Glas Rotkohl (720 ml)'), {
-    amount: '1 Glas oder 720 ml',
-    name: 'Rotkohl',
-  });
+  assert.deepEqual(f('1 Glas Rotkohl (720 ml)'), { amount: '1 Glas', name: 'Rotkohl' });
+  // Steht sonst keine Menge da, tritt das Gewicht an ihre Stelle.
+  assert.deepEqual(f('Kokosmilch (ca. 400 g)'), { amount: '400 g', name: 'Kokosmilch' });
+  // "je" gehoert zur selben Sorte Klammer.
+  assert.deepEqual(f('2 Pck. Sahne (je 200 g)'), { amount: '2 Pck', name: 'Sahne' });
   // Eine Klammer, die keine Menge ist, bleibt stehen.
   assert.deepEqual(f('Nudeln (Spirelli)'), { amount: '', name: 'Nudeln (Spirelli)' });
 
