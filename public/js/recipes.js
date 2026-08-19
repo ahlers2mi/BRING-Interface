@@ -1164,20 +1164,34 @@ export async function initRecipes() {
     }
   });
 
+  // Sammellauf ueber alle duennen Rezepte – jedes aus SEINER Quelle (Video,
+  // Instagram, Chefkoch, beliebige Seite). Gedeckelt: was nicht mehr in den Lauf
+  // passt, steht in `remaining`.
   on('mealieRepairBtn', 'click', async (e) => {
     const btn = e.currentTarget;
     setLoading(btn, true);
     try {
-      const r = await apiFetch('/api/mealie/repair', { method: 'POST' });
+      const r = await apiFetch('/api/recipes/enrich/thin', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      const teile = [];
+      if (r.checked === 0) {
+        teile.push('Kein dünnes Rezept mit Quelladresse gefunden.');
+      } else {
+        teile.push(`✓ ${r.enriched} von ${r.checked} ergänzt`);
+        if (r.unchanged) teile.push(`${r.unchanged} ohne neue Daten`);
+        if (r.failed) teile.push(`${r.failed} fehlgeschlagen`);
+        if (r.remaining) teile.push(`${r.remaining} noch offen – nochmal drücken`);
+      }
+      const details = [
+        r.names.length ? `Ergänzt: ${r.names.slice(0, 5).join(' · ')}` : '',
+        r.errors?.length ? `Nicht geklappt: ${r.errors.slice(0, 3).join(' · ')}` : '',
+      ].filter(Boolean);
       flash(
         'mealieResult',
-        r.checked === 0
-          ? 'Keine unvollständigen Chefkoch-Rezepte gefunden.'
-          : `✓ ${r.repaired} von ${r.checked} ergänzt` +
-              `${r.unchanged ? `, ${r.unchanged} ohne neue Daten (vermutlich PLUS-Rezepte)` : ''}` +
-              `${r.failed ? `, ${r.failed} fehlgeschlagen` : ''}.` +
-              (r.names.length ? ` Ergänzt: ${escHtml(r.names.slice(0, 5).join(', '))}` : ''),
-        r.repaired ? 'success' : 'info'
+        escHtml(teile.join(', ') + (details.length ? `. ${details.join('. ')}` : '.')),
+        r.enriched ? 'success' : 'info'
       );
       await refreshAll();
     } catch (err) {

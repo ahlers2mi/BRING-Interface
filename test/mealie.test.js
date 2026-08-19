@@ -711,10 +711,10 @@ test('dünn importierte Chefkoch-Rezepte werden aus der API ergänzt', async () 
   };
 
   try {
-    const res = await api('/api/mealie/repair', { method: 'POST' });
+    const res = await api('/api/recipes/enrich/thin', { method: 'POST', body: {} });
     assert.equal(res.status, 200, res.text);
     assert.ok(res.json.checked >= 1, JSON.stringify(res.json));
-    assert.equal(res.json.repaired, 1);
+    assert.equal(res.json.enriched, 1, JSON.stringify(res.json));
 
     // In Mealie steht jetzt das ganze Rezept …
     const inMealie = recipes.get('teaser');
@@ -753,9 +753,9 @@ test('liefert die Chefkoch-API auch nichts, bleibt es beim Teaser', async () => 
     return new Response('paywall', { status: 403 }); // API und HTML gesperrt
   };
   try {
-    const res = await api('/api/mealie/repair', { method: 'POST' });
+    const res = await api('/api/recipes/enrich/thin', { method: 'POST', body: {} });
     assert.equal(res.status, 200, res.text);
-    assert.equal(res.json.repaired, 0);
+    assert.equal(res.json.enriched, 0, JSON.stringify(res.json));
     assert.ok(res.json.unchanged + res.json.failed >= 1);
     // Nichts kaputt gemacht:
     assert.equal(recipes.get('plus-only').recipeIngredient.length, 1);
@@ -968,10 +968,12 @@ test('Anreichern einzeln: Chefkoch gibt nichts her, die Antwort sagt warum', asy
     return new Response('paywall', { status: 403 });
   };
   try {
-    const res = await api(`/api/mealie/repair/${mirrored.id}`, { method: 'POST' });
-    assert.equal(res.status, 200, res.text);
-    assert.equal(res.json.outcome, 'no-data');
-    assert.match(res.json.message, /PLUS/);
+    const res = await api(`/api/recipes/${mirrored.id}/enrich`, { method: 'POST', body: {} });
+    // Chefkoch sperrt API und Seite mit 403 – daraus wird ein 422 mit Grund,
+    // kein roher HTTP-Fehler.
+    assert.equal(res.status, 422, res.text);
+    // Die Meldung muss den Grund nennen – "HTTP 403" allein hilft niemandem.
+    assert.match(res.json.error, /PLUS/);
   } finally {
     globalThis.fetch = realFetch;
   }
@@ -1010,9 +1012,9 @@ test('Anreichern einzeln: was die Chefkoch-API hergibt, wird nachgetragen', asyn
     return new Response('not found', { status: 404 });
   };
   try {
-    const res = await api(`/api/mealie/repair/${mirrored.id}`, { method: 'POST' });
+    const res = await api(`/api/recipes/${mirrored.id}/enrich`, { method: 'POST', body: {} });
     assert.equal(res.status, 200, res.text);
-    assert.equal(res.json.outcome, 'repaired', res.text);
+    assert.equal(res.json.outcome, 'enriched', res.text);
     assert.equal(res.json.recipe.incomplete, false);
     assert.ok(res.json.recipe.ingredients.length >= 6);
     assert.match(res.json.recipe.instructions, /Chorizo anbraten/);
@@ -1021,14 +1023,38 @@ test('Anreichern einzeln: was die Chefkoch-API hergibt, wird nachgetragen', asyn
   }
 });
 
-test('Anreichern einzeln: ohne Chefkoch-Quelle gibt es eine klare Absage', async () => {
+test('Anreichern einzeln: auch eine Nicht-Chefkoch-Quelle wird gelesen', async () => {
+  // Frueher war hier eine Absage ("geht nur bei Chefkoch"). Anreichern liest
+  // jetzt jede Quelle – eine fremde Seite mit schema.org-Daten also auch.
   const other = (await api('/api/recipes')).json.find(
     (r) => r.source_slug && !/chefkoch\.de/.test(r.source_url || '')
   );
   if (!other) return; // kein passendes Rezept übrig – dann ist nichts zu prüfen
-  const res = await api(`/api/mealie/repair/${other.id}`, { method: 'POST' });
-  assert.equal(res.status, 400);
-  assert.match(res.json.error, /Chefkoch/);
+
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const href = String(input);
+    if (href.includes('127.0.0.1')) return realFetch(input, init);
+    if (href.includes('mealie') || href.includes('/api/')) return realFetch(input, init);
+    return new Response(
+      `<script type="application/ld+json">${JSON.stringify({
+        '@type': 'Recipe',
+        name: 'Von der fremden Seite',
+        recipeIngredient: ['1 Prise Neugier'],
+        recipeInstructions: 'Nachlesen und einbauen.',
+      })}</script>`,
+      { status: 200, headers: { 'content-type': 'text/html' } }
+    );
+  };
+  try {
+    const res = await api(`/api/recipes/${other.id}/enrich`, { method: 'POST', body: {} });
+    assert.equal(res.status, 200, res.text);
+    assert.ok(['enriched', 'not-needed'].includes(res.json.outcome), res.text);
+    // Der Name bleibt in jedem Fall stehen.
+    assert.equal(res.json.recipe.name, other.name);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });
 
 // ── Ein Rezept per Link (auch vom Handy) ──────────────────────────────────────

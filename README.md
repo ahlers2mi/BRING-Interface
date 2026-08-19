@@ -737,10 +737,16 @@ bleiben.
 - **Anreichern** (`🩹` an der Rezeptkarte): liest die **Quelle des Rezepts**
   nochmal und füllt, was fehlt – Zutaten, Zubereitung, Bild, Zeit, Portionen.
   Funktioniert für Videos genauso wie für normale Rezeptseiten und Chefkoch.
-  Standard ist „nur Lücken füllen"; steht schon eine Zubereitung da, kommt eine
-  Rückfrage, ob ersetzt werden soll (Umschalttaste beim Klick ersetzt direkt).
-  **Name, Bewertungen und Plan bleiben unangetastet** – Anreichern ist niemals
-  ein Löschen-und-neu-Anlegen. Läuft Mealie, wird dort ergänzt.
+  Standard ist „nur Lücken füllen"; eine **ausführlichere Zubereitung** aus der
+  Quelle gewinnt aber (der typische Anriss-Fall: ein Satz gegen die vollständige
+  Anleitung). Steht schon etwas da, kommt eine Rückfrage, ob alles ersetzt
+  werden soll. **Name, Bewertungen und Plan bleiben unangetastet** – Anreichern
+  ist niemals ein Löschen-und-neu-Anlegen. Läuft Mealie, wird dort ergänzt.
+- **„🩹 Dünne Rezepte ergänzen"** macht dasselbe im Rutsch für alle Rezepte, bei
+  denen Zutaten oder Zubereitung fehlen – **jedes aus seiner eigenen Quelle**,
+  also auch Videos, Instagram-Beiträge und fremde Rezeptseiten. Der Lauf ist
+  gedeckelt (25 je Klick, jedes Rezept ist ein Abruf im Netz) und sagt, wie
+  viele noch offen sind. Rezepte ohne Quelladresse bleiben unberührt.
 - **Massenimport von chefkoch.de**: Suchbegriff (oder leer für beliebte Rezepte)
   und Anzahl angeben. Der Lauf passiert im Hintergrund mit Fortschritt und
   Protokoll, lässt sich abbrechen und überspringt bereits vorhandene Rezepte

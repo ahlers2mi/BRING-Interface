@@ -160,6 +160,10 @@ test('looksLikeIngredientLine ist streng genug', () => {
   assert.equal(looksLikeIngredientLine('- 1 Kugel Mozzarella'), true);
   assert.equal(looksLikeIngredientLine('• 2 EL Olivenoel'), true);
   assert.equal(looksLikeIngredientLine('2 Eier'), true, 'Menge ohne Einheit');
+  // Kurze Zutatennamen: mit einer 3-Buchstaben-Regel fiel die Öl-Zeile jeder
+  // Liste durch.
+  assert.equal(looksLikeIngredientLine('2 EL Öl'), true);
+  assert.equal(looksLikeIngredientLine('- 3 Ei'), true);
   assert.equal(looksLikeIngredientLine('300 g Mehl (Type 405)'), true);
 
   // Zubereitungssaetze fangen genauso mit einer Zahl an.
