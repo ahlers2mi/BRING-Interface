@@ -138,6 +138,13 @@ in der Liste erwischen Zwiebelkuchen, Flammkuchen, Eisbein und Milchreis –
 deshalb stehen sie **nicht** drin. Was die Endung nicht trifft, fangen die
 Kategorien; im Zweifel wird gewürfelt.
 
+**Ein Wurf für EINEN Tag schließt das Gericht aus, das dort schon liegt.** Sonst
+war „würfeln" manchmal ein No-op (dasselbe Rezept wieder), und weil
+`setPlanEntry` den `shopped_at`-Merker bei unverändertem Rezept behält, blieb
+dann auch das „dafür ist schon eingekauft" fälschlich stehen. Kommt bei winziger
+Sammlung oder engem Zeitlimit nichts anderes heraus, greift ein Rückfall auf die
+alte Auswahl statt einer Fehlermeldung.
+
 ## Geschmacksprofil (`lib/taste.js`)
 
 Zwei getrennte Hebel, die man nicht verwechseln darf:
@@ -155,6 +162,21 @@ Zwei getrennte Hebel, die man nicht verwechseln darf:
   sind also 1.2 und kommen gar nicht erst ins Profil, zwei gekochte
   Bewertungen (2.0) schon. Sonst brandmarkt ein einziges Aufräumen am Abend
   eine ganze Zutat („Wir mögen keine Gnocchi").
+
+**Die Sterne sind ausschließlich die eigenen.** `ratingStats()` liest nur unsere
+Tabelle `ratings` – gefüllt von den Smiley-Knöpfen. `mapMealieRecipe()` holt aus
+Mealie **kein** `rating`-Feld; die einzige Verbindung ist `pushRatingToMealie()`,
+und das ist die **Schreib**richtung (`rating` + `lastMade` per PATCH, abschaltbar
+mit `MEALIE_PUSH_RATINGS=0`). Bewertet also jemand in Mealie, sieht die App das
+nicht und der Würfel rechnet nicht damit. **Offen und ungeprüft:** ob Mealie
+v3.22 die Bewertung noch als Rezept-Feld führt oder inzwischen pro Benutzer
+(`userRatings`) – davon hängt ab, ob unser Zurückschreiben dort überhaupt
+ankommt. Der Code protokolliert einen Fehler nur, er meldet ihn nicht.
+
+Im Wochenplan stehen deshalb **zwei verschiedene** Bewertungen je Tag, das wird
+leicht verwechselt: in der Meta-Zeile der **Schnitt des Rezepts** über alle Male
+(auch bei ungekochten Tagen, damit man beim Planen sieht was ankommt), darunter
+`bewertet: ★★★★☆` die Bewertung **für genau diesen Tag** bzw. `🗑 rausgeflogen`.
 
 Strukturelle Tags (`Hauptgerichte`, `Thermomix`, `Cookidoo` …) stehen in
 `IGNORED_TAGS` und sind vom Profil ausgenommen – sie hängen an fast jedem
@@ -426,6 +448,17 @@ Reihenfolge:
 sind die gemeinsame Einfahrt für YouTube **und** Instagram; `server.js` kennt
 nur diese vier. In der Spalte `source` steht `youtube` bzw. `instagram`,
 `providerOf()` im Browser macht daraus die Filter `▶️ Video` und `📷 Instagram`.
+
+## Oberfläche: zwei Fallen mit versteckter Wirkung
+
+- **`.recipe-item.is-blocked` legte Opazität über die GANZE Karte** – also auch
+  über die Knöpfe. „✅ Entsperren" sah damit deaktiviert aus, obwohl es
+  funktionierte; genau der Knopf, den man auf so einer Karte braucht. Jetzt tritt
+  nur der Inhalt zurück (`> *:not(.recipe-actions)`). Gilt für alle drei Fälle
+  mit dieser Klasse: gesperrt, unvollständig, in Mealie gelöscht.
+- **`applyMealieMode()` blendet Karten aus** (siehe „Rezept aus Screenshots") –
+  wer eine neue Karte im Import-Tab baut, muss dort nachsehen, sonst ist sie mit
+  Mealie einfach nicht da.
 
 ## Mealie
 
