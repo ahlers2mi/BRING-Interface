@@ -1857,3 +1857,26 @@ test('Vorraete: nichts knapp -> nichts auf die Liste (ohne Bring-Aufruf)', async
   assert.deepEqual(res.json.imported, []);
   assert.match(res.json.message, /Nichts knapp/);
 });
+
+test('Vorraete: ein gescheiterter Einkaufszettel laesst die Liste in Ruhe', async () => {
+  // Der interessante Weg (abgehakt -> gekauft) steht in test/pantry.test.js, das
+  // laeuft direkt gegen die Datenbank. Hier nur: scheitert Bring, darf sich an
+  // den Zustaenden nichts aendern.
+  await api('/api/pantry/all', { method: 'POST', body: { status: 'have' } });
+  const alle = (await api('/api/pantry')).json.items;
+  const salz = alle.find((i) => i.name === 'Salz');
+  await api(`/api/pantry/${salz.id}`, { method: 'PUT', body: { status: 'out' } });
+
+  const res = await api('/api/pantry/shopping', {
+    method: 'POST',
+    body: { listUuid: 'kein-echtes-konto' },
+  });
+  assert.ok([200, 500].includes(res.status), res.text);
+  assert.equal((await api('/api/pantry')).json.items.find((i) => i.id === salz.id).status, 'out');
+});
+
+test('Vorraete: check verlangt Liste oder Listen-Inhalt', async () => {
+  const res = await api('/api/pantry/check', { method: 'POST', body: {} });
+  assert.equal(res.status, 400);
+  assert.match(res.json.error, /listUuid/);
+});

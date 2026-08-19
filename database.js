@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { todayIso } from './lib/week.js';
-import { isIncompleteRecipe, prepHint } from './lib/normalize.js';
+import { isIncompleteRecipe, normalizeName, prepHint } from './lib/normalize.js';
 import { courseConfig, courseOf, courseReason } from './lib/course.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -66,6 +66,7 @@ db.exec(`
     status TEXT NOT NULL DEFAULT 'have',
     amount TEXT,
     sortby INTEGER NOT NULL DEFAULT 0,
+    listed_at TEXT,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
@@ -117,6 +118,18 @@ if (!planColumns.includes('origin')) {
 // Ruhe, sonst liegt das Essen im Kühlschrank und steht nicht mehr im Plan.
 if (!planColumns.includes('shopped_at')) {
   db.exec(`ALTER TABLE meal_plan ADD COLUMN shopped_at TEXT`);
+}
+
+// Wann dieser Vorrat auf die Bring-Liste geschoben wurde. Nur so lässt sich
+// später erkennen, ob er inzwischen gekauft ist: abgehakt wird in der
+// Bring-App, nicht hier – wir sehen es daran, dass er von der Liste
+// verschwunden bzw. unter „zuletzt gekauft" aufgetaucht ist.
+const pantryColumns = db
+  .prepare('PRAGMA table_info(pantry)')
+  .all()
+  .map((c) => c.name);
+if (pantryColumns.length && !pantryColumns.includes('listed_at')) {
+  db.exec('ALTER TABLE pantry ADD COLUMN listed_at TEXT');
 }
 
 // Doppelte Importe verhindern (external_id z. B. "chefkoch:1234").
@@ -185,6 +198,62 @@ export function setAllPantryStatus(status) {
   return db
     .prepare(`UPDATE pantry SET status = ?, updated_at = datetime('now')`)
     .run(status).changes;
+}
+
+// Merken, dass diese Vorräte gerade auf die Bring-Liste geschoben wurden.
+export function markPantryListed(names) {
+  const stmt = db.prepare(
+    `UPDATE pantry SET listed_at = datetime('now') WHERE name = ?`
+  );
+  const run = db.transaction(() => {
+    let n = 0;
+    for (const name of names || []) n += stmt.run(String(name)).changes;
+    return n;
+  });
+  return run();
+}
+
+// Gekauftes übernehmen. Abgehakt wird in der Bring-App – hier kommt nur an, wie
+// die Liste jetzt aussieht:
+//
+// * noch auf der Liste (`purchase`) -> nichts tun, liegt noch an
+// * unter „zuletzt gekauft" (`recently`) -> gekauft, Zustand wieder 'have'
+// * in keiner von beiden -> von Hand von der Liste genommen. Dann NICHT auf
+//   „da" setzen (gekauft wurde ja nichts), nur die Merkung löschen.
+//
+// Betrachtet werden ausschließlich Vorräte mit `listed_at`: sonst würde ein
+// alter Eintrag unter „zuletzt gekauft" jeden neu auf „knapp" gesetzten Vorrat
+// sofort wieder auf „da" ziehen.
+export function applyPantryPurchases({ purchase = [], recently = [] } = {}) {
+  const key = (name) => normalizeName(name);
+  const offen = new Set(purchase.map((i) => key(i?.name ?? i)).filter(Boolean));
+  const gekauft = new Set(recently.map((i) => key(i?.name ?? i)).filter(Boolean));
+
+  const wartet = db.prepare('SELECT * FROM pantry WHERE listed_at IS NOT NULL').all();
+  const bought = [];
+  const dropped = [];
+
+  const setHave = db.prepare(
+    `UPDATE pantry SET status = 'have', listed_at = NULL, updated_at = datetime('now')
+      WHERE id = ?`
+  );
+  const clear = db.prepare('UPDATE pantry SET listed_at = NULL WHERE id = ?');
+
+  const run = db.transaction(() => {
+    for (const item of wartet) {
+      const k = key(item.name);
+      if (offen.has(k)) continue; // steht noch auf der Liste
+      if (gekauft.has(k)) {
+        setHave.run(item.id);
+        bought.push(item.name);
+      } else {
+        clear.run(item.id);
+        dropped.push(item.name);
+      }
+    }
+  });
+  run();
+  return { bought, dropped };
 }
 
 // Grundstock anlegen. Vorhandene Einträge bleiben unangetastet – der Knopf darf

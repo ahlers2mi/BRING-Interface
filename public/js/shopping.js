@@ -12,6 +12,7 @@ import {
   selectListEverywhere,
   setLoading,
 } from './core.js';
+import { checkPantryAgainst } from './pantry.js';
 
 let selectedPhoto = null;
 
@@ -97,6 +98,12 @@ export async function loadCurrentItems(listUuid) {
     } else {
       for (const item of items) target.appendChild(buildItemRow(item));
     }
+
+    // Vorräte: was von der Liste verschwunden und unter „zuletzt gekauft"
+    // aufgetaucht ist, ist eingekauft. Abgehakt wird in der Bring-App, deshalb
+    // merkt es die App nur so. Die Listen sind hier schon geladen – mitschicken
+    // statt einen zweiten Bring-Aufruf machen.
+    checkPantryAgainst(data);
 
     // „Zuletzt gekauft": ein Tipp setzt den Artikel wieder auf die Liste.
     const recent = (data.recently ?? data.recent ?? []).slice(0, 40);

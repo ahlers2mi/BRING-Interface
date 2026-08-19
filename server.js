@@ -32,9 +32,11 @@ import {
   deletePlanEntry,
   updatePlanStatus,
   addPantryItem,
+  applyPantryPurchases,
   deletePantryItem,
   getPantry,
   getSetting,
+  markPantryListed,
   seedPantry,
   setAllPantryStatus,
   setSetting,
@@ -717,9 +719,42 @@ app.post('/api/pantry/shopping', async (req, res) => {
       listUuid,
       fehlt.map((i) => ({ name: i.name, amount: i.amount || '' }))
     );
+    // Merken, was jetzt auf der Liste steht – daran erkennt
+    // `/api/pantry/check` später, was abgehakt wurde.
+    markPantryListed(imported);
     res.json({
       imported,
       message: `${imported.length} Vorräte auf die Liste geschoben.`,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/pantry/check – body: { listUuid } oder { purchase, recently }
+// Gekauftes übernehmen. Abgehakt wird in der **Bring-App**, nicht hier – wir
+// sehen es daran, dass ein Vorrat von der Liste verschwunden und unter „zuletzt
+// gekauft" aufgetaucht ist. Die Oberfläche schickt die Liste mit, die sie
+// sowieso schon geladen hat; mit `listUuid` holt die Route sie selbst.
+app.post('/api/pantry/check', async (req, res) => {
+  try {
+    let daten = req.body || {};
+    if (!Array.isArray(daten.purchase) && !Array.isArray(daten.recently)) {
+      if (!daten.listUuid) {
+        return res.status(400).json({ error: 'listUuid oder die Listen selbst angeben.' });
+      }
+      const client = await getBringClient();
+      const items = await client.getItems(daten.listUuid);
+      daten = { purchase: items?.purchase || [], recently: items?.recently || [] };
+    }
+    const { bought, dropped } = applyPantryPurchases(daten);
+    res.json({
+      bought,
+      dropped,
+      items: getPantry(),
+      message: bought.length
+        ? `${bought.length} als gekauft übernommen: ${bought.join(', ')}`
+        : 'Nichts Neues abgehakt.',
     });
   } catch (err) {
     res.status(500).json({ error: err.message });

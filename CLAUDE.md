@@ -261,9 +261,25 @@ ohne `wasser` und `ei` (Wasser kauft man nicht, `ei` ist neben `eier` doppelt).
   frischt den Eintrag auf statt ihn zu verdoppeln. `seedPantry` benutzt dagegen
   `ON CONFLICT DO NOTHING` – der Knopf darf mehrfach gedrückt werden, ohne einen
   Zustand zu überschreiben.
-- **Der Zustand bleibt nach dem Einkaufszettel stehen.** „Auf die Liste
-  geschoben" heißt nicht „gekauft"; zurückgesetzt wird von Hand („Alles wieder
-  da") oder je Zeile. Alles andere wäre geraten.
+- **Gekauftes erkennt die App selbst.** Abgehakt wird in der **Bring-App**, nicht
+  hier – sichtbar wird es daran, dass ein Artikel von der Einkaufsliste
+  verschwindet und unter „zuletzt gekauft" (`recently`) auftaucht. Genau das
+  wertet `applyPantryPurchases()` aus:
+  - noch in `purchase` → liegt noch an, nichts tun
+  - in `recently` → gekauft, Zustand zurück auf `have`
+  - in keiner von beiden → von Hand von der Liste geworfen. Dann **nicht** auf
+    „da" setzen (gekauft wurde nichts), nur die Merkung löschen.
+- **Die Spalte `listed_at` ist dafür Pflicht**, nicht Komfort: betrachtet werden
+  nur Vorräte, die wir selbst auf die Liste geschoben haben. Sonst zieht ein
+  Wochen alter Eintrag unter „zuletzt gekauft" jeden frisch auf „knapp"
+  gesetzten Vorrat sofort wieder auf „da".
+- Verglichen wird über `normalizeName`, nicht buchstabengenau – Bring gibt
+  Artikel auch mal klein geschrieben zurück.
+- Der Abgleich läuft **automatisch**, wenn der Einkaufslisten-Tab die Liste lädt:
+  die Oberfläche schickt `purchase`/`recently` mit, die sie sowieso schon hat, und
+  spart so einen zweiten Bring-Aufruf. Scheitert er, wird nur in die Konsole
+  geloggt – beim Öffnen der Einkaufsliste will niemand einen Fehler sehen.
+  Zurücksetzen von Hand geht weiter („Alles wieder da") oder je Zeile.
 - Unbekannte Zustände werden verworfen, nicht gespeichert (`PANTRY_STATUS`).
 - In der Oberfläche bekommt nur der **gewählte** Zustand Farbe, und „da" ein
   ruhiges Grün: wären alle drei `btn-primary`, stünden in einer gesunden
