@@ -133,6 +133,50 @@ export async function loadCurrentItems(listUuid) {
 }
 
 export function initShopping() {
+  // Alte Artikel aufräumen: bei denen steckt die Menge im Namen, weil der
+  // Rezept-Import sie früher ungetrennt auf die Liste geschrieben hat. Erst
+  // zeigen, dann fragen – die Liste sieht die ganze Familie.
+  on('tidyItemsBtn', 'click', async (e) => {
+    const btn = e.currentTarget;
+    if (!currentListUuid) {
+      return flash('itemsResult', 'Bitte zuerst eine Liste auswählen.', 'error');
+    }
+    setLoading(btn, true);
+    try {
+      const probe = await apiFetch(`/api/lists/${currentListUuid}/tidy`, {
+        method: 'POST',
+        body: JSON.stringify({ dryRun: true }),
+      });
+      if (!probe.changes.length) {
+        flash('itemsResult', `Nichts zu tun – alle ${probe.checked} Artikel sind sauber.`, 'info');
+        return;
+      }
+      const liste = probe.changes
+        .map((c) => `• ${c.from}  →  ${c.to}${c.amount ? `  (${c.amount})` : ''}`)
+        .join('\n');
+      if (!confirm(`${probe.changes.length} von ${probe.checked} Artikeln ändern?\n\n${liste}`)) {
+        flash('itemsResult', 'Abgebrochen – nichts geändert.', 'info');
+        return;
+      }
+      const res = await apiFetch(`/api/lists/${currentListUuid}/tidy`, {
+        method: 'POST',
+        body: JSON.stringify({ dryRun: false }),
+      });
+      flash(
+        'itemsResult',
+        `✓ ${res.changed} Artikel aufgeräumt` +
+          (res.failed.length ? `, ${res.failed.length} nicht geklappt` : '') +
+          '.',
+        res.changed ? 'success' : 'info'
+      );
+      await loadCurrentItems(currentListUuid);
+    } catch (err) {
+      flash('itemsResult', `Fehler: ${escHtml(err.message)}`, 'error');
+    } finally {
+      setLoading(btn, false);
+    }
+  });
+
   on('addItemBtn', 'click', async (e) => {
     const listUuid = el('listSelect').value;
     if (!listUuid) return flash('itemsResult', 'Bitte zuerst eine Bring-Liste auswählen.', 'error');

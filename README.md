@@ -5,7 +5,7 @@ Web Interface für Bring APP
 ## Features
 
 - **Einkaufsliste importieren** – Artikel (mit optionaler Mengenangabe) in ein Textfeld eingeben und direkt in eine Bring-Liste importieren.
-- **Bring-Liste bearbeiten** – die aktuelle Liste direkt in der App: Artikel hinzufügen, Mengen ändern, abhaken (wie in der Bring-App) oder ganz entfernen; zuletzt Gekauftes per Tipp zurück auf die Liste.
+- **Bring-Liste bearbeiten** – die aktuelle Liste direkt in der App: Artikel hinzufügen, Mengen ändern, abhaken (wie in der Bring-App) oder ganz entfernen; zuletzt Gekauftes per Tipp zurück auf die Liste. **„🧹 Mengen aus den Namen holen"** räumt Altlasten auf: Artikel wie „400 g Hähnchenbrustfilet(s)" werden in Artikel + Menge getrennt – erst als Probelauf mit Rückfrage, dann wirklich.
 - **KI-Hilfe für die Einkaufsliste** – unsauberen Freitext aufräumen lassen oder ein **Foto** der Einkaufsliste hochladen; die KI (über OpenRouter) erkennt die Artikel automatisch.
 - **Rezeptverwaltung** – Rezepte mit Zutaten, Tags, Portionen, Link, Zubereitung und voraussichtlicher Zeit speichern und per Klick in eine Bring-Liste importieren.
 - **Wochenplan mit Würfelfunktion** – einzelne Tage oder die ganze Woche auswürfeln lassen, Tage von Hand belegen, auf einen anderen Tag verschieben und die Zutaten der kompletten Woche in einem Schritt nach Bring schieben.

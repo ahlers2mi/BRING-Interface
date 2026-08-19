@@ -66,7 +66,7 @@ import {
   startImportJob,
   stripHtml,
 } from './lib/recipe-import.js';
-import { realIngredients } from './lib/normalize.js';
+import { realIngredients, tidyItems } from './lib/normalize.js';
 import { renderPlanSvg } from './lib/plan-svg.js';
 import { recipeFromText } from './lib/video-import.js';
 import {
@@ -525,6 +525,46 @@ app.get('/api/lists/:uuid/items', async (req, res) => {
     const client = await getBringClient();
     const data = await client.getItems(req.params.uuid);
     res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/lists/:uuid/tidy – body: { dryRun? }
+// Räumt eine Bring-Liste auf: Artikel, in deren NAMEN die Menge steht
+// ("400 g Hähnchenbrustfilet(s)"), werden in Name + Mengenfeld getrennt. Genau
+// die sind vor der Trennung in `mapMealieIngredient` auf die Liste gewandert.
+//
+// Standard ist der **Probelauf**: die Liste gehört auch der Familie, also erst
+// zeigen was passiert, dann ändern.
+app.post('/api/lists/:uuid/tidy', async (req, res) => {
+  const dryRun = req.body?.dryRun !== false;
+  try {
+    const client = await getBringClient();
+    const data = await client.getItems(req.params.uuid);
+    const items = data?.purchase || [];
+
+    const changes = tidyItems(items);
+
+    if (dryRun) {
+      return res.json({ dryRun: true, checked: items.length, changes });
+    }
+
+    const done = [];
+    const failed = [];
+    for (const change of changes) {
+      try {
+        // Bring kennt kein Umbenennen: erst den neuen Artikel anlegen, dann den
+        // alten entfernen. In dieser Reihenfolge, damit bei einem Fehler
+        // dazwischen nichts von der Liste verschwindet.
+        await client.saveItem(req.params.uuid, change.to, change.amount);
+        await client.removeItem(req.params.uuid, change.from);
+        done.push(change);
+      } catch (err) {
+        failed.push({ ...change, error: err.message });
+      }
+    }
+    res.json({ dryRun: false, checked: items.length, changed: done.length, done, failed });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

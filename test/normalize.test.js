@@ -12,6 +12,7 @@ import {
   realIngredients,
   splitAmount,
   splitIngredientText,
+  tidyItems,
 } from '../lib/normalize.js';
 
 test('splitAmount trennt Menge und Zutat', () => {
@@ -90,6 +91,50 @@ test('splitIngredientText raeumt Freitext-Zutaten auf', () => {
   // Ohne Menge bleibt alles, wie es ist.
   assert.deepEqual(f('Salz und Pfeffer'), { amount: '', name: 'Salz und Pfeffer' });
   assert.deepEqual(f(''), { amount: '', name: '' });
+});
+
+test('tidyItems findet die Artikel mit Menge im Namen', () => {
+  // Genau die Liste aus dem Alltag: oben von Hand eingetragene Artikel, unten
+  // die, die der Rezept-Import ungetrennt draufgeschrieben hat.
+  const liste = [
+    { name: 'Spülbürste', specification: '1' },
+    { name: 'Erdinger', specification: 'alkoholfreies' },
+    { name: 'Glasreiniger', specification: '' },
+    { name: 'Q Tips', specification: '?' },
+    { name: 'Salz und Pfeffer', specification: '' },
+    { name: '1 kleine Zwiebel(n)', specification: '' },
+    { name: '400 g Hähnchenbrustfilet(s)', specification: '' },
+    { name: 'n. B. Reis', specification: '' },
+    { name: '0.25 Salatgurke(n)', specification: '' },
+    { name: '1 Dose/n Kokosmilch (ca. 400 g)', specification: '' },
+  ];
+
+  const changes = tidyItems(liste);
+  assert.deepEqual(
+    changes.map((c) => `${c.from} => ${c.to}|${c.amount}`),
+    [
+      '1 kleine Zwiebel(n) => Zwiebel|1 kleine',
+      '400 g Hähnchenbrustfilet(s) => Hähnchenbrustfilet|400 g',
+      'n. B. Reis => Reis|',
+      '0.25 Salatgurke(n) => Salatgurke|1/4',
+      '1 Dose/n Kokosmilch (ca. 400 g) => Kokosmilch|1 Dose',
+    ]
+  );
+
+  // Von Hand eingetragene Artikel bleiben unangetastet – auch die mit "?" oder
+  // einem Wort im Mengenfeld.
+  for (const name of ['Spülbürste', 'Erdinger', 'Glasreiniger', 'Q Tips', 'Salz und Pfeffer']) {
+    assert.ok(!changes.some((c) => c.from === name), `${name} darf nicht angefasst werden`);
+  }
+});
+
+test('tidyItems verliert kein von Hand eingetragenes Mengenfeld', () => {
+  const [change] = tidyItems([{ name: '400 g Hähnchenbrustfilet(s)', specification: 'Bio' }]);
+  assert.equal(change.to, 'Hähnchenbrustfilet');
+  assert.equal(change.amount, '400 g Bio');
+  assert.equal(change.hadSpec, true);
+  assert.deepEqual(tidyItems([]), []);
+  assert.deepEqual(tidyItems(null), []);
 });
 
 test('ingredientMatches erkennt Singular/Plural und Umlaute', () => {
