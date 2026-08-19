@@ -672,6 +672,52 @@ ul.plain li { padding: 0.1rem 0; }
    „Entsperren" aus wie deaktiviert – also der Knopf, den man dort braucht. */
 .recipe-item.is-blocked > *:not(.recipe-actions) { opacity: 0.55; }
 
+/* Vorräte: Name – Zustandsknöpfe – Menge – Löschen. Auf dem Handy bricht die
+   Zeile um, die Knöpfe bleiben aber beieinander. */
+.pantry-list { display: flex; flex-direction: column; gap: 0.4rem; }
+
+.pantry-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 0.55rem;
+  background: var(--card);
+}
+
+.pantry-name { flex: 1 1 9rem; font-weight: 500; }
+.pantry-status { display: flex; gap: 0.25rem; flex-shrink: 0; }
+.pantry-row input.pantry-amount { width: 8rem; flex: 0 0 auto; }
+
+/* Knapp und leer sollen ins Auge fallen – das ist die Einkaufsliste von morgen. */
+.pantry-row.status-low { border-color: #f59e0b; background: #fffbeb; }
+.pantry-row.status-out { border-color: #ef4444; background: #fef2f2; }
+
+/* Der gewählte Zustand ist markiert, aber nur „knapp"/„leer" schreien. Wären
+   alle drei orange wie ein btn-primary, stünden in einer gesunden Vorratsliste
+   30 Alarmknöpfe. */
+.pantry-pick.is-on[data-status='have'] {
+  background: #ecfdf5;
+  border-color: #10b981;
+  color: #047857;
+  font-weight: 600;
+}
+.pantry-pick.is-on[data-status='low'] {
+  background: #f59e0b;
+  border-color: #f59e0b;
+  color: #fff;
+}
+.pantry-pick.is-on[data-status='out'] {
+  background: #ef4444;
+  border-color: #ef4444;
+  color: #fff;
+}
+/* Nicht gewählte Zustände treten zurück, bis man mit der Maus draufgeht. */
+.pantry-pick:not(.is-on) { opacity: 0.5; }
+.pantry-pick:not(.is-on):hover { opacity: 1; }
+
 /* Vorschaubild links in Rezeptliste und Reste-Küche. Feste Breite, damit die
    Karten untereinander eine Kante bilden – auch wenn ein Bild fehlt. */
 .recipe-thumb {

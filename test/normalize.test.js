@@ -46,6 +46,26 @@ test('splitAmount laesst die Einheit nicht mitten im Wort greifen', () => {
   assert.deepEqual(splitAmount('200ml Sahne'), { amount: '200 ml', name: 'Sahne' });
 });
 
+test('splitAmount kennt die haushaltsuebliche Einheiten', () => {
+  // "1 Schuss Balsamico" wurde zum Artikel "Schuss Balsamico" - die Einheit
+  // fehlte einfach in der Liste. Dasselbe fuer die anderen hier.
+  assert.deepEqual(splitAmount('1 Schuss Balsamico'), { amount: '1 Schuss', name: 'Balsamico' });
+  assert.deepEqual(splitAmount('1 Spritzer Zitrone'), { amount: '1 Spritzer', name: 'Zitrone' });
+  assert.deepEqual(splitAmount('1 Kopf Salat'), { amount: '1 Kopf', name: 'Salat' });
+  assert.deepEqual(splitAmount('1 Knolle Sellerie'), { amount: '1 Knolle', name: 'Sellerie' });
+  assert.deepEqual(splitAmount('2 Tafeln Schokolade'), {
+    amount: '2 Tafeln',
+    name: 'Schokolade',
+  });
+  assert.deepEqual(splitAmount('1 Messerspitze Zimt'), {
+    amount: '1 Messerspitze',
+    name: 'Zimt',
+  });
+  // Und die Gegenprobe: ein Artikel, der mit einer Einheit ANFAENGT, bleibt ganz.
+  assert.deepEqual(splitAmount('1 Kopfsalat'), { amount: '1', name: 'Kopfsalat' });
+  assert.deepEqual(splitAmount('2 Handtuecher'), { amount: '2', name: 'Handtuecher' });
+});
+
 test('splitIngredientText raeumt Freitext-Zutaten auf', () => {
   // Alle Zeilen echt so von der Bring-Liste bzw. aus Mealie.
   const f = (text) => splitIngredientText(text);

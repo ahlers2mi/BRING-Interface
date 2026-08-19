@@ -244,6 +244,31 @@ Oberfläche legt den Text ins Feld „Rezepttext". Läuft Mealie, wird das Ergeb
 mit `createRecipeInMealie()` dort angelegt (POST nur mit Namen, alles andere per
 PATCH), damit Mealie die eine Quelle bleibt.
 
+## Vorräte (`pantry`-Tabelle)
+
+Was im Haus sein **soll**, mit Zustand `have` / `low` / `out`. Knapp und leer
+wandern per Knopf auf die Bring-Liste.
+
+**Nicht zu verwechseln mit `PANTRY_ITEMS` in `normalize.js`:** die Liste dort ist
+im Code festgelegt und sagt nur „das zählt bei der Reste-Suche nicht als
+fehlend" bzw. „das gehört nicht ins Geschmacksprofil". Die `pantry`-Tabelle
+gehört dem Haushalt und ändert sich täglich. Berührungspunkt ist einzig
+`POST /api/pantry/seed`: der Grundstock kommt aus `PANTRY_ITEMS`, aber
+**groß geschrieben** (auf einer Einkaufsliste liest niemand gern „salz") und
+ohne `wasser` und `ei` (Wasser kauft man nicht, `ei` ist neben `eier` doppelt).
+
+- `name` ist **UNIQUE**; `addPantryItem` ist ein UPSERT, ein zweites Anlegen
+  frischt den Eintrag auf statt ihn zu verdoppeln. `seedPantry` benutzt dagegen
+  `ON CONFLICT DO NOTHING` – der Knopf darf mehrfach gedrückt werden, ohne einen
+  Zustand zu überschreiben.
+- **Der Zustand bleibt nach dem Einkaufszettel stehen.** „Auf die Liste
+  geschoben" heißt nicht „gekauft"; zurückgesetzt wird von Hand („Alles wieder
+  da") oder je Zeile. Alles andere wäre geraten.
+- Unbekannte Zustände werden verworfen, nicht gespeichert (`PANTRY_STATUS`).
+- In der Oberfläche bekommt nur der **gewählte** Zustand Farbe, und „da" ein
+  ruhiges Grün: wären alle drei `btn-primary`, stünden in einer gesunden
+  Vorratsliste 30 orange Alarmknöpfe.
+
 ## Zutaten aus Freitext trennen (`splitIngredientText`)
 
 Mealie legt Zutaten ohne `quantity`/`unit` als **eine Zeichenkette** in `note` ab
