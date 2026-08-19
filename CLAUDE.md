@@ -286,6 +286,22 @@ Alternative am Lookahead scheitert und zurückgesetzt wird.
 Der Spiegel wird bei jedem Abgleich neu geschrieben – die Korrektur wirkt also
 nach dem nächsten Sync auf alle vorhandenen Rezepte, ohne Migration.
 
+**Was schon auf der Bring-Liste liegt**, erreicht der Sync nicht. Dafür gibt es
+`POST /api/lists/:uuid/tidy` (Knopf „🧹 Mengen aus den Namen holen" in der Karte
+„Aktuelle Liste bearbeiten"). Die Entscheidung, was sich ändert, macht
+`tidyItems()` in `normalize.js` – reine Rechnerei und damit testbar; die
+Bring-Aufrufe bleiben in der Route (die Bring-Routen sind in den Tests
+ausgenommen, dafür bräuchte es ein Konto).
+
+- **Standard ist der Probelauf** (`dryRun`, Default `true`). Die Liste gehört auch
+  dem Rest der Familie – erst zeigen, dann fragen, dann ändern.
+- Bring kennt **kein Umbenennen**: erst `saveItem` mit dem neuen Namen, dann
+  `removeItem` mit dem alten. In dieser Reihenfolge, damit bei einem Fehler
+  dazwischen nichts von der Liste verschwindet.
+- Ein von Hand eingetragenes Mengenfeld bleibt stehen, die abgeleitete Menge
+  kommt davor („400 g Bio"). Artikel ohne Menge im Namen werden nicht angefasst –
+  auch „Q Tips" mit „?" im Mengenfeld nicht.
+
 ## Rezept aus Screenshots (KI-Rückfall)
 
 Wenn eine Seite sich nicht auslesen lässt, bleibt das Abfotografieren.
