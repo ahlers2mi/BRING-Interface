@@ -618,11 +618,30 @@ export async function loadTaste() {
 
 // Ist Mealie die Quelle, verschwinden die lokalen Pflege- und Importkarten:
 // Änderungen dort würde der nächste Abgleich ohnehin überschreiben.
+//
+// Die KI-Karte bleibt aber stehen. Sie war früher zu Recht mit dabei – damals
+// konnte sie nur das lokale Formular füllen, und dessen Speichern ist mit Mealie
+// gesperrt. Seit „Erkennen und anlegen" legt sie das Rezept direkt in Mealie an
+// und ist damit der Rückfall für alles, was sich nicht auslesen lässt
+// (Screenshots, abgetippter Text). Nur der Knopf, der bloß das versteckte
+// Formular füllen würde, fällt dann weg.
 export function applyMealieMode() {
   const active = mealieActive();
   el('mealieCard').style.display = active ? '' : 'none';
-  for (const id of ['recipeFormCard', 'importCard', 'aiRecipeCard']) {
+  for (const id of ['recipeFormCard', 'importCard']) {
     if (el(id)) el(id).style.display = active ? 'none' : '';
+  }
+  if (el('aiRecipeCard')) el('aiRecipeCard').style.display = '';
+  if (el('analyzeBtn')) el('analyzeBtn').style.display = active ? 'none' : '';
+  // Mit Mealie ist „Erkennen und anlegen" die einzige Aktion der Karte – dann
+  // soll sie auch aussehen wie eine.
+  const speichern = el('analyzeSaveBtn');
+  if (speichern) {
+    speichern.classList.toggle('btn-primary', active);
+    speichern.classList.toggle('btn-secondary', !active);
+  }
+  if (el('aiMealieHint')) {
+    el('aiMealieHint').style.display = active ? '' : 'none';
   }
   if (!active) return;
   renderOrphans();
@@ -1117,9 +1136,7 @@ export async function initRecipes() {
       flash(
         resultEl,
         `✓ Aus ${woher}: ${(antwort.ingredients || []).length} Zutaten erkannt. ` +
-          (mealieActive()
-            ? 'Rezepte werden in Mealie gepflegt – zum Anlegen „Erkennen und anlegen" nehmen.'
-            : 'Bitte unten prüfen und speichern.')
+          'Bitte unten prüfen und speichern.'
       );
     } catch (err) {
       flash(resultEl, `Fehler bei der Analyse: ${escHtml(err.message)}`, 'error');

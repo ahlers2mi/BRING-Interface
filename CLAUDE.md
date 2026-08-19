@@ -269,6 +269,15 @@ Wenn eine Seite sich nicht auslesen lässt, bleibt das Abfotografieren.
 - Erkennt das Modell nichts (leerer Name **und** keine Zutaten), kommt **422**
   mit dem Hinweis auf einen schärferen Ausschnitt – nicht ein leeres Formular.
 
+**Falle: `applyMealieMode()` versteckt Karten.** Läuft Mealie, blendet es
+`recipeFormCard` und `importCard` aus – lokale Pflege würde der nächste Abgleich
+überschreiben. Die KI-Karte stand dort ursprünglich mit drin und war damit
+unsichtbar, obwohl sie seit „Erkennen und anlegen" direkt in Mealie schreibt.
+Sie bleibt jetzt immer stehen; mit Mealie fällt nur der Knopf weg, der bloß das
+versteckte Formular füllen würde, und „Erkennen und anlegen" wird zum
+Hauptknopf. **Wer eine neue Karte im Import-Tab baut, muss hier nachsehen** –
+sonst ist sie für den Nutzer einfach nicht da.
+
 ## Rezepte aus Instagram (`lib/social-import.js`)
 
 Mealies `recipe-scrapers` liefert bei einem Reel Titel und Beschreibung, aber
