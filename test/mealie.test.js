@@ -331,7 +331,11 @@ test('Abgleich spiegelt Rezepte samt Zutaten, Zeiten und Tags', async () => {
 
   // Freitext-Zutaten (ohne food/unit) landen als Text im Namen.
   const pfann = list.json.find((r) => r.name === 'Pfannkuchen');
-  assert.deepEqual(asText(pfann.ingredients), ['|250 g Mehl', '3|Eier']);
+  // Freitext-Zutaten (Mealie: alles in `note`, keine quantity/unit) werden beim
+  // Spiegeln getrennt. Ungetrennt landet die Menge im Artikelnamen auf der
+  // Bring-Liste, und die Portions-Umrechnung greift nicht - die rechnet nur am
+  // amount-Feld.
+  assert.deepEqual(asText(pfann.ingredients), ['250 g|Mehl', '3|Eier']);
   assert.equal(pfann.prep_time, '15 Minuten + 10 Minuten');
 });
 

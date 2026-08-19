@@ -11,6 +11,7 @@ import {
   normalizeName,
   realIngredients,
   splitAmount,
+  splitIngredientText,
 } from '../lib/normalize.js';
 
 test('splitAmount trennt Menge und Zutat', () => {
@@ -30,6 +31,65 @@ test('splitAmount trennt Menge und Zutat', () => {
     amount: '500 g',
     name: 'Hackfleisch',
   });
+});
+
+test('splitAmount laesst die Einheit nicht mitten im Wort greifen', () => {
+  // Das "g" fuer Gramm griff in "Glas", das "l" in "Liter", das "st" in
+  // "Stangen": aus "1 Glas Rotkohl" wurde "1 G" + "las Rotkohl".
+  assert.deepEqual(splitAmount('1 Glas Rotkohl'), { amount: '1 Glas', name: 'Rotkohl' });
+  assert.deepEqual(splitAmount('1 Liter Milch'), { amount: '1 Liter', name: 'Milch' });
+  assert.deepEqual(splitAmount('2 Stangen Porree'), { amount: '2 Stangen', name: 'Porree' });
+  assert.deepEqual(splitAmount('3 Tassen Reis'), { amount: '3 Tassen', name: 'Reis' });
+  // Punkt hinter der Einheit und Einheit direkt an der Zahl gehen weiterhin.
+  assert.deepEqual(splitAmount('1 TL. Salz'), { amount: '1 TL', name: 'Salz' });
+  assert.deepEqual(splitAmount('200ml Sahne'), { amount: '200 ml', name: 'Sahne' });
+});
+
+test('splitIngredientText raeumt Freitext-Zutaten auf', () => {
+  // Alle Zeilen echt so von der Bring-Liste bzw. aus Mealie.
+  const f = (text) => splitIngredientText(text);
+
+  assert.deepEqual(f('400 g Hähnchenbrustfilet(s)'), {
+    amount: '400 g',
+    name: 'Hähnchenbrustfilet',
+  });
+  assert.deepEqual(f('100 g Bulgur'), { amount: '100 g', name: 'Bulgur' });
+  assert.deepEqual(f('200 ml Orangensaft'), { amount: '200 ml', name: 'Orangensaft' });
+
+  // Krumme Zahlen lesbar: 0.25 -> 1/4.
+  assert.deepEqual(f('0.25 Salatgurke(n)'), { amount: '1/4', name: 'Salatgurke' });
+  assert.deepEqual(f('0.5 Paprikaschote(n)'), { amount: '1/2', name: 'Paprikaschote' });
+
+  // "n. B." heisst "nach Bedarf" - keine Menge, und schon gar kein Name.
+  assert.deepEqual(f('n. B. Reis'), { amount: '', name: 'Reis' });
+  assert.deepEqual(f('etwas Butter'), { amount: '', name: 'Butter' });
+
+  // Groesse gehoert zur Menge: Bring kennt "Zwiebel", nicht "kleine Zwiebel".
+  assert.deepEqual(f('1 kleine Zwiebel(n)'), { amount: '1 kleine', name: 'Zwiebel' });
+  assert.deepEqual(f('2 kleine Champignons'), { amount: '2 kleine', name: 'Champignons' });
+  // Farbe/Sorte bleibt am Namen - das ist ein anderes Produkt.
+  assert.deepEqual(f('1 Paprikaschote(n), rote'), {
+    amount: '1',
+    name: 'Paprikaschote, rote',
+  });
+
+  // Gewicht in Klammern gehoert nicht in den Artikelnamen. Es gilt EINE Menge:
+  // die Packungseinheit, denn die legt man in den Wagen.
+  assert.deepEqual(f('1 Dose/n Kokosmilch (ca. 400 g)'), {
+    amount: '1 Dose',
+    name: 'Kokosmilch',
+  });
+  assert.deepEqual(f('1 Glas Rotkohl (720 ml)'), { amount: '1 Glas', name: 'Rotkohl' });
+  // Steht sonst keine Menge da, tritt das Gewicht an ihre Stelle.
+  assert.deepEqual(f('Kokosmilch (ca. 400 g)'), { amount: '400 g', name: 'Kokosmilch' });
+  // "je" gehoert zur selben Sorte Klammer.
+  assert.deepEqual(f('2 Pck. Sahne (je 200 g)'), { amount: '2 Pck', name: 'Sahne' });
+  // Eine Klammer, die keine Menge ist, bleibt stehen.
+  assert.deepEqual(f('Nudeln (Spirelli)'), { amount: '', name: 'Nudeln (Spirelli)' });
+
+  // Ohne Menge bleibt alles, wie es ist.
+  assert.deepEqual(f('Salz und Pfeffer'), { amount: '', name: 'Salz und Pfeffer' });
+  assert.deepEqual(f(''), { amount: '', name: '' });
 });
 
 test('ingredientMatches erkennt Singular/Plural und Umlaute', () => {

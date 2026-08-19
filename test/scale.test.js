@@ -64,6 +64,14 @@ test('Brüche werden verstanden', () => {
   assert.equal(scaleAmountText('1/2 TL', 4), '2 TL');
 });
 
+test('doppelte Angaben werden beide umgerechnet', () => {
+  // "1 Dose Kokosmilch (ca. 400 g)" wird beim Spiegeln zu Menge
+  // "1 Dose oder 400 g". Ohne Sonderbehandlung faellt die zweite Angabe beim
+  // Umrechnen weg, weil splitAmount nur die erste sieht.
+  assert.equal(scaleAmountText('1 Dose oder 400 g', 0.5), '1/2 Dose oder 200 g');
+  assert.equal(scaleAmountText('1 Glas oder 720 ml', 2), '2 Glas oder 1440 ml');
+});
+
 test('Verdoppeln ist der Normalfall bei Besuch', () => {
   const f = scaleFactor('4 Portionen', 8);
   assert.equal(f, 2);
