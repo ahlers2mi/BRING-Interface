@@ -821,6 +821,15 @@ test('Analyse weist Unfug ab, bevor es die KI kostet', async () => {
   });
   assert.equal(falsch.status, 400);
   assert.match(falsch.json.error, /Data-URL/);
+
+  // Auch das Vorschaubild muss eine Data-URL sein – es wird hochgeladen, nicht
+  // von Mealie abgerufen.
+  const cover = await api('/api/recipes/analyze', {
+    method: 'POST',
+    body: { text: 'irgendwas', cover: 'https://example.org/foto.jpg' },
+  });
+  assert.equal(cover.status, 400);
+  assert.match(cover.json.error, /Vorschaubild/);
 });
 
 test('Analyse aus Screenshots: Bilder gehen als Blöcke an die KI', async () => {
@@ -887,6 +896,54 @@ test('Analyse aus Screenshots: Bilder gehen als Blöcke an die KI', async () => 
     assert.match(gespeichert.json.recipe.instructions, /Gemüse würfeln/);
     // Ein einzelnes Bild bekommt den anderen Hinweis.
     assert.match(gesendet.messages.at(-1).content[0].text, /Das Bild zeigt ein Rezept/);
+  } finally {
+    globalThis.fetch = realFetch;
+    if (alterKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = alterKey;
+  }
+});
+
+test('Vorschaubild geht nicht an die KI, sondern ans Rezept', async () => {
+  const alterKey = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = 'test-key';
+  let gesendet = null;
+
+  globalThis.fetch = async (url, opts) => {
+    const href = String(url);
+    if (href.startsWith(base)) return realFetch(url, opts);
+    gesendet = JSON.parse(opts.body);
+    return new Response(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                name: 'Gulasch vom Foto',
+                ingredients: [{ name: 'Rindfleisch', amount: '1 kg' }],
+              }),
+            },
+          },
+        ],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } }
+    );
+  };
+
+  try {
+    const res = await api('/api/recipes/analyze', {
+      method: 'POST',
+      body: { images: [BILD], cover: BILD, save: true },
+    });
+    assert.equal(res.status, 201, res.text);
+
+    // Ein Screenshot ging an das Modell, das Vorschaubild nicht: es zeigt das
+    // Gericht, nicht die Zutatenliste, und kostet nur Token.
+    const blocks = gesendet.messages.at(-1).content;
+    assert.equal(blocks.filter((b) => b.type === 'image_url').length, 1);
+
+    // Ohne Mealie gibt es keinen Bilderspeicher – die Data-URL steht direkt am
+    // Rezept und laesst sich so anzeigen.
+    assert.equal(res.json.recipe.image_url, BILD);
   } finally {
     globalThis.fetch = realFetch;
     if (alterKey === undefined) delete process.env.OPENROUTER_API_KEY;

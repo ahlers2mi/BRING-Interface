@@ -1089,6 +1089,8 @@ export async function initRecipes() {
     el('recipeRawText').value = '';
     el('recipeImages').value = '';
     el('recipeImagesInfo').textContent = '';
+    el('recipeCover').value = '';
+    el('recipeCoverInfo').textContent = '';
     el('analyzeResult').innerHTML = '';
   });
 
@@ -1100,12 +1102,20 @@ export async function initRecipes() {
       : '';
   });
 
+  on('recipeCover', 'change', (e) => {
+    const datei = (e.target.files || [])[0];
+    el('recipeCoverInfo').textContent = datei
+      ? `Vorschaubild: ${datei.name} – wird mit "Erkennen und anlegen" gesetzt.`
+      : '';
+  });
+
   // Ein Weg fuer beide Knoepfe: `speichern` entscheidet nur, ob das Ergebnis
   // ins Formular oder direkt in die Sammlung (bzw. nach Mealie) geht.
   async function analysieren(btn, speichern) {
     const resultEl = el('analyzeResult');
     const text = el('recipeRawText').value.trim();
     const dateien = [...(el('recipeImages').files || [])].slice(0, MAX_BILDER);
+    const coverDatei = (el('recipeCover').files || [])[0] || null;
     if (!text && !dateien.length) {
       return flash(resultEl, 'Bitte einen Rezepttext einfügen oder Bilder wählen.', 'error');
     }
@@ -1116,9 +1126,12 @@ export async function initRecipes() {
         flash(resultEl, `Lese ${dateien.length} Bild(er) …`, 'info');
       }
       const images = await Promise.all(dateien.map((f) => fileToResizedDataUrl(f)));
+      // Das Vorschaubild darf kleiner sein als die Screenshots: dort muss die
+      // KI Text lesen, hier schaut nur ein Mensch auf ein Foto.
+      const cover = coverDatei ? await fileToResizedDataUrl(coverDatei, 1200) : undefined;
       const antwort = await apiFetch('/api/recipes/analyze', {
         method: 'POST',
-        body: JSON.stringify({ text, images, save: speichern }),
+        body: JSON.stringify({ text, images, cover, save: speichern }),
       });
 
       if (speichern) {
@@ -1126,6 +1139,8 @@ export async function initRecipes() {
         el('recipeRawText').value = '';
         el('recipeImages').value = '';
         el('recipeImagesInfo').textContent = '';
+        el('recipeCover').value = '';
+        el('recipeCoverInfo').textContent = '';
         await refreshAll();
         return;
       }
@@ -1136,7 +1151,11 @@ export async function initRecipes() {
       flash(
         resultEl,
         `✓ Aus ${woher}: ${(antwort.ingredients || []).length} Zutaten erkannt. ` +
-          'Bitte unten prüfen und speichern.'
+          'Bitte unten prüfen und speichern.' +
+          (coverDatei
+            ? ' Das Vorschaubild bleibt dabei liegen – es wird nur von ' +
+              '"Erkennen und anlegen" gesetzt.'
+            : '')
       );
     } catch (err) {
       flash(resultEl, `Fehler bei der Analyse: ${escHtml(err.message)}`, 'error');

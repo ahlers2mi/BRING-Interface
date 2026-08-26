@@ -785,14 +785,22 @@ app.get('/api/recipes', (_req, res) => {
 // mit Reserve; jedes weitere kostet Token und bringt selten etwas.
 const MAX_ANALYZE_IMAGES = 4;
 
-// POST /api/recipes/analyze – body: { text?, image?, images?, save? }
+const DATA_URL_RE = /^data:image\/(png|jpe?g|webp|gif);base64,/i;
+
+// POST /api/recipes/analyze – body: { text?, image?, images?, cover?, save? }
 // Freitext und/oder Screenshots per OpenRouter zu einem Rezept machen. Ohne
 // `save` kommt das Ergebnis nur zurück (die Oberfläche füllt damit das
 // Formular); mit `save` wird es angelegt – in Mealie, wenn das die Quelle ist.
+//
+// `cover` ist das Vorschaubild und geht **nicht** an die KI: aus einem
+// Screenshot der Zutatenliste lässt sich kein Titelbild machen, und das Modell
+// gibt ohnehin keins zurück (im RECIPE_SCHEMA gibt es kein Bildfeld). Wer ein
+// Foto vom Gericht will, lädt es hier ausdrücklich mit hoch.
 app.post('/api/recipes/analyze', async (req, res) => {
   const text = String(req.body.text || '').trim();
   const roh = req.body.images ?? req.body.image;
   const images = (Array.isArray(roh) ? roh : [roh]).filter(Boolean).map(String);
+  const cover = req.body.cover ? String(req.body.cover) : '';
 
   if (!text && !images.length) {
     return res.status(400).json({
@@ -805,10 +813,15 @@ app.post('/api/recipes/analyze', async (req, res) => {
         'bei mehr wird die Analyse teuer und schlechter.',
     });
   }
-  const falsch = images.find((url) => !/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(url));
+  const falsch = images.find((url) => !DATA_URL_RE.test(url));
   if (falsch) {
     return res.status(400).json({
       error: 'Bilder bitte als Data-URL (data:image/…;base64,…) übergeben.',
+    });
+  }
+  if (cover && !DATA_URL_RE.test(cover)) {
+    return res.status(400).json({
+      error: 'Vorschaubild bitte als Data-URL (data:image/…;base64,…) übergeben.',
     });
   }
 
@@ -825,7 +838,9 @@ app.post('/api/recipes/analyze', async (req, res) => {
 
     // Anlegen: mit Mealie als Quelle gehört es dorthin, sonst hierher.
     if (mealieEnabled()) {
-      const slug = await createRecipeInMealie(recipe);
+      // `image_data` lädt `createRecipeInMealie` als Datei hoch (multipart PUT);
+      // Mealie kann die Data-URL nicht selbst abrufen wie eine http-Adresse.
+      const slug = await createRecipeInMealie({ ...recipe, image_data: cover || undefined });
       const detail = await fetchRecipeDetail(slug);
       const mapped = mapMealieRecipe(detail, mealieConfig().url);
       const saved = mapped ? upsertRecipeFromSource(mapped) : null;
@@ -837,7 +852,13 @@ app.post('/api/recipes/analyze', async (req, res) => {
         message: `In Mealie angelegt: ${saved?.name || recipe.name}`,
       });
     }
-    const created = createRecipe({ ...recipe, source: images.length ? 'bild' : 'manuell' });
+    // Ohne Mealie gibt es keinen Bilderspeicher – die Data-URL geht als
+    // `image_url` in die Datenbank, das zeigt jeder Browser direkt an.
+    const created = createRecipe({
+      ...recipe,
+      image_url: cover || recipe.image_url || null,
+      source: images.length ? 'bild' : 'manuell',
+    });
     return res.status(201).json({
       recipe: created,
       saved: true,

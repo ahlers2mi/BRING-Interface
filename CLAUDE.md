@@ -382,7 +382,7 @@ ausgenommen, dafür bräuchte es ein Konto).
 ## Rezept aus Screenshots (KI-Rückfall)
 
 Wenn eine Seite sich nicht auslesen lässt, bleibt das Abfotografieren.
-`POST /api/recipes/analyze` nimmt deshalb `{ text?, images?, save? }` –
+`POST /api/recipes/analyze` nimmt deshalb `{ text?, images?, cover?, save? }` –
 `images` sind **Data-URLs**, höchstens vier, und gehen als eigene
 `image_url`-Blöcke an OpenRouter (`analyzeRecipe()` in `server.js`).
 
@@ -403,6 +403,37 @@ Wenn eine Seite sich nicht auslesen lässt, bleibt das Abfotografieren.
   „Erkennen und anlegen" speichert.
 - Erkennt das Modell nichts (leerer Name **und** keine Zutaten), kommt **422**
   mit dem Hinweis auf einen schärferen Ausschnitt – nicht ein leeres Formular.
+
+### Titelbild: nur ausdrücklich hochgeladen
+
+**Aus dieser Quelle entsteht kein Foto.** Im `RECIPE_SCHEMA` gibt es kein
+Bildfeld, und es wäre auch keins zu holen: die Screenshots zeigen Zutatenliste
+und Zubereitung, nicht das fertige Gericht. Video-, Instagram- und
+schema.org-Import bringen ihr Vorschaubild mit, der Screenshot-Weg nicht – da
+blieb die Kachel grau.
+
+Dafür gibt es `cover`, ein eigenes Dateifeld in der Karte (`recipeCover`):
+
+- Das Bild geht **nicht an die KI** – es würde nur Token kosten und die
+  Erkennung verwässern. Ein eigener Test hält das fest.
+- Verkleinert wird es auf `maxDim` **1200** statt 1600: hier muss kein Modell
+  Text lesen.
+- Es wirkt nur mit **„Erkennen und anlegen"**. Beim bloßen „Analysieren" gibt es
+  kein Ziel, weil das lokale Formular kein Bildfeld hat – die Oberfläche sagt
+  das in der Erfolgsmeldung, statt das Bild stillschweigend wegzuwerfen.
+- **Mit Mealie: multipart `PUT /api/recipes/<slug>/image`**, nicht der
+  `POST`-Endpunkt. Die zwei sind verschiedene Dinge und werden leicht
+  verwechselt: `POST` nimmt `{ url }` und lässt **Mealie** die Adresse abrufen
+  (richtig für YouTube-Vorschaubilder), `PUT` nimmt die Datei selbst
+  (`image` + `extension`). Eine Data-URL kann Mealie nicht abrufen.
+  `uploadRecipeImage()` in `lib/mealie.js` macht das; ein hochgeladenes
+  `image_data` hat in `createRecipeInMealie()` Vorrang vor `image_url`.
+  **Falle:** beim FormData darf `mealieFetch` **keinen** `Content-Type` setzen –
+  den baut `fetch` selbst samt Boundary, ein eigener zerstört den Body.
+  Mealie will die Endung als `jpg`, nicht `jpeg` (`decodeDataUrl()` dreht das).
+- **Ohne Mealie** gibt es keinen Bilderspeicher: die Data-URL landet als
+  `image_url` in der Datenbank und wird so direkt angezeigt. Der Browser liefert
+  immer JPEG (`canvas.toDataURL('image/jpeg', 0.8)`), das bleibt klein.
 
 **Falle: `applyMealieMode()` versteckt Karten.** Läuft Mealie, blendet es
 `recipeFormCard` und `importCard` aus – lokale Pflege würde der nächste Abgleich
