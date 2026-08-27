@@ -153,7 +153,8 @@ function buildDayCard(day) {
   `;
 
   node.querySelector('[data-act="roll"]').addEventListener('click', async (e) => {
-    setLoading(e.currentTarget, true);
+    const btn = e.currentTarget;
+    setLoading(btn, true);
     try {
       const res = await apiFetch('/api/plan/roll', {
         method: 'POST',
@@ -164,7 +165,7 @@ function buildDayCard(day) {
       if (first?.error) flash('planResult', first.error, 'error');
     } catch (err) {
       flash('planResult', `Fehler: ${escHtml(err.message)}`, 'error');
-      setLoading(e.currentTarget, false);
+      setLoading(btn, false);
     }
   });
 
@@ -185,6 +186,7 @@ function buildDayCard(day) {
   // Ist der Zieltag belegt, fragen wir vorher – sonst verschwindet dort
   // stillschweigend ein Gericht.
   node.querySelector('[data-act="move"]')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
     const morgen = new Date(`${day.date}T12:00:00Z`);
     morgen.setUTCDate(morgen.getUTCDate() + 1);
     const ziel = morgen.toISOString().slice(0, 10);
@@ -194,13 +196,14 @@ function buildDayCard(day) {
       openMoveDialog(day, zielTag);
       return;
     }
-    setLoading(e.currentTarget, true);
+    setLoading(btn, true);
     await moveDay(day.date, ziel, 'replace');
-    setLoading(e.currentTarget, false);
+    setLoading(btn, false);
   });
 
   node.querySelector('[data-act="leftovers"]').addEventListener('click', async (e) => {
-    setLoading(e.currentTarget, true);
+    const btn = e.currentTarget;
+    setLoading(btn, true);
     try {
       const res = await apiFetch(`/api/plan/${day.date}/status`, {
         method: 'POST',
@@ -209,14 +212,15 @@ function buildDayCard(day) {
       renderPlan(res.plan);
     } catch (err) {
       flash('planResult', `Fehler: ${escHtml(err.message)}`, 'error');
-      setLoading(e.currentTarget, false);
+      setLoading(btn, false);
     }
   });
 
   node.querySelector('[data-act="cart"]')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
     const listUuid = el('planListSelect').value;
     if (!listUuid) return flash('planResult', 'Bitte oben eine Bring-Liste wählen.', 'error');
-    setLoading(e.currentTarget, true);
+    setLoading(btn, true);
     try {
       const res = await apiFetch(`/api/recipes/${recipe.id}/import`, {
         method: 'POST',
@@ -228,7 +232,7 @@ function buildDayCard(day) {
     } catch (err) {
       flash('planResult', `Fehler: ${escHtml(err.message)}`, 'error');
     } finally {
-      setLoading(e.currentTarget, false);
+      setLoading(btn, false);
     }
   });
 

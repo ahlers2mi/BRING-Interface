@@ -65,6 +65,7 @@ test('die Module sprechen nur Elemente an, die es im HTML gibt', () => {
     'recipes.js',
     'fridge.js',
     'cookidoo.js',
+    'pantry.js',
   ];
   const htmlIds = new Set([...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]));
   // Elemente, die die Module selbst erzeugen (nicht im HTML) – bewusst erlaubt.
@@ -81,4 +82,33 @@ test('die Module sprechen nur Elemente an, die es im HTML gibt', () => {
       assert.ok(htmlIds.has(id), `${file} greift auf #${id} zu, das es im HTML nicht gibt`);
     }
   }
+});
+
+// Der Fehler dahinter: der "Aufnehmen"-Knopf der Vorratsliste drehte nach dem
+// ersten Klick fuer immer. `setLoading(btn, true)` laeuft noch synchron, das
+// Zuruecksetzen aber erst nach einem `await` – und da ist `e.currentTarget`
+// bereits `null` (der Browser raeumt es auf, sobald die Ereignisbehandlung
+// durch ist). Der Knopf blieb damit als Spinner stehen und disabled.
+//
+// Regel: das Element gleich am Anfang des Handlers in eine Konstante holen.
+
+test('kein Knopf wird ueber e.currentTarget nach einem await zurueckgesetzt', () => {
+  const files = fs.readdirSync(path.join(root, 'public/js')).filter((f) => f.endsWith('.js'));
+  const treffer = [];
+
+  for (const file of files) {
+    const code = fs.readFileSync(path.join(root, 'public/js', file), 'utf8');
+    code.split('\n').forEach((zeile, i) => {
+      if (/setLoading\(\s*(?:e|ev|event)\.currentTarget/.test(zeile)) {
+        treffer.push(`${file}:${i + 1}`);
+      }
+    });
+  }
+
+  assert.deepEqual(
+    treffer,
+    [],
+    'e.currentTarget ist nach dem ersten await null – vorher in eine Konstante holen ' +
+      `(${treffer.join(', ')})`
+  );
 });

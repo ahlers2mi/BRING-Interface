@@ -351,7 +351,8 @@ function buildRecipeCard(recipe) {
     }
   });
   node.querySelector('[data-action="course"]').addEventListener('click', async (e) => {
-    setLoading(e.currentTarget, true);
+    const btn = e.currentTarget;
+    setLoading(btn, true);
     try {
       // Umgekehrt zur jetzigen Einordnung – und zwar von Hand, damit eine
       // spätere Änderung der Kategorien in Mealie das nicht wieder umwirft.
@@ -362,11 +363,12 @@ function buildRecipeCard(recipe) {
       await refreshAll();
     } catch (err) {
       alert(`Fehler: ${err.message}`);
-      setLoading(e.currentTarget, false);
+      setLoading(btn, false);
     }
   });
   node.querySelector('[data-action="block"]').addEventListener('click', async (e) => {
-    setLoading(e.currentTarget, true);
+    const btn = e.currentTarget;
+    setLoading(btn, true);
     try {
       await apiFetch(`/api/recipes/${recipe.id}/block`, {
         method: 'POST',
@@ -375,7 +377,7 @@ function buildRecipeCard(recipe) {
       await refreshAll();
     } catch (err) {
       alert(`Fehler: ${err.message}`);
-      setLoading(e.currentTarget, false);
+      setLoading(btn, false);
     }
   });
   node
@@ -394,14 +396,15 @@ function buildRecipeCard(recipe) {
       ) {
         return;
       }
-      setLoading(e.currentTarget, true);
+      const btn = e.currentTarget;
+      setLoading(btn, true);
       try {
         const res = await apiFetch(`/api/mealie/recipe/${recipe.id}`, { method: 'DELETE' });
         await refreshAll();
         if (res.kept) alert(res.message);
       } catch (err) {
         alert(`Fehler: ${err.message}`);
-        setLoading(e.currentTarget, false);
+        setLoading(btn, false);
       }
     });
 

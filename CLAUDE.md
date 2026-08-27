@@ -512,6 +512,35 @@ Antwort.
 - `planOfferedFor` merkt sich die Lauf-id: die Läufe bleiben nach dem Ende
   abrufbar, sonst käme das Angebot bei jedem Neuladen der Seite wieder.
 
+## Oberfläche: `e.currentTarget` überlebt kein `await`
+
+Der „➕ Aufnehmen"-Knopf der Vorratsliste drehte nach dem **ersten** Klick für
+immer und war nicht mehr benutzbar. Ursache ist eine Eigenheit der
+Ereignis-Objekte im Browser: **`e.currentTarget` ist `null`, sobald die
+Ereignisbehandlung durch ist** – also nach dem ersten `await`. Ein
+
+```js
+setLoading(e.currentTarget, true);   // läuft noch synchron: Spinner an
+try { await apiFetch(…); } finally {
+  setLoading(e.currentTarget, false); // hier ist es null: Spinner bleibt
+}
+```
+
+lässt den Knopf als Spinner und `disabled` stehen. Das Fiese daran: die erste
+Aktion **klappt**, es sieht nur danach aus wie ein hängender Aufruf.
+
+**Regel: das Element in der ersten Zeile des Handlers in eine Konstante holen**
+(`const btn = e.currentTarget;`) und überall diese benutzen. Ein Test in
+`frontend.test.js` sucht nach `setLoading(e.currentTarget` in allen Modulen und
+verhindert den Rückfall.
+
+Betroffen waren 14 Handler in `pantry.js`, `fridge.js`, `plan.js` und
+`recipes.js`. In `plan.js`/`recipes.js` fiel es nicht auf, weil dort der
+Erfolgsfall die Karte neu zeichnet – der Knopf war weg, bevor man den Spinner
+sah. Stehen blieb er dort nur **im Fehlerfall**, also genau dann, wenn man ihn
+noch braucht. In der Vorratsliste bleibt die Karte stehen, darum war es dort
+sofort sichtbar.
+
 ## Oberfläche: zwei Fallen mit versteckter Wirkung
 
 - **`.recipe-item.is-blocked` legte Opazität über die GANZE Karte** – also auch
