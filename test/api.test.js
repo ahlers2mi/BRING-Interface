@@ -362,6 +362,66 @@ test('Wocheneinkauf fasst die Zutaten der Woche zusammen', async () => {
   assert.equal(new Set(names).size, names.length, 'keine Dubletten');
 });
 
+test('Mengen derselben Zutat werden addiert, nicht aneinandergehaengt', async () => {
+  // Drei Rezepte auf sieben Tage: mindestens eines steht mehrfach im Plan.
+  // Vorher stand da "1 TL + 1 TL + 1 TL".
+  const res = await api('/api/plan/shopping?week=current');
+  for (const item of res.json.items) {
+    if (!item.amount) continue;
+    const teile = item.amount.split(' + ');
+    const einheiten = teile
+      .map((t) => /^[\d.,/½¼¾⅓⅔]+\s*(.*)$/.exec(t)?.[1]?.toLowerCase())
+      .filter((e) => e !== undefined);
+    assert.equal(
+      new Set(einheiten).size,
+      einheiten.length,
+      `${item.name}: gleiche Einheit zweimal in "${item.amount}"`
+    );
+  }
+});
+
+test('was im Vorrat auf „da" steht, kommt nicht auf den Wocheneinkauf', async () => {
+  // Eine Zutat nehmen, die im gewuerfelten Plan wirklich vorkommt – welche
+  // Rezepte drinstehen, entscheidet der Wuerfel.
+  const vorher = await api('/api/plan/shopping?week=current');
+  const zutat = vorher.json.items[0]?.name;
+  assert.ok(zutat, `nichts eingeplant: ${vorher.text}`);
+
+  const angelegt = await api('/api/pantry', { method: 'POST', body: { name: zutat } });
+  assert.equal(angelegt.status, 201, angelegt.text);
+  try {
+    const res = await api('/api/plan/shopping?week=current');
+    assert.ok(
+      !res.json.items.some((i) => i.name === zutat),
+      `${zutat} liegt im Vorrat: ${JSON.stringify(res.json.items)}`
+    );
+    // Nicht stillschweigend: was weggelassen wurde, wird gemeldet.
+    assert.ok(
+      res.json.pantrySkipped.some((p) => p.name === zutat),
+      JSON.stringify(res.json.pantrySkipped)
+    );
+
+    // Mit pantry=0 ist es wieder dabei – fuer den Fall, dass die Zuordnung
+    // etwas Falsches geschluckt hat.
+    const alles = await api('/api/plan/shopping?week=current&pantry=0');
+    assert.ok(alles.json.items.some((i) => i.name === zutat));
+    assert.equal(alles.json.pantrySkipped.length, 0);
+
+    // „knapp" gehoert ausdruecklich auf die Liste.
+    await api(`/api/pantry/${angelegt.json.id}`, {
+      method: 'PUT',
+      body: { status: 'low' },
+    });
+    const knapp = await api('/api/plan/shopping?week=current');
+    assert.ok(
+      knapp.json.items.some((i) => i.name === zutat),
+      'knapper Vorrat muss mit auf die Liste'
+    );
+  } finally {
+    await api(`/api/pantry/${angelegt.json.id}`, { method: 'DELETE' });
+  }
+});
+
 // ── FHEM-Schnittstelle ────────────────────────────────────────────────────────
 
 test('FHEM-Plan liefert flache Werte für HTTPMOD', async () => {

@@ -321,6 +321,47 @@ Zwei Berührungspunkte:
   ruhiges Grün: wären alle drei `btn-primary`, stünden in einer gesunden
   Vorratsliste 30 orange Alarmknöpfe.
 
+## Wocheneinkauf: Vorrat abziehen, Mengen addieren
+
+`weekShoppingItems()` in `lib/mealplan.js`. Zwei Dinge, die man sonst am Regal
+von Hand macht:
+
+- **Was im Vorrat auf `have` steht, kommt nicht auf die Liste.** Der Grundstock
+  (Salz, Pfeffer, Öl, Paprikapulver …) muss nicht jede Woche mitgekauft werden.
+  Nur `have` fällt raus – **„knapp" und „leer" gehören ausdrücklich drauf**,
+  das ist der ganze Sinn der Vorratsliste.
+- **Gleiche Zutat, gleiche Einheit wird addiert** (`mergeAmounts` in
+  `normalize.js`). Vorher wurden die Mengen nur aneinandergehängt, auf dem
+  Zettel stand „½ TL + 1 TL + 1 TL Salz" und „2 + 1 Knoblauchzehen".
+
+Zur Zuordnung dient `ingredientMatches` – dieselbe großzügige Regel wie in der
+Reste-Küche (Stämme + Komposita). **Deshalb wird gemeldet, was weggelassen
+wurde** (`pantrySkipped`, in der Oberfläche als Zeile unter der Liste): eine
+falsche Zuordnung heißt hier, dass eine Zutat beim Einkauf fehlt, und das darf
+nicht stillschweigend passieren. `?pantry=0` (bzw. `pantry: false` im POST)
+nimmt sie wieder mit.
+
+Die Grenzen sind bewusst so gesetzt:
+
+- **Nur die gepflegte `pantry`-Tabelle zählt, nicht `PANTRY_ITEMS`.** Wer die
+  Vorratsliste nie angelegt hat, bekommt seine Liste unverändert – Artikel von
+  einem Einkaufszettel zu streichen, ohne dass jemand das eingerichtet hat,
+  wäre zu forsch. (Die Reste-Suche darf auf die Code-Liste zurückfallen, dort
+  kostet ein Fehlgriff nichts.)
+- **Umgerechnet wird nur verlustfrei** (g↔kg, ml↔l) und immer in die Einheit der
+  **ersten** Angabe: `1 kg + 500 g` → „1,5 kg", umgekehrt „1500 g". TL und EL
+  bleiben getrennt: „5⅓ EL" ist als Kaufmenge unbrauchbar, „4 EL + 4 TL"
+  wenigstens ehrlich.
+- **Ein- und Mehrzahl sind dieselbe Einheit** (`unitStem`), sonst wären „2 Dosen"
+  und „1 Dose" zwei Posten. Für die Anzeige gewinnt die Mehrzahl, wenn sie
+  vorkommt – aber nur, wenn sie **dasselbe Wort verlängert** und **kein
+  Umrechnungsfaktor** im Spiel ist. Ohne diese zwei Bedingungen wurde aus
+  „2 EL + 1 Esslöffel" die Einheit „Esslöffel" und – gefährlich – aus
+  „500 g + 1 kg" die Angabe **„1500 kg"**.
+- Was sich nicht sauber lesen lässt (`1 kleine`, `2-3 EL`, `2 EL (ca. 30 g)`),
+  bleibt unverändert stehen und wird mit ` + ` angehängt. Lieber untereinander
+  als falsch addiert.
+
 ## Zutaten aus Freitext trennen (`splitIngredientText`)
 
 Mealie legt Zutaten ohne `quantity`/`unit` als **eine Zeichenkette** in `note` ab
@@ -345,8 +386,16 @@ der Quellen werden dabei geglättet, alle an echten Zeilen gefunden:
 
 Größenwörter (klein/groß) wandern zur Menge, weil Bring „Zwiebel" kennt und
 „kleine Zwiebel" nicht. **Farb- und Sortenwörter bleiben am Namen** („Paprikaschote,
-rote") – die bezeichnen ein anderes Produkt. Eine Klammer, die keine Menge ist,
-bleibt ebenfalls stehen (`Nudeln (Spirelli)`).
+rote") – die bezeichnen ein anderes Produkt. Eine Klammer **hinter** dem Namen,
+die keine Menge ist, bleibt ebenfalls stehen (`Nudeln (Spirelli)`) – die
+bezeichnet die Sorte.
+
+Eine Klammer **vor** dem Namen fällt dagegen weg (Regel 4b). Sie ist eine
+Anmerkung zur Menge, kein Teil des Artikels, und stand mitten in echten
+Rezeptzeilen: aus „2 EL (ca. 30 g) Butter" wurde der Bring-Artikel
+„(ca. 30 g) Butter", aus „400 g (ca. 150 g roher Reis) gekochter Basmatireis"
+entsprechend. So etwas findet Bring in seinem Katalog nicht. Regel 4 fasste nur
+die Klammer am **Zeilenende**, weil dort die Packungsangabe steht.
 
 Es gilt **eine** Menge, nicht zwei: bei „1 Dose … (ca. 400 g)" gewinnt die
 **Packungseinheit** – die legt man in den Wagen, das Gewicht ist nur zum

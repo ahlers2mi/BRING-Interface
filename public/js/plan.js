@@ -329,9 +329,15 @@ export function initPlan() {
         method: 'POST',
         body: JSON.stringify({ week: currentWeek, listUuid }),
       });
+      const vorrat = res.pantrySkipped || [];
       flash(
         'planResult',
-        `✓ ${res.imported.length} Zutaten aus ${res.recipes.length} Rezepten in Bring übertragen.`
+        `✓ ${res.imported.length} Zutaten aus ${res.recipes.length} Rezepten in Bring übertragen.` +
+          (vorrat.length
+            ? ` ${vorrat.length} lagen im Vorrat auf „da" und blieben weg: ` +
+              escHtml(vorrat.map((v) => v.name).join(', ')) +
+              '.'
+            : '')
       );
     } catch (err) {
       flash('planResult', `Fehler: ${escHtml(err.message)}`, 'error');
@@ -347,6 +353,16 @@ export function initPlan() {
       const res = await apiFetch(
         `/api/plan/shopping?week=${encodeURIComponent(currentWeek)}`
       );
+      // Was im Vorrat liegt, steht dazu – sonst rätselt man, wo das Salz ist,
+      // und eine falsche Zuordnung fiele nie auf.
+      const vorrat = res.pantrySkipped || [];
+      const vorratZeile = vorrat.length
+        ? `<div class="hint" style="margin-top:0.5rem;">
+             📦 ${vorrat.length} im Vorrat („da"), bleiben weg:
+             ${escHtml(vorrat.map((v) => v.name).join(', '))}
+           </div>`
+        : '';
+
       el('planResult').innerHTML = res.items.length
         ? `<div class="alert alert-info">
              <b>${res.items.length} Zutaten</b> aus ${res.recipes.length} Rezepten:<br />
@@ -358,8 +374,13 @@ export function initPlan() {
                    )}</span>`
                )
                .join('')}
+             ${vorratZeile}
            </div>`
-        : '<div class="alert alert-info">Für diese Woche ist nichts eingeplant.</div>';
+        : `<div class="alert alert-info">${
+            vorrat.length
+              ? 'Alles, was diese Woche gebraucht wird, steht im Vorrat auf „da".'
+              : 'Für diese Woche ist nichts eingeplant.'
+          }${vorratZeile}</div>`;
     } catch (err) {
       flash('planResult', `Fehler: ${escHtml(err.message)}`, 'error');
     } finally {

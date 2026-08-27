@@ -320,9 +320,14 @@ test('Thermomix-Rezepte landen im Würfeltopf und in der Wochen-Einkaufsliste', 
   const shoppingList = await api('/api/plan/shopping?all=1');
   assert.ok(shoppingList.json.items.length >= 1);
   // Mengen kommen mit. Bei drei Rezepten auf sieben Tage steht dasselbe Gericht
-  // mehrmals im Plan – die Wochenliste addiert die Mengen dann.
+  // mehrmals im Plan – die Wochenliste addiert die Mengen dann WIRKLICH: vorher
+  // stand da "600 g + 600 g + 600 g".
   const kartoffeln = shoppingList.json.items.find((i) => /Kartoffeln/i.test(i.name));
-  if (kartoffeln) assert.match(kartoffeln.amount, /600 g/);
+  if (kartoffeln) {
+    assert.match(kartoffeln.amount, /^\d+ g$/, `eine Menge, keine Kette: ${kartoffeln.amount}`);
+    const gramm = Number(kartoffeln.amount.replace(' g', ''));
+    assert.equal(gramm % 600, 0, `Vielfaches von 600 g erwartet, ist ${gramm}`);
+  }
 });
 
 test('aus einer Sammlung entfernte Rezepte werden als verschwunden markiert', async () => {
