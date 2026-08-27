@@ -1593,10 +1593,17 @@ app.post('/api/plan/:date/rate', (req, res) => {
 });
 
 // Wochen-Einkaufsliste ansehen …
+// `pantry=0` nimmt auch die Vorräte mit, die auf „da" stehen – für den Fall,
+// dass die Zuordnung etwas Falsches geschluckt hat.
 app.get('/api/plan/shopping', (req, res) => {
   const week = resolveWeek(req.query.week);
   if (!week) return res.status(400).json({ error: 'Ungültige Woche.' });
-  res.json(weekShoppingItems(week, { skipCooked: req.query.all !== '1' }));
+  res.json(
+    weekShoppingItems(week, {
+      skipCooked: req.query.all !== '1',
+      skipPantry: req.query.pantry !== '0',
+    })
+  );
 });
 
 // … und in eine Bring-Liste schieben.
@@ -1606,9 +1613,16 @@ app.post('/api/plan/shopping', async (req, res) => {
   const { listUuid } = req.body || {};
   if (!listUuid) return res.status(400).json({ error: 'listUuid fehlt.' });
   try {
-    const { items, recipes } = weekShoppingItems(week, { skipCooked: !req.body.all });
+    const { items, recipes, pantrySkipped } = weekShoppingItems(week, {
+      skipCooked: !req.body.all,
+      skipPantry: req.body.pantry !== false,
+    });
     if (!items.length) {
-      return res.status(400).json({ error: 'Für diese Woche ist nichts eingeplant.' });
+      return res.status(400).json({
+        error: pantrySkipped?.length
+          ? 'Alles, was diese Woche gebraucht wird, steht im Vorrat auf „da".'
+          : 'Für diese Woche ist nichts eingeplant.',
+      });
     }
     const imported = await importItemsToBring(listUuid, items);
     // Alle Tage, deren Zutaten mitgegangen sind, als eingekauft markieren.
@@ -1618,7 +1632,7 @@ app.post('/api/plan/shopping', async (req, res) => {
       setPlanShopped(eintrag.date, true);
       markiert.push(eintrag.date);
     }
-    res.json({ imported, recipes, shopped: markiert });
+    res.json({ imported, recipes, shopped: markiert, pantrySkipped });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -1889,7 +1903,15 @@ async function addRecipeByUrl(url) {
   if (known) {
     return {
       status: 200,
-      body: { ok: true, duplicate: true, name: known.name, message: `Kennen wir schon: ${known.name}` },
+      body: {
+        ok: true,
+        duplicate: true,
+        // Auch bei einer Dublette mitschicken: das Rezept einzuplanen ist genau
+        // dann sinnvoll, wenn man es gerade wieder in der Hand hatte.
+        recipeId: known.id,
+        name: known.name,
+        message: `Kennen wir schon: ${known.name}`,
+      },
     };
   }
 
@@ -1912,6 +1934,7 @@ async function addRecipeByUrl(url) {
         body: {
           ok: true,
           target: 'mealie',
+          recipeId: saved?.id || null,
           name: saved?.name || recipe.name,
           link: mealieRecipeUrl(slug),
           message:
@@ -1926,6 +1949,7 @@ async function addRecipeByUrl(url) {
       body: {
         ok: true,
         target: 'lokal',
+        recipeId: created.id,
         name: created.name,
         message:
           `${woher} übernommen, ` +
@@ -1946,6 +1970,7 @@ async function addRecipeByUrl(url) {
       body: {
         ok: true,
         target: 'mealie',
+        recipeId: saved?.id || null,
         name: saved?.name || detail?.name || '',
         link: mealieRecipeUrl(slug),
         message: `In Mealie angelegt: ${saved?.name || detail?.name || slug}`,
@@ -1967,7 +1992,13 @@ async function addRecipeByUrl(url) {
   const created = createRecipe(recipe);
   return {
     status: 201,
-    body: { ok: true, target: 'lokal', name: created.name, message: `Gespeichert: ${created.name}` },
+    body: {
+      ok: true,
+      target: 'lokal',
+      recipeId: created.id,
+      name: created.name,
+      message: `Gespeichert: ${created.name}`,
+    },
   };
 }
 
@@ -2634,9 +2665,18 @@ async function handleFhemShopping(req, res) {
     return res.status(400).json({ error: 'Keine Bring-Liste angegeben oder gemerkt.' });
   }
   try {
-    const { items } = weekShoppingItems(week, { skipCooked: params.all !== '1' });
+    const { items, pantrySkipped } = weekShoppingItems(week, {
+      skipCooked: params.all !== '1',
+      skipPantry: params.pantry !== '0',
+    });
     const imported = await importItemsToBring(listUuid, items);
-    res.json({ imported: imported.length, items: imported, week });
+    res.json({
+      imported: imported.length,
+      items: imported,
+      week,
+      // Für FHEM als Zahl: ein Reading braucht keinen Namenssalat.
+      vorrat: (pantrySkipped || []).length,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

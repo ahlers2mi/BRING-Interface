@@ -8,6 +8,7 @@ import {
   isPantryItem,
   isTeaserIngredient,
   matchRecipeToFridge,
+  mergeAmounts,
   normalizeName,
   realIngredients,
   splitAmount,
@@ -258,4 +259,67 @@ test('die Reste-Suche rechnet den Platzhalter nicht als fehlende Zutat', () => {
   );
   assert.equal(res.coverage, 1);
   assert.equal(res.missing.length, 0);
+});
+
+// ── Mengen zusammenrechnen (Wocheneinkauf) ────────────────────────────────────
+//
+// Vorher wurden die Mengen bloss aneinandergehaengt. Auf dem Zettel stand
+// "½ TL + 1 TL + 1 TL Salz" und "2 + 1 Knoblauchzehen" – beides echte Beispiele
+// aus einer Wochenliste.
+
+test('gleiche Einheit wird addiert', () => {
+  assert.equal(mergeAmounts(['½ TL', '1 TL', '1 TL']), '2,5 TL');
+  assert.equal(mergeAmounts(['2', '1']), '3');
+  assert.equal(mergeAmounts(['1 TL', '2 TL']), '3 TL');
+  assert.equal(mergeAmounts(['1/2 TL', '1/2 TL']), '1 TL');
+  assert.equal(mergeAmounts(['400 g']), '400 g');
+  assert.equal(mergeAmounts([]), '');
+  assert.equal(mergeAmounts(['', null]), '');
+});
+
+test('Ein- und Mehrzahl derselben Einheit sind dieselbe Einheit', () => {
+  assert.equal(mergeAmounts(['2 Dosen', '1 Dose']), '3 Dosen');
+  // Die Mehrzahl gewinnt, wenn sie vorkommt – "3 Zehe" liest sich falsch.
+  assert.equal(mergeAmounts(['1 Zehe', '2 Zehen']), '3 Zehen');
+  assert.equal(mergeAmounts(['1 Prise', '2 Prisen']), '3 Prisen');
+  // Ausgeschrieben ist es dieselbe Einheit wie die Abkuerzung.
+  assert.equal(mergeAmounts(['2 EL', '1 Esslöffel']), '3 EL');
+});
+
+test('umgerechnet wird nur, wo es verlustfrei ist – und in die erste Einheit', () => {
+  assert.equal(mergeAmounts(['1 kg', '500 g']), '1,5 kg');
+  assert.equal(mergeAmounts(['500 g', '1 kg']), '1500 g');
+  assert.equal(mergeAmounts(['200 ml', '0,5 l']), '700 ml');
+  // TL und EL bleiben getrennt: "5⅓ EL" ist als Kaufmenge unbrauchbar.
+  assert.equal(mergeAmounts(['4 EL', '4 TL']), '4 EL + 4 TL');
+});
+
+test('was sich nicht verrechnen laesst, bleibt unveraendert stehen', () => {
+  // Groessenangabe, Bereich, Klammerzusatz – lieber ehrlich hintereinander
+  // als falsch addiert.
+  assert.equal(mergeAmounts(['1 kleine', '2']), '1 kleine + 2');
+  assert.equal(mergeAmounts(['2-3 EL', '1 EL']), '2-3 EL + 1 EL');
+  assert.equal(mergeAmounts(['2 EL (ca. 30 g)']), '2 EL (ca. 30 g)');
+});
+
+test('eine Klammer VOR dem Namen ist eine Anmerkung, kein Artikel', () => {
+  // Regel 4 fasst nur die Klammer am Ende. Mitten in der Zeile blieb sie am
+  // Namen kleben – "(ca. 30 g) Butter" findet Bring in seinem Katalog nicht.
+  assert.deepEqual(splitIngredientText('2 EL (ca. 30 g) Butter'), {
+    name: 'Butter',
+    amount: '2 EL',
+  });
+  assert.deepEqual(splitIngredientText('400 g (ca. 150 g roher Reis) gekochter Basmatireis'), {
+    name: 'gekochter Basmatireis',
+    amount: '400 g',
+  });
+  assert.deepEqual(
+    splitIngredientText('200 g (frisch oder abgetropft aus der Dose) Ananasstücke'),
+    { name: 'Ananasstücke', amount: '200 g' }
+  );
+  // Eine Klammer HINTER dem Namen bleibt: die bezeichnet die Sorte.
+  assert.deepEqual(splitIngredientText('Nudeln (Spirelli)'), {
+    name: 'Nudeln (Spirelli)',
+    amount: '',
+  });
 });

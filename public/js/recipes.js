@@ -11,6 +11,7 @@ import {
   escHtml,
   fileToResizedDataUrl,
   flash,
+  holdFlash,
   on,
   openModal,
   populateListSelects,
@@ -350,7 +351,8 @@ function buildRecipeCard(recipe) {
     }
   });
   node.querySelector('[data-action="course"]').addEventListener('click', async (e) => {
-    setLoading(e.currentTarget, true);
+    const btn = e.currentTarget;
+    setLoading(btn, true);
     try {
       // Umgekehrt zur jetzigen Einordnung – und zwar von Hand, damit eine
       // spätere Änderung der Kategorien in Mealie das nicht wieder umwirft.
@@ -361,11 +363,12 @@ function buildRecipeCard(recipe) {
       await refreshAll();
     } catch (err) {
       alert(`Fehler: ${err.message}`);
-      setLoading(e.currentTarget, false);
+      setLoading(btn, false);
     }
   });
   node.querySelector('[data-action="block"]').addEventListener('click', async (e) => {
-    setLoading(e.currentTarget, true);
+    const btn = e.currentTarget;
+    setLoading(btn, true);
     try {
       await apiFetch(`/api/recipes/${recipe.id}/block`, {
         method: 'POST',
@@ -374,7 +377,7 @@ function buildRecipeCard(recipe) {
       await refreshAll();
     } catch (err) {
       alert(`Fehler: ${err.message}`);
-      setLoading(e.currentTarget, false);
+      setLoading(btn, false);
     }
   });
   node
@@ -393,14 +396,15 @@ function buildRecipeCard(recipe) {
       ) {
         return;
       }
-      setLoading(e.currentTarget, true);
+      const btn = e.currentTarget;
+      setLoading(btn, true);
       try {
         const res = await apiFetch(`/api/mealie/recipe/${recipe.id}`, { method: 'DELETE' });
         await refreshAll();
         if (res.kept) alert(res.message);
       } catch (err) {
         alert(`Fehler: ${err.message}`);
-        setLoading(e.currentTarget, false);
+        setLoading(btn, false);
       }
     });
 
@@ -452,9 +456,14 @@ function openImportModal(recipeId) {
 // weiter voraus zu planen kommt in der Praxis nicht vor.
 
 let dayPickRecipe = null;
+// Wohin die Erfolgsmeldung geht. Aus der Rezeptliste ist das Formular richtig,
+// aus dem Import-Tab NICHT: dort ist die Karte gar nicht zu sehen, mit Mealie
+// ist sie sogar ausgeblendet – die Bestätigung wäre unsichtbar.
+let dayPickResultTarget = 'recipeFormResult';
 
-async function openDayPicker(recipe) {
+async function openDayPicker(recipe, { resultEl = 'recipeFormResult' } = {}) {
   dayPickRecipe = recipe;
+  dayPickResultTarget = resultEl;
   el('dayPickName').textContent = recipe.name;
   el('dayPickResult').innerHTML = '';
   el('dayPickList').innerHTML = '<span class="spinner"></span>';
@@ -507,7 +516,7 @@ function renderDayPicker(days) {
           // einen Ringschluss ergeben (plan.js holt loadTaste von hier), und
           // der Tab lädt beim Wechsel sowieso neu.
           flash(
-            'recipeFormResult',
+            dayPickResultTarget,
             `✓ „${escHtml(dayPickRecipe.name)}" für ${escHtml(
               deDate(btn.dataset.date)
             )} eingeplant.`
@@ -518,6 +527,61 @@ function renderDayPicker(days) {
         }
       });
     });
+}
+
+// Nach dem Anlegen gleich einplanen. Angeboten wird das ueberall, wo GENAU EIN
+// Rezept entstanden ist – bei einem Massenimport waere die Frage sinnlos, und
+// mit zwei Rezepten waere unklar, welches gemeint ist.
+//
+// Der Knopf haengt sich unter die Erfolgsmeldung, statt sie zu ersetzen: `flash`
+// schreibt in dasselbe Element, und die Meldung soll stehen bleiben.
+//
+// Die id reicht als Uebergabe – das Rezept wird beim Klick frisch geholt. Im
+// Mealie-Modus liegt zwischen Anlegen und Abgleich ein Moment, in dem
+// `state.recipes` es noch nicht kennt.
+function offerPlanning(resultEl, recipeId, { label = 'Gleich einplanen?' } = {}) {
+  const box = typeof resultEl === 'string' ? el(resultEl) : resultEl;
+  if (!box || !recipeId) return;
+
+  const zeile = document.createElement('div');
+  zeile.className = 'plan-offer';
+  zeile.innerHTML = `<span class="hint">${escHtml(label)}</span>
+    <button class="btn btn-secondary btn-sm" type="button">📅 Einplanen</button>`;
+
+  // Die Meldung raeumt sich sonst nach 6 Sekunden selbst weg – mitsamt dem
+  // Angebot, ueber das der Nutzer gerade nachdenkt.
+  holdFlash(box);
+
+  zeile.querySelector('button').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    setLoading(btn, true);
+    try {
+      const recipe = await apiFetch(`/api/recipes/${recipeId}`);
+      await openDayPicker(recipe, { resultEl: box });
+    } catch (err) {
+      flash(box, `Fehler: ${escHtml(err.message)}`, 'error');
+    } finally {
+      setLoading(btn, false);
+    }
+  });
+
+  box.appendChild(zeile);
+}
+
+// Dasselbe fuer die Hintergrund-Laeufe (Massenimport, Koch-Seite,
+// Chefkoch->Mealie). Die zaehlen mit, was SIE angelegt haben – bei genau einem
+// Rezept ist die Frage sinnvoll, bei 40 nicht.
+//
+// `planOfferedFor` verhindert, dass das Angebot beim Neuladen der Seite noch
+// einmal auftaucht: die Laeufe bleiben nach dem Ende abrufbar.
+let planOfferedFor = null;
+
+function offerPlanningForJob(job, resultEl) {
+  const ids = job?.createdIds || [];
+  if (ids.length !== 1 || planOfferedFor === job.id) return;
+  planOfferedFor = job.id;
+  flash(resultEl, '✓ Ein Rezept angelegt.');
+  offerPlanning(resultEl, ids[0]);
 }
 
 // ── Geschmacksprofil ──────────────────────────────────────────────────────────
@@ -803,6 +867,7 @@ async function pollCkJob() {
     el('ckImportBtn').disabled = false;
     await refreshAll();
     renderMealieStatus();
+    offerPlanningForJob(job, 'ckResult');
     return job;
   } catch (err) {
     clearInterval(ckPollTimer);
@@ -874,6 +939,7 @@ async function pollSiteJob() {
     el('siteImportBtn').disabled = false;
     el('siteDryRunBtn').disabled = false;
     if (!job.dryRun) await refreshAll();
+    offerPlanningForJob(job, 'siteResult');
     return job;
   } catch (err) {
     clearInterval(sitePollTimer);
@@ -962,6 +1028,7 @@ async function pollImportJob() {
     importPollTimer = null;
     el('bulkImportBtn').disabled = false;
     await refreshAll();
+    offerPlanningForJob(job, 'bulkImportResult');
     return job;
   } catch (err) {
     clearInterval(importPollTimer);
@@ -1023,6 +1090,9 @@ export async function initRecipes() {
       });
       flash('addUrlResult', escHtml(res.message), res.duplicate ? 'info' : 'success');
       if (!res.duplicate) el('addUrl').value = '';
+      offerPlanning('addUrlResult', res.recipeId, {
+        label: res.duplicate ? 'Trotzdem einplanen?' : 'Gleich einplanen?',
+      });
       await refreshAll();
     } catch (err) {
       // Bei einem Video schickt der Server den gesammelten Text mit, wenn keine
@@ -1136,6 +1206,7 @@ export async function initRecipes() {
 
       if (speichern) {
         flash(resultEl, escHtml(antwort.message || 'Gespeichert.'));
+        offerPlanning(resultEl, antwort.recipe?.id);
         el('recipeRawText').value = '';
         el('recipeImages').value = '';
         el('recipeImagesInfo').textContent = '';
@@ -1213,6 +1284,9 @@ export async function initRecipes() {
           ? `ℹ "${escHtml(res.recipe.name)}" war schon gespeichert.`
           : `✓ "${escHtml(res.recipe.name)}" gespeichert.`
       );
+      offerPlanning(resultEl, res.recipe?.id, {
+        label: res.duplicate ? 'Trotzdem einplanen?' : 'Gleich einplanen?',
+      });
       el('importUrl').value = '';
       await refreshAll();
     } catch (err) {

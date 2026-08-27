@@ -321,6 +321,47 @@ Zwei Berührungspunkte:
   ruhiges Grün: wären alle drei `btn-primary`, stünden in einer gesunden
   Vorratsliste 30 orange Alarmknöpfe.
 
+## Wocheneinkauf: Vorrat abziehen, Mengen addieren
+
+`weekShoppingItems()` in `lib/mealplan.js`. Zwei Dinge, die man sonst am Regal
+von Hand macht:
+
+- **Was im Vorrat auf `have` steht, kommt nicht auf die Liste.** Der Grundstock
+  (Salz, Pfeffer, Öl, Paprikapulver …) muss nicht jede Woche mitgekauft werden.
+  Nur `have` fällt raus – **„knapp" und „leer" gehören ausdrücklich drauf**,
+  das ist der ganze Sinn der Vorratsliste.
+- **Gleiche Zutat, gleiche Einheit wird addiert** (`mergeAmounts` in
+  `normalize.js`). Vorher wurden die Mengen nur aneinandergehängt, auf dem
+  Zettel stand „½ TL + 1 TL + 1 TL Salz" und „2 + 1 Knoblauchzehen".
+
+Zur Zuordnung dient `ingredientMatches` – dieselbe großzügige Regel wie in der
+Reste-Küche (Stämme + Komposita). **Deshalb wird gemeldet, was weggelassen
+wurde** (`pantrySkipped`, in der Oberfläche als Zeile unter der Liste): eine
+falsche Zuordnung heißt hier, dass eine Zutat beim Einkauf fehlt, und das darf
+nicht stillschweigend passieren. `?pantry=0` (bzw. `pantry: false` im POST)
+nimmt sie wieder mit.
+
+Die Grenzen sind bewusst so gesetzt:
+
+- **Nur die gepflegte `pantry`-Tabelle zählt, nicht `PANTRY_ITEMS`.** Wer die
+  Vorratsliste nie angelegt hat, bekommt seine Liste unverändert – Artikel von
+  einem Einkaufszettel zu streichen, ohne dass jemand das eingerichtet hat,
+  wäre zu forsch. (Die Reste-Suche darf auf die Code-Liste zurückfallen, dort
+  kostet ein Fehlgriff nichts.)
+- **Umgerechnet wird nur verlustfrei** (g↔kg, ml↔l) und immer in die Einheit der
+  **ersten** Angabe: `1 kg + 500 g` → „1,5 kg", umgekehrt „1500 g". TL und EL
+  bleiben getrennt: „5⅓ EL" ist als Kaufmenge unbrauchbar, „4 EL + 4 TL"
+  wenigstens ehrlich.
+- **Ein- und Mehrzahl sind dieselbe Einheit** (`unitStem`), sonst wären „2 Dosen"
+  und „1 Dose" zwei Posten. Für die Anzeige gewinnt die Mehrzahl, wenn sie
+  vorkommt – aber nur, wenn sie **dasselbe Wort verlängert** und **kein
+  Umrechnungsfaktor** im Spiel ist. Ohne diese zwei Bedingungen wurde aus
+  „2 EL + 1 Esslöffel" die Einheit „Esslöffel" und – gefährlich – aus
+  „500 g + 1 kg" die Angabe **„1500 kg"**.
+- Was sich nicht sauber lesen lässt (`1 kleine`, `2-3 EL`, `2 EL (ca. 30 g)`),
+  bleibt unverändert stehen und wird mit ` + ` angehängt. Lieber untereinander
+  als falsch addiert.
+
 ## Zutaten aus Freitext trennen (`splitIngredientText`)
 
 Mealie legt Zutaten ohne `quantity`/`unit` als **eine Zeichenkette** in `note` ab
@@ -345,8 +386,16 @@ der Quellen werden dabei geglättet, alle an echten Zeilen gefunden:
 
 Größenwörter (klein/groß) wandern zur Menge, weil Bring „Zwiebel" kennt und
 „kleine Zwiebel" nicht. **Farb- und Sortenwörter bleiben am Namen** („Paprikaschote,
-rote") – die bezeichnen ein anderes Produkt. Eine Klammer, die keine Menge ist,
-bleibt ebenfalls stehen (`Nudeln (Spirelli)`).
+rote") – die bezeichnen ein anderes Produkt. Eine Klammer **hinter** dem Namen,
+die keine Menge ist, bleibt ebenfalls stehen (`Nudeln (Spirelli)`) – die
+bezeichnet die Sorte.
+
+Eine Klammer **vor** dem Namen fällt dagegen weg (Regel 4b). Sie ist eine
+Anmerkung zur Menge, kein Teil des Artikels, und stand mitten in echten
+Rezeptzeilen: aus „2 EL (ca. 30 g) Butter" wurde der Bring-Artikel
+„(ca. 30 g) Butter", aus „400 g (ca. 150 g roher Reis) gekochter Basmatireis"
+entsprechend. So etwas findet Bring in seinem Katalog nicht. Regel 4 fasste nur
+die Klammer am **Zeilenende**, weil dort die Packungsangabe steht.
 
 Es gilt **eine** Menge, nicht zwei: bei „1 Dose … (ca. 400 g)" gewinnt die
 **Packungseinheit** – die legt man in den Wagen, das Gewicht ist nur zum
@@ -479,6 +528,67 @@ Reihenfolge:
 sind die gemeinsame Einfahrt für YouTube **und** Instagram; `server.js` kennt
 nur diese vier. In der Spalte `source` steht `youtube` bzw. `instagram`,
 `providerOf()` im Browser macht daraus die Filter `▶️ Video` und `📷 Instagram`.
+
+## Nach dem Import gleich einplanen
+
+Entsteht bei einem Import **genau ein** Rezept, hängt `offerPlanning()` unter die
+Erfolgsmeldung ein „📅 Einplanen" und öffnet damit die vorhandene Tagesauswahl
+(`openDayPicker`, dasselbe Modal wie der Knopf an der Rezeptkarte). Bei einem
+Massenimport wird nichts angeboten – die Frage „welches der 40?" hat keine
+Antwort.
+
+- **Die Zahl muss aus dem Lauf kommen, nicht aus `imported`.** Die drei
+  Hintergrund-Läufe (`recipe-import.js`, `site-job.js`, der Chefkoch→Mealie-Lauf
+  in `mealie.js`) führen dafür `createdIds`. Übersprungene Dubletten stehen
+  bewusst nicht drin. Im Mealie-Modus gibt es die id erst **nach** dem Abgleich:
+  dort werden die Quell-Kennungen gesammelt und hinterher über
+  `findRecipeBySourceUrlPart` aufgelöst.
+- Die Einzel-Routen (`/api/recipes/add`, `/api/recipes/analyze`,
+  `/api/recipes/import/url`) schicken `recipeId` mit – **auch bei einer
+  Dublette**. „Kennen wir schon" ist gerade der Moment, in dem man das Rezept
+  einplanen will; der Knopf heißt dann „Trotzdem einplanen?".
+- Übergeben wird nur die id, das Rezept holt der Klick frisch über
+  `/api/recipes/:id`. Mit Mealie liegt zwischen Anlegen und Spiegel-Abgleich ein
+  Moment, in dem `state.recipes` es noch nicht kennt.
+- **Falle: `flash()` räumt seine Box nach 6 Sekunden selbst leer** – und damit
+  auch das Angebot, über das der Nutzer noch nachdenkt. Dagegen gibt es
+  `holdFlash()` in `core.js` (stoppt nur den Timer; der nächste `flash` auf
+  dasselbe Element räumt weiterhin auf).
+- **Falle: die Bestätigung darf nicht nach `recipeFormResult`.** Die
+  Tagesauswahl schrieb sie fest dorthin – das ist im Rezepte-Tab richtig, aus dem
+  Import-Tab aber unsichtbar, und mit Mealie ist die Karte sogar ausgeblendet.
+  Darum `openDayPicker(recipe, { resultEl })`.
+- `planOfferedFor` merkt sich die Lauf-id: die Läufe bleiben nach dem Ende
+  abrufbar, sonst käme das Angebot bei jedem Neuladen der Seite wieder.
+
+## Oberfläche: `e.currentTarget` überlebt kein `await`
+
+Der „➕ Aufnehmen"-Knopf der Vorratsliste drehte nach dem **ersten** Klick für
+immer und war nicht mehr benutzbar. Ursache ist eine Eigenheit der
+Ereignis-Objekte im Browser: **`e.currentTarget` ist `null`, sobald die
+Ereignisbehandlung durch ist** – also nach dem ersten `await`. Ein
+
+```js
+setLoading(e.currentTarget, true);   // läuft noch synchron: Spinner an
+try { await apiFetch(…); } finally {
+  setLoading(e.currentTarget, false); // hier ist es null: Spinner bleibt
+}
+```
+
+lässt den Knopf als Spinner und `disabled` stehen. Das Fiese daran: die erste
+Aktion **klappt**, es sieht nur danach aus wie ein hängender Aufruf.
+
+**Regel: das Element in der ersten Zeile des Handlers in eine Konstante holen**
+(`const btn = e.currentTarget;`) und überall diese benutzen. Ein Test in
+`frontend.test.js` sucht nach `setLoading(e.currentTarget` in allen Modulen und
+verhindert den Rückfall.
+
+Betroffen waren 14 Handler in `pantry.js`, `fridge.js`, `plan.js` und
+`recipes.js`. In `plan.js`/`recipes.js` fiel es nicht auf, weil dort der
+Erfolgsfall die Karte neu zeichnet – der Knopf war weg, bevor man den Spinner
+sah. Stehen blieb er dort nur **im Fehlerfall**, also genau dann, wenn man ihn
+noch braucht. In der Vorratsliste bleibt die Karte stehen, darum war es dort
+sofort sichtbar.
 
 ## Oberfläche: zwei Fallen mit versteckter Wirkung
 

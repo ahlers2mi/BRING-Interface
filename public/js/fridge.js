@@ -124,11 +124,12 @@ function buildResultCard(item) {
   `;
 
   node.querySelector('[data-act="missing"]')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
     const listUuid = el('fridgeListSelect')?.value || el('listSelect')?.value;
     if (!listUuid) {
       return flash('fridgeResult', 'Bitte oben eine Bring-Liste wählen.', 'error');
     }
-    setLoading(e.currentTarget, true);
+    setLoading(btn, true);
     try {
       const res = await apiFetch(`/api/lists/${listUuid}/items`, {
         method: 'POST',
@@ -138,12 +139,13 @@ function buildResultCard(item) {
     } catch (err) {
       flash('fridgeResult', `Fehler: ${escHtml(err.message)}`, 'error');
     } finally {
-      setLoading(e.currentTarget, false);
+      setLoading(btn, false);
     }
   });
 
   node.querySelector('[data-act="today"]').addEventListener('click', async (e) => {
-    setLoading(e.currentTarget, true);
+    const btn = e.currentTarget;
+    setLoading(btn, true);
     try {
       await apiFetch('/api/plan/today', {
         method: 'PUT',
@@ -154,7 +156,7 @@ function buildResultCard(item) {
     } catch (err) {
       flash('fridgeResult', `Fehler: ${escHtml(err.message)}`, 'error');
     } finally {
-      setLoading(e.currentTarget, false);
+      setLoading(btn, false);
     }
   });
 

@@ -757,6 +757,16 @@ ul.plain li { padding: 0.1rem 0; }
   flex-shrink: 0;
 }
 
+/* "Gleich einplanen?" unter einer Erfolgsmeldung. Steht in derselben Box wie
+   die Meldung, darum der Abstand nach oben. */
+.plan-offer {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
 .ingredient-tags { margin-top: 0.5rem; }
 
 details.instructions { margin-top: 0.5rem; }

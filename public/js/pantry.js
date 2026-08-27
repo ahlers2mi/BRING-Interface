@@ -83,13 +83,14 @@ function buildRow(item) {
   menge.addEventListener('change', () => speichern({ amount: menge.value.trim() }));
 
   row.querySelector('[data-act="del"]').addEventListener('click', async (e) => {
-    setLoading(e.currentTarget, true);
+    const btn = e.currentTarget;
+    setLoading(btn, true);
     try {
       await apiFetch(`/api/pantry/${item.id}`, { method: 'DELETE' });
       await loadPantry();
     } catch (err) {
       flash('pantryResult', `Fehler: ${escHtml(err.message)}`, 'error');
-      setLoading(e.currentTarget, false);
+      setLoading(btn, false);
     }
   });
   return row;
@@ -130,9 +131,10 @@ export async function loadPantry() {
 
 export function initPantry() {
   on('pantryAddBtn', 'click', async (e) => {
+    const btn = e.currentTarget;
     const name = el('pantryName').value.trim();
     if (!name) return flash('pantryResult', 'Bitte einen Namen eingeben.', 'error');
-    setLoading(e.currentTarget, true);
+    setLoading(btn, true);
     try {
       await apiFetch('/api/pantry', {
         method: 'POST',
@@ -144,7 +146,7 @@ export function initPantry() {
     } catch (err) {
       flash('pantryResult', `Fehler: ${escHtml(err.message)}`, 'error');
     } finally {
-      setLoading(e.currentTarget, false);
+      setLoading(btn, false);
     }
   });
 
@@ -154,7 +156,8 @@ export function initPantry() {
   });
 
   on('pantrySeedBtn', 'click', async (e) => {
-    setLoading(e.currentTarget, true);
+    const btn = e.currentTarget;
+    setLoading(btn, true);
     try {
       const res = await apiFetch('/api/pantry/seed', { method: 'POST' });
       flash(
@@ -168,16 +171,17 @@ export function initPantry() {
     } catch (err) {
       flash('pantryResult', `Fehler: ${escHtml(err.message)}`, 'error');
     } finally {
-      setLoading(e.currentTarget, false);
+      setLoading(btn, false);
     }
   });
 
   on('pantryShopBtn', 'click', async (e) => {
+    const btn = e.currentTarget;
     const listUuid = currentListUuid();
     if (!listUuid) {
       return flash('pantryResult', 'Bitte oben zuerst eine Bring-Liste auswählen.', 'error');
     }
-    setLoading(e.currentTarget, true);
+    setLoading(btn, true);
     try {
       const res = await apiFetch('/api/pantry/shopping', {
         method: 'POST',
@@ -187,15 +191,16 @@ export function initPantry() {
     } catch (err) {
       flash('pantryResult', `Fehler: ${escHtml(err.message)}`, 'error');
     } finally {
-      setLoading(e.currentTarget, false);
+      setLoading(btn, false);
     }
   });
 
   on('pantryAllHaveBtn', 'click', async (e) => {
+    const btn = e.currentTarget;
     const fehlt = items.filter((i) => i.status !== 'have').length;
     if (!fehlt) return flash('pantryResult', 'Steht schon alles auf „da".', 'info');
     if (!confirm(`${fehlt} Vorräte wieder auf „da" setzen?`)) return;
-    setLoading(e.currentTarget, true);
+    setLoading(btn, true);
     try {
       await apiFetch('/api/pantry/all', {
         method: 'POST',
@@ -206,7 +211,7 @@ export function initPantry() {
     } catch (err) {
       flash('pantryResult', `Fehler: ${escHtml(err.message)}`, 'error');
     } finally {
-      setLoading(e.currentTarget, false);
+      setLoading(btn, false);
     }
   });
 }
