@@ -911,6 +911,100 @@ test('Rezept ohne Mealie-Herkunft landet als Titel im Kalender', async () => {
   assert.equal(posted.text, 'von Hand gewählt');
 });
 
+// ── Hochgeladenes Vorschaubild ────────────────────────────────────────────────
+
+// Ein 1x1-PNG als Data-URL, wie es der Browser nach dem Verkleinern schickt.
+const EIN_PIXEL =
+  'data:image/png;base64,' +
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==';
+
+test('decodeDataUrl trennt Bytes, Endung und Typ', async () => {
+  const { decodeDataUrl } = await import('../lib/mealie.js');
+
+  const png = decodeDataUrl(EIN_PIXEL);
+  assert.equal(png.extension, 'png');
+  assert.equal(png.mime, 'image/png');
+  assert.ok(png.bytes.length > 0);
+
+  // Mealie will `jpg`, der MIME-Typ heisst aber `image/jpeg`.
+  assert.equal(decodeDataUrl('data:image/jpeg;base64,AAAA').extension, 'jpg');
+
+  // Alles, was keine Bild-Data-URL ist, faellt durch.
+  assert.equal(decodeDataUrl('https://example.org/bild.jpg'), null);
+  assert.equal(decodeDataUrl(''), null);
+  assert.equal(decodeDataUrl(null), null);
+});
+
+test('uploadRecipeImage schickt die Datei als multipart PUT', async () => {
+  const { uploadRecipeImage } = await import('../lib/mealie.js');
+
+  let gesehen = null;
+  const fakeFetch = async (input, init = {}) => {
+    const url = new URL(String(input));
+    gesehen = { pfad: url.pathname, method: init.method, init };
+    return new Response(JSON.stringify({ image: '1' }), { status: 200 });
+  };
+
+  const ok = await uploadRecipeImage('mein-rezept', EIN_PIXEL, { fetchImpl: fakeFetch });
+  assert.equal(ok, true);
+  assert.equal(gesehen.method, 'PUT', 'POST /image nimmt nur eine URL, die Datei will PUT');
+  assert.equal(gesehen.pfad, '/api/recipes/mein-rezept/image');
+  assert.ok(gesehen.init.body instanceof FormData, 'Datei als FormData');
+  assert.equal(gesehen.init.body.get('extension'), 'png');
+  assert.ok(gesehen.init.body.get('image') instanceof Blob, 'Feld `image` ist die Datei');
+
+  // Den Content-Type muss fetch selbst setzen – mit Boundary. Ein eigener
+  // Header zerstoert den Multipart-Body.
+  const headers = gesehen.init.headers || {};
+  assert.ok(
+    !Object.keys(headers).some((k) => k.toLowerCase() === 'content-type'),
+    'kein eigener Content-Type beim Datei-Upload'
+  );
+});
+
+test('uploadRecipeImage laesst ungueltige Bilder liegen, statt Mealie zu rufen', async () => {
+  const { uploadRecipeImage } = await import('../lib/mealie.js');
+  let gerufen = 0;
+  const fakeFetch = async () => {
+    gerufen += 1;
+    return new Response('{}', { status: 200 });
+  };
+
+  assert.equal(await uploadRecipeImage('x', 'kein-bild', { fetchImpl: fakeFetch }), false);
+  assert.equal(await uploadRecipeImage('', EIN_PIXEL, { fetchImpl: fakeFetch }), false);
+  assert.equal(gerufen, 0);
+});
+
+test('createRecipeInMealie: hochgeladenes Bild hat Vorrang vor der Adresse', async () => {
+  const { createRecipeInMealie } = await import('../lib/mealie.js');
+
+  const bildrufe = [];
+  const fakeFetch = async (input, init = {}) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith('/image')) {
+      bildrufe.push({ method: init.method, form: init.body instanceof FormData });
+      return new Response('{}', { status: 200 });
+    }
+    if (url.pathname === '/api/recipes' && init.method === 'POST') {
+      return new Response(JSON.stringify('neues-rezept'), { status: 201 });
+    }
+    return new Response(JSON.stringify({ slug: 'neues-rezept' }), { status: 200 });
+  };
+
+  await createRecipeInMealie(
+    { name: 'Mit Foto', image_data: EIN_PIXEL, image_url: 'https://example.org/anders.jpg' },
+    { fetchImpl: fakeFetch }
+  );
+  assert.deepEqual(bildrufe, [{ method: 'PUT', form: true }], 'nur der Upload, kein POST mit URL');
+
+  bildrufe.length = 0;
+  await createRecipeInMealie(
+    { name: 'Nur Adresse', image_url: 'https://example.org/anders.jpg' },
+    { fetchImpl: fakeFetch }
+  );
+  assert.deepEqual(bildrufe, [{ method: 'POST', form: false }], 'ohne Upload holt Mealie selbst');
+});
+
 // ── Einzelnes Rezept anreichern ───────────────────────────────────────────────
 
 test('ein PLUS-Anriss sieht vollständig aus, ist es aber nicht', async () => {
