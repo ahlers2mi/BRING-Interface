@@ -36,6 +36,16 @@ export function flash(target, html, type = 'success') {
   }, 6000);
 }
 
+// Eine Meldung stehen lassen, statt sie nach 6 Sekunden zu raeumen. Gedacht
+// fuer Meldungen, unter denen noch etwas zu entscheiden ist (etwa "gleich
+// einplanen?") – die darf man dem Nutzer nicht unter den Fingern wegnehmen.
+// Der naechste `flash` auf dasselbe Element raeumt trotzdem auf.
+export function holdFlash(target) {
+  const node = typeof target === 'string' ? el(target) : target;
+  if (!node) return;
+  clearTimeout(node._flashTimer);
+}
+
 export function setLoading(btn, loading) {
   if (!btn) return;
   if (loading) {

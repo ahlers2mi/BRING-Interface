@@ -1889,7 +1889,15 @@ async function addRecipeByUrl(url) {
   if (known) {
     return {
       status: 200,
-      body: { ok: true, duplicate: true, name: known.name, message: `Kennen wir schon: ${known.name}` },
+      body: {
+        ok: true,
+        duplicate: true,
+        // Auch bei einer Dublette mitschicken: das Rezept einzuplanen ist genau
+        // dann sinnvoll, wenn man es gerade wieder in der Hand hatte.
+        recipeId: known.id,
+        name: known.name,
+        message: `Kennen wir schon: ${known.name}`,
+      },
     };
   }
 
@@ -1912,6 +1920,7 @@ async function addRecipeByUrl(url) {
         body: {
           ok: true,
           target: 'mealie',
+          recipeId: saved?.id || null,
           name: saved?.name || recipe.name,
           link: mealieRecipeUrl(slug),
           message:
@@ -1926,6 +1935,7 @@ async function addRecipeByUrl(url) {
       body: {
         ok: true,
         target: 'lokal',
+        recipeId: created.id,
         name: created.name,
         message:
           `${woher} übernommen, ` +
@@ -1946,6 +1956,7 @@ async function addRecipeByUrl(url) {
       body: {
         ok: true,
         target: 'mealie',
+        recipeId: saved?.id || null,
         name: saved?.name || detail?.name || '',
         link: mealieRecipeUrl(slug),
         message: `In Mealie angelegt: ${saved?.name || detail?.name || slug}`,
@@ -1967,7 +1978,13 @@ async function addRecipeByUrl(url) {
   const created = createRecipe(recipe);
   return {
     status: 201,
-    body: { ok: true, target: 'lokal', name: created.name, message: `Gespeichert: ${created.name}` },
+    body: {
+      ok: true,
+      target: 'lokal',
+      recipeId: created.id,
+      name: created.name,
+      message: `Gespeichert: ${created.name}`,
+    },
   };
 }
 

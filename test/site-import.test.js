@@ -235,3 +235,50 @@ test('die Prüfung wirft Übersichtsseiten weg und meldet das', async () => {
     `Hinweis erwartet, bekommen: ${meldungen.join(' | ')}`
   );
 });
+
+// ── Der Lauf selbst: was hat DIESER Durchgang angelegt? ───────────────────────
+//
+// `createdIds` ist die Grundlage fuer das Angebot "gleich einplanen?" nach dem
+// Import. Es darf nur enthalten, was wirklich neu entstanden ist – nicht das,
+// was als Dublette uebersprungen wurde.
+
+test('der Lauf merkt sich die angelegten Rezepte', async () => {
+  const { startSiteImportJob, getSiteJob } = await import('../lib/site-job.js');
+
+  const uebersicht = `
+    <a href="/rezepte/nudelauflauf/">Nudelauflauf</a>
+    <a href="/rezepte/linsensuppe/">Linsensuppe</a>`;
+  const fetchImpl = fakeFetch({
+    'https://blog.example/rezepte/': uebersicht,
+    'https://blog.example/rezepte/nudelauflauf/': recipePage('Nudelauflauf'),
+    'https://blog.example/rezepte/linsensuppe/': recipePage('Linsensuppe'),
+  });
+
+  let naechsteId = 100;
+  const angelegt = [];
+  const deps = {
+    createRecipe: (r) => {
+      const rezept = { ...r, id: (naechsteId += 1) };
+      angelegt.push(rezept);
+      return rezept;
+    },
+    // Die Linsensuppe kennen wir schon – die darf nicht mitgezaehlt werden.
+    findRecipeBySourceUrlPart: (key) => (key.includes('linsensuppe') ? { id: 7 } : null),
+    findRecipeByName: () => null,
+  };
+
+  startSiteImportJob({ url: 'https://blog.example/rezepte/', pages: 1, deps, fetchImpl });
+
+  const bis = Date.now() + 5000;
+  let job = getSiteJob();
+  while (job.status === 'running' && Date.now() < bis) {
+    await new Promise((r) => setTimeout(r, 50));
+    job = getSiteJob();
+  }
+
+  assert.equal(job.status, 'done', job.error || JSON.stringify(job.log));
+  assert.equal(job.imported, 1);
+  assert.equal(job.skipped, 1);
+  assert.equal(angelegt.length, 1);
+  assert.deepEqual(job.createdIds, [angelegt[0].id]);
+});

@@ -748,6 +748,9 @@ test('Rezept aus einem Kochvideo uebernehmen', async () => {
     assert.match(res.json.message, /Video/);
 
     const rezept = (await api('/api/recipes')).json.find((r) => r.name === 'Gnocchi-Auflauf');
+    // Die id muss mitkommen: die Oberflaeche bietet danach an, das eine neue
+    // Rezept gleich einzuplanen.
+    assert.equal(res.json.recipeId, rezept?.id, res.text);
     assert.ok(rezept, 'Titel ohne "| Rezept von Emmi"');
     assert.equal(rezept.source, 'youtube');
     assert.equal(rezept.source_url, 'https://www.youtube.com/watch?v=smWgIBFuVRU');
@@ -769,6 +772,8 @@ test('Rezept aus einem Kochvideo uebernehmen', async () => {
       body: { url: 'https://www.youtube.com/watch?v=smWgIBFuVRU' },
     });
     assert.equal(again.json.duplicate, true, again.text);
+    // Auch bei der Dublette: einplanen will man das Rezept trotzdem koennen.
+    assert.equal(again.json.recipeId, rezept?.id, again.text);
   } finally {
     globalThis.fetch = realFetch;
   }

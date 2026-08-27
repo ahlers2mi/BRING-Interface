@@ -480,6 +480,38 @@ sind die gemeinsame Einfahrt für YouTube **und** Instagram; `server.js` kennt
 nur diese vier. In der Spalte `source` steht `youtube` bzw. `instagram`,
 `providerOf()` im Browser macht daraus die Filter `▶️ Video` und `📷 Instagram`.
 
+## Nach dem Import gleich einplanen
+
+Entsteht bei einem Import **genau ein** Rezept, hängt `offerPlanning()` unter die
+Erfolgsmeldung ein „📅 Einplanen" und öffnet damit die vorhandene Tagesauswahl
+(`openDayPicker`, dasselbe Modal wie der Knopf an der Rezeptkarte). Bei einem
+Massenimport wird nichts angeboten – die Frage „welches der 40?" hat keine
+Antwort.
+
+- **Die Zahl muss aus dem Lauf kommen, nicht aus `imported`.** Die drei
+  Hintergrund-Läufe (`recipe-import.js`, `site-job.js`, der Chefkoch→Mealie-Lauf
+  in `mealie.js`) führen dafür `createdIds`. Übersprungene Dubletten stehen
+  bewusst nicht drin. Im Mealie-Modus gibt es die id erst **nach** dem Abgleich:
+  dort werden die Quell-Kennungen gesammelt und hinterher über
+  `findRecipeBySourceUrlPart` aufgelöst.
+- Die Einzel-Routen (`/api/recipes/add`, `/api/recipes/analyze`,
+  `/api/recipes/import/url`) schicken `recipeId` mit – **auch bei einer
+  Dublette**. „Kennen wir schon" ist gerade der Moment, in dem man das Rezept
+  einplanen will; der Knopf heißt dann „Trotzdem einplanen?".
+- Übergeben wird nur die id, das Rezept holt der Klick frisch über
+  `/api/recipes/:id`. Mit Mealie liegt zwischen Anlegen und Spiegel-Abgleich ein
+  Moment, in dem `state.recipes` es noch nicht kennt.
+- **Falle: `flash()` räumt seine Box nach 6 Sekunden selbst leer** – und damit
+  auch das Angebot, über das der Nutzer noch nachdenkt. Dagegen gibt es
+  `holdFlash()` in `core.js` (stoppt nur den Timer; der nächste `flash` auf
+  dasselbe Element räumt weiterhin auf).
+- **Falle: die Bestätigung darf nicht nach `recipeFormResult`.** Die
+  Tagesauswahl schrieb sie fest dorthin – das ist im Rezepte-Tab richtig, aus dem
+  Import-Tab aber unsichtbar, und mit Mealie ist die Karte sogar ausgeblendet.
+  Darum `openDayPicker(recipe, { resultEl })`.
+- `planOfferedFor` merkt sich die Lauf-id: die Läufe bleiben nach dem Ende
+  abrufbar, sonst käme das Angebot bei jedem Neuladen der Seite wieder.
+
 ## Oberfläche: zwei Fallen mit versteckter Wirkung
 
 - **`.recipe-item.is-blocked` legte Opazität über die GANZE Karte** – also auch
