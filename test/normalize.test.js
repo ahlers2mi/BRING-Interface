@@ -11,6 +11,7 @@ import {
   mergeAmounts,
   normalizeName,
   realIngredients,
+  recipeItemsOnList,
   splitAmount,
   splitIngredientText,
   tidyItems,
@@ -322,4 +323,83 @@ test('eine Klammer VOR dem Namen ist eine Anmerkung, kein Artikel', () => {
     name: 'Nudeln (Spirelli)',
     amount: '',
   });
+});
+
+// ── Zutaten wieder von der Bring-Liste nehmen ─────────────────────────────────
+
+const REZEPT = [
+  { name: 'Zwiebeln', amount: '2' },
+  { name: 'Olivenöl', amount: '2 EL' },
+  { name: 'Zucker', amount: '1 TL' },
+  { name: 'Hackfleisch', amount: '500 g' },
+  { name: '-- additional ingredients not fully disclosed --' },
+];
+
+test('nur was zum Rezept gehoert, kommt weg', () => {
+  const liste = [
+    { name: 'Zwiebel', specification: '2' }, // Einzahl auf der Liste
+    { name: 'Olivenöl', specification: '2 EL' },
+    { name: 'Klopapier', specification: '' }, // fremd
+    { name: 'Puderzucker', specification: '1 Pck' }, // NICHT "Zucker"
+  ];
+  const res = recipeItemsOnList(liste, REZEPT);
+
+  assert.deepEqual(res.remove.map((r) => r.name), ['Zwiebel', 'Olivenöl']);
+  // Die Zutat steht dabei, nicht nur der Listenname – so ist nachvollziehbar,
+  // warum "Zwiebel" gemeint ist.
+  assert.equal(res.remove[0].ingredient, 'Zwiebeln');
+  assert.equal(res.remove[0].amount, '2');
+  // Fehlendes ist kein Fehler, nur eine Auskunft.
+  assert.deepEqual(res.missing.sort(), ['Hackfleisch', 'Zucker']);
+});
+
+test('die Teilwort-Regel gilt hier NICHT', () => {
+  // `ingredientMatches` zieht "Tomatenmark" auf "Tomaten" und "Buttermilch" auf
+  // "Milch". Beim Zusammenlegen von Mengen ist so ein Fehlgriff eine krumme
+  // Zahl, beim Loeschen fehlt hinterher ein Lebensmittel im Wagen – und zwar
+  // eines, das jemand anders eingetragen hat.
+  assert.equal(ingredientMatches('Tomaten', 'Tomatenmark'), true);
+  assert.equal(ingredientMatches('Milch', 'Buttermilch'), true);
+
+  const res = recipeItemsOnList(
+    [{ name: 'Tomatenmark' }, { name: 'Buttermilch' }],
+    [{ name: 'Tomaten' }, { name: 'Milch' }]
+  );
+  assert.deepEqual(res.remove, []);
+  assert.deepEqual(res.missing.sort(), ['Milch', 'Tomaten']);
+
+  // Die Einzahl/Mehrzahl-Regel greift aber weiter: dieselbe Zutat, anders
+  // geschrieben, wird gefunden.
+  assert.deepEqual(
+    recipeItemsOnList([{ name: 'Zwiebel' }], [{ name: 'Zwiebeln' }]).remove.map((r) => r.name),
+    ['Zwiebel']
+  );
+});
+
+test('Vorraete auf der Liste bleiben stehen', () => {
+  // Das Öl liegt auf der Liste, weil es LEER ist – nicht wegen des Rezepts.
+  const res = recipeItemsOnList(
+    [{ name: 'Olivenöl', specification: '' }, { name: 'Zwiebeln', specification: '2' }],
+    REZEPT,
+    { keepNames: ['Olivenöl'] }
+  );
+  assert.deepEqual(res.remove.map((r) => r.name), ['Zwiebeln']);
+  assert.deepEqual(res.kept.map((k) => k.name), ['Olivenöl']);
+  assert.equal(res.kept[0].reason, 'vorrat');
+});
+
+test('der PLUS-Platzhalter zaehlt auch hier nicht als Zutat', () => {
+  const res = recipeItemsOnList(
+    [{ name: '-- additional ingredients not fully disclosed --' }],
+    REZEPT
+  );
+  assert.deepEqual(res.remove, []);
+  assert.ok(!res.missing.some((n) => /disclosed/.test(n)));
+});
+
+test('leere Eingaben ergeben leere Antworten', () => {
+  assert.deepEqual(recipeItemsOnList([], []), { remove: [], kept: [], missing: [] });
+  assert.deepEqual(recipeItemsOnList(null, null), { remove: [], kept: [], missing: [] });
+  // Namenlose Zeilen von Bring werden uebersprungen, nicht gematcht.
+  assert.deepEqual(recipeItemsOnList([{ name: '  ' }], REZEPT).remove, []);
 });

@@ -74,7 +74,12 @@ import {
   startImportJob,
   stripHtml,
 } from './lib/recipe-import.js';
-import { PANTRY_ITEMS, realIngredients, tidyItems } from './lib/normalize.js';
+import {
+  PANTRY_ITEMS,
+  realIngredients,
+  recipeItemsOnList,
+  tidyItems,
+} from './lib/normalize.js';
 import { renderPlanSvg } from './lib/plan-svg.js';
 import { recipeFromText } from './lib/video-import.js';
 import {
@@ -983,6 +988,68 @@ app.post('/api/recipes/:id/import', async (req, res) => {
       markiert = planDate;
     }
     res.json({ imported, scaled: Boolean(factor), shopped: markiert });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/recipes/:id/unimport – body: { listUuid, dryRun?, date? }
+// Der Gegenweg zu `/import`: die Zutaten dieses Rezepts wieder von der
+// Bring-Liste nehmen. Für den Fall, dass ein Tag umgeplant wurde oder doch
+// auswärts gegessen wird.
+//
+// **Standard ist der Probelauf** – wie beim Aufräumen. Die Liste gehört auch
+// dem Rest der Familie: erst zeigen, was verschwinden würde, dann löschen.
+// Ein `dryRun: false` kommt nur nach dem Blick darauf.
+app.post('/api/recipes/:id/unimport', async (req, res) => {
+  const dryRun = req.body?.dryRun !== false;
+  try {
+    const recipe = getRecipeById(Number(req.params.id));
+    if (!recipe) return res.status(404).json({ error: 'Rezept nicht gefunden.' });
+    const { listUuid } = req.body || {};
+    if (!listUuid) return res.status(400).json({ error: 'listUuid fehlt.' });
+
+    const client = await getBringClient();
+    const data = await client.getItems(listUuid);
+    // Nur die offene Liste. Was unter „zuletzt gekauft" steht, ist schon
+    // abgehakt – da etwas zu löschen bringt niemandem etwas.
+    const items = data?.purchase || [];
+
+    // Vorräte, die wir selbst auf die Liste geschoben haben, bleiben stehen:
+    // die liegen dort, weil sie leer sind, nicht wegen dieses Rezepts.
+    const vorratListed = getPantry()
+      .filter((p) => p.listed_at)
+      .map((p) => p.name);
+
+    const { remove, kept, missing } = recipeItemsOnList(items, recipe.ingredients, {
+      keepNames: vorratListed,
+    });
+
+    if (dryRun) {
+      return res.json({ dryRun: true, recipe: recipe.name, checked: items.length, remove, kept, missing });
+    }
+
+    const removed = [];
+    const failed = [];
+    for (const treffer of remove) {
+      try {
+        await client.removeItem(listUuid, treffer.name);
+        removed.push(treffer.name);
+      } catch (err) {
+        failed.push({ name: treffer.name, error: err.message });
+      }
+    }
+    setSetting('lastListUuid', listUuid);
+
+    // Spiegelbild zum Import: hat der Tag als eingekauft gegolten, gilt er es
+    // jetzt nicht mehr – sonst lässt der Würfel ihn weiter in Ruhe.
+    const planDate = resolveDate(req.body?.date);
+    let entmarkiert = null;
+    if (planDate && getPlanEntry(planDate)?.recipe_id === recipe.id) {
+      setPlanShopped(planDate, false);
+      entmarkiert = planDate;
+    }
+    res.json({ dryRun: false, recipe: recipe.name, removed, failed, kept, missing, unshopped: entmarkiert });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

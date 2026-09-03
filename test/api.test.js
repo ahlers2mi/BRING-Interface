@@ -1967,6 +1967,27 @@ test('Vorraete: ohne Namen und ohne Liste gibt es klare Absagen', async () => {
   assert.equal(weg.status, 404);
 });
 
+test('Zutaten rausnehmen: prueft erst, bevor es bei Bring anklopft', async () => {
+  // Der Weg mit echter Liste braeuchte ein Bring-Konto (siehe Kopf der Datei) –
+  // die Zuordnungslogik steht darum in test/normalize.test.js. Hier nur, dass
+  // die Route in der richtigen Reihenfolge prueft: erst Rezept, dann Liste,
+  // erst danach Bring. Sonst wuerde ein Tippfehler in der id zu einem
+  // Anmeldefehler statt zu einem 404.
+  const unbekannt = await api('/api/recipes/999999/unimport', {
+    method: 'POST',
+    body: { listUuid: 'egal' },
+  });
+  assert.equal(unbekannt.status, 404, unbekannt.text);
+
+  const rezept = (await api('/api/recipes')).json[0];
+  const ohneListe = await api(`/api/recipes/${rezept.id}/unimport`, {
+    method: 'POST',
+    body: {},
+  });
+  assert.equal(ohneListe.status, 400, ohneListe.text);
+  assert.match(ohneListe.json.error, /listUuid/);
+});
+
 test('Vorraete: nichts knapp -> nichts auf die Liste (ohne Bring-Aufruf)', async () => {
   // Alles steht auf "da", also darf die Route gar nicht bei Bring anklopfen –
   // sonst braeuchte dieser Test ein Konto.

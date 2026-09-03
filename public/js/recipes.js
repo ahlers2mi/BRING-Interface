@@ -29,6 +29,9 @@ import {
 } from './core.js';
 
 let importTargetRecipeId = null;
+// Merkt sich, fuer welche Liste der Probelauf schon gezeigt wurde – der zweite
+// Klick auf denselben Knopf raeumt dann wirklich ab.
+let unimportGeprueft = null;
 let visibleCount = 30; // Rezeptliste wird stückweise gezeichnet
 let importPollTimer = null;
 
@@ -303,7 +306,7 @@ function buildRecipeCard(recipe) {
 
   node
     .querySelector('[data-action="import"]')
-    .addEventListener('click', () => openImportModal(recipe.id));
+    .addEventListener('click', () => openImportModal(recipe));
   node
     .querySelector('[data-action="plan"]')
     .addEventListener('click', () => openDayPicker(recipe));
@@ -443,9 +446,13 @@ async function refreshAll() {
 
 // ── Import in eine Bring-Liste ────────────────────────────────────────────────
 
-function openImportModal(recipeId) {
-  importTargetRecipeId = recipeId;
+function openImportModal(recipe) {
+  // Nimmt das Rezept, nicht nur die id: das Modal kann seit dem
+  // Rausnehmen-Knopf beide Richtungen, da muss dranstehen um welches es geht.
+  importTargetRecipeId = recipe?.id ?? recipe;
+  el('importRecipeName').textContent = recipe?.name ? `Rezept: ${recipe.name}` : '';
   el('modalResult').innerHTML = '';
+  unimportGeprueft = null;
   openModal('importModal');
 }
 
@@ -1465,7 +1472,91 @@ export async function initRecipes() {
         body: JSON.stringify({ listUuid }),
       });
       flash(resultEl, `✓ ${result.imported.length} Zutaten importiert.`);
+      unimportGeprueft = null; // nach einem Import ist der alte Probelauf hinfällig
       setTimeout(() => closeModal('importModal'), 1600);
+    } catch (err) {
+      flash(resultEl, `Fehler: ${escHtml(err.message)}`, 'error');
+    } finally {
+      setLoading(btn, false);
+    }
+  });
+
+  // Gegenweg: die Zutaten wieder von der Liste nehmen. Erster Klick zeigt, was
+  // verschwinden würde, zweiter macht es – die Liste gehört auch der Familie.
+  on('unimportBtn', 'click', async (e) => {
+    const btn = e.currentTarget;
+    const resultEl = el('modalResult');
+    const listUuid = el('importListSelect').value;
+    if (!listUuid) return flash(resultEl, 'Bitte eine Bring-Liste auswählen.', 'error');
+
+    const jetztWirklich = unimportGeprueft === listUuid;
+    setLoading(btn, true);
+    try {
+      const res = await apiFetch(`/api/recipes/${importTargetRecipeId}/unimport`, {
+        method: 'POST',
+        body: JSON.stringify({ listUuid, dryRun: !jetztWirklich }),
+      });
+
+      // Nicht nur „x entfernt": auch was stehen bleibt und warum. Sonst wirkt
+      // eine Zutat, die als Vorrat auf der Liste liegt, wie ein Fehler.
+      const rest = [];
+      if (res.kept?.length) {
+        const namen = escHtml(res.kept.map((k) => k.name).join(', '));
+        rest.push(
+          res.kept.length === 1
+            ? `${namen} bleibt stehen – steht als Vorrat auf der Liste.`
+            : `Als Vorrat auf der Liste und bleiben stehen: ${namen}.`
+        );
+      }
+      if (res.missing?.length) {
+        rest.push(
+          res.missing.length === 1
+            ? '1 Zutat stand nicht (mehr) auf der Liste.'
+            : `${res.missing.length} Zutaten standen nicht (mehr) auf der Liste.`
+        );
+      }
+      const anhang = rest.length ? `<br /><span class="hint">${rest.join('<br />')}</span>` : '';
+
+      if (res.dryRun) {
+        if (!res.remove.length) {
+          unimportGeprueft = null;
+          return flash(
+            resultEl,
+            `Von diesem Rezept liegt nichts auf der Liste.${anhang}`,
+            'info'
+          );
+        }
+        unimportGeprueft = listUuid;
+        flash(
+          resultEl,
+          `<b>${res.remove.length} Artikel würden von der Liste verschwinden:</b><br />` +
+            res.remove
+              .map(
+                (r) =>
+                  `<span class="ingredient-tag">${escHtml(
+                    r.amount ? `${r.amount} ${r.name}` : r.name
+                  )}</span>`
+              )
+              .join('') +
+            `<br />Noch einmal „Wieder rausnehmen" drücken, dann werden sie entfernt.${anhang}`,
+          'info'
+        );
+        // Die Liste darf nicht nach 6 Sekunden verschwinden – sie ist die
+        // Entscheidungsgrundlage fuer den zweiten Klick.
+        holdFlash(resultEl);
+        return;
+      }
+
+      unimportGeprueft = null;
+      const fehler = res.failed?.length
+        ? ` ${res.failed.length} ließen sich nicht entfernen.`
+        : '';
+      flash(
+        resultEl,
+        `✓ ${res.removed.length} Artikel von der Liste genommen.${fehler}${anhang}`,
+        res.failed?.length ? 'error' : 'success'
+      );
+      if (!res.failed?.length) setTimeout(() => closeModal('importModal'), 2400);
     } catch (err) {
       flash(resultEl, `Fehler: ${escHtml(err.message)}`, 'error');
     } finally {

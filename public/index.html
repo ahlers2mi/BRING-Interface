@@ -685,7 +685,8 @@
 <!-- ─── Import-Recipe Modal ──────────────────────────────────────────────── -->
 <div id="importModal" class="modal">
   <div class="modal-box">
-    <h2>Zutaten in Bring-Liste übertragen</h2>
+    <h2>Zutaten und Bring-Liste</h2>
+    <p class="hint" id="importRecipeName"></p>
     <div class="form-group">
       <label for="importListSelect">Bring-Liste</label>
       <select id="importListSelect">
@@ -694,6 +695,10 @@
     </div>
     <div class="btn-group">
       <button class="btn btn-primary" id="confirmImportBtn">Importieren</button>
+      <button class="btn btn-secondary" id="unimportBtn"
+        title="Die Zutaten dieses Rezepts wieder von der Liste nehmen – zeigt erst, was verschwinden würde">
+        🧺 Wieder rausnehmen
+      </button>
       <button class="btn btn-secondary" id="cancelImportBtn">Abbrechen</button>
     </div>
     <div id="modalResult"></div>
