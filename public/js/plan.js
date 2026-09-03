@@ -55,6 +55,10 @@ let uncartGeprueft = null;
 
 function renderPlan(plan) {
   lastPlan = plan;
+  // Die gezeichnete Woche IST die aktuelle. Vorher setzte das nur `loadPlan`;
+  // seit man in die Folgewoche verschieben kann, zeigte das Raster dann die
+  // neue Woche, und das naechste Neuladen sprang zurueck zur alten.
+  currentWeek = plan.week;
   el('planWeekLabel').textContent =
     `KW ${plan.week.slice(-2)} (${deDate(plan.from)} – ${deDate(plan.to)})`;
   el('planWeekLabel').dataset.from = plan.from;
@@ -575,8 +579,23 @@ async function moveDay(from, to, mode) {
       body: JSON.stringify({ to, mode }),
     });
     renderPlan(res.plan);
-    const teile = [`✓ auf ${escHtml(deDate(res.to))} verschoben`];
-    if (res.verschoben?.length) teile.push(`${res.verschoben.length} Tag(e) mit aufgerückt`);
+    const teile = [
+      res.mode === 'swap'
+        ? `✓ mit ${escHtml(deDate(res.to))} getauscht`
+        : `✓ auf ${escHtml(deDate(res.to))} verschoben`,
+    ];
+    if (res.verschoben?.length) {
+      // Wohin das letzte Gericht gerutscht ist, gehört dazu: bei einer langen
+      // Kette landet es in der Folgewoche und sieht sonst verloren aus.
+      //
+      // Das SPÄTESTE Datum, nicht der letzte Eintrag: der Server setzt die
+      // Kette von hinten nach vorn, `verschoben[0]` ist also der ferne Tag.
+      const letzter = res.verschoben.map((v) => v.to).sort().at(-1);
+      teile.push(
+        `${res.verschoben.length} Tag(e) mit aufgerückt` +
+          (letzter ? `, bis ${escHtml(deDate(letzter))}` : '')
+      );
+    }
     if (res.verdraengt?.name) teile.push(`„${escHtml(res.verdraengt.name)}" ist entfallen`);
     flash('planResult', `${teile.join(' · ')}.`);
     return true;

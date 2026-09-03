@@ -149,7 +149,24 @@ Server nimmt für `week` auch ein **Datum** und ermittelt die Kalenderwoche
 selbst – der Tag nach Sonntag (`addDays(lastPlan.to, 1)`) genügt.
 
 Der Server konnte das alles schon: `POST /api/plan/:date/move` nimmt jedes
-Zieldatum und die drei Modi. Es fehlte nur die Frage danach.
+Zieldatum und die drei Modi (`shift`/`swap`/`replace`, getestet in
+`api.test.js`). Es fehlte nur die Frage danach.
+
+Drei Kleinigkeiten in der Rückmeldung, alle beim Durchklicken aufgefallen:
+
+- **`currentWeek` gehört an `renderPlan`**, nicht nur an `loadPlan`. Seit man in
+  die Folgewoche verschieben kann, zeichnete das Raster die neue Woche, während
+  `currentWeek` auf der alten stand – das nächste Neuladen sprang zurück.
+- **Tauschen ist kein Verschieben.** Bei `swap` sagt die Meldung „mit … 
+  getauscht", sonst stand da „verschoben" und es sah aus, als hätte der Zieltag
+  sein Gericht verloren.
+- **Beim Mitschieben steht dabei, wohin das letzte Gericht gerutscht ist.** Bei
+  einer langen Kette landet es in der **Folgewoche** und sieht sonst verloren
+  aus (ist es nicht – genau das ist der Sinn von `shift`). **Falle:**
+  `verschoben` steht von **hinten nach vorn** (der Server setzt die Kette so, um
+  sich nicht selbst zu überschreiben), der fernste Tag ist also das **Maximum**
+  und nicht der letzte Eintrag. Erste Fassung nannte den nächstgelegenen Tag;
+  ein Test hält die Reihenfolge jetzt fest.
 
 ## Würfeln: Abendessen vs. Beilage
 
