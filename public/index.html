@@ -705,19 +705,38 @@
   </div>
 </div>
 
-<!-- ─── Rezept-Auswahl für einen Tag ─────────────────────────────────────── -->
+<!-- ─── Gericht auf einen anderen Tag verschieben ────────────────────────── -->
+<!-- Zwei Schritte in einem Kasten: erst der Zieltag, und NUR wenn dort schon
+     etwas steht die Frage, was damit passieren soll. -->
 <div id="moveModal" class="modal">
   <div class="modal-box">
-    <h2>Verschieben auf <span id="moveTargetDay"></span></h2>
-    <p class="hint" id="moveInfo"></p>
-    <div class="btn-group" style="flex-direction:column; align-items:stretch;">
-      <button class="btn btn-primary" id="moveShiftBtn">
-        ↕ Alles mitschieben – nichts geht verloren
-      </button>
-      <button class="btn btn-secondary" id="moveSwapBtn">⇄ Die beiden Tage tauschen</button>
-      <button class="btn btn-danger" id="moveReplaceBtn">
-        ✕ <span id="moveReplaceName"></span> fällt weg
-      </button>
+    <h2>„<span id="moveSourceName"></span>" verschieben</h2>
+
+    <div id="movePickStep">
+      <p class="hint">
+        Auf welchen Tag? Belegte Tage stehen mit ihrem Gericht dabei – dann wird
+        gefragt, was damit passiert. Gekochte Tage lassen sich nicht
+        überschreiben.
+      </p>
+      <div id="movePickList" class="picker-list"></div>
+    </div>
+
+    <div id="moveConflictStep" hidden>
+      <p>Verschieben auf <b id="moveTargetDay"></b></p>
+      <p class="hint" id="moveInfo"></p>
+      <div class="btn-group" style="flex-direction:column; align-items:stretch;">
+        <button class="btn btn-primary" id="moveShiftBtn">
+          ↕ Alles mitschieben – nichts geht verloren
+        </button>
+        <button class="btn btn-secondary" id="moveSwapBtn">⇄ Die beiden Tage tauschen</button>
+        <button class="btn btn-danger" id="moveReplaceBtn">
+          ✕ <span id="moveReplaceName"></span> fällt weg
+        </button>
+        <button class="btn btn-secondary" id="moveBackBtn">↩ Anderen Tag wählen</button>
+      </div>
+    </div>
+
+    <div class="btn-group">
       <button class="btn btn-secondary" id="moveCancelBtn">Abbrechen</button>
     </div>
     <div id="moveResult"></div>

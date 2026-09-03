@@ -123,6 +123,34 @@ das alte `style.css`/JS im Cache.
 Neue Umgebungsvariablen brauchen `docker compose up -d` – ein `restart`
 übernimmt sie **nicht**.
 
+## Verschieben: Zieltag wählen, dann fragen
+
+Der `→`-Knopf am Plan-Tag ging bis v1.29.0 **stur auf morgen** – sein Titel hieß
+auch so („Auf morgen verschieben"), seit dem allerersten Commit. Weiter kam man
+nur, indem man mehrmals schob. Das war kein Fehler, aber es sah wie einer aus:
+zum Verschieben auf Samstag gibt es keinen sichtbaren Weg.
+
+Jetzt sind es zwei Schritte in **einem** Kasten (`moveModal`):
+
+1. `openMovePicker()` – Tagesauswahl über **zwei Wochen**: die angezeigte plus
+   die folgende. Der Quelltag fällt raus, Vergangenes auch, gekochte Tage sind
+   gesperrt (`disabled`), und an jedem Tag steht sein Gericht bzw. „– frei –"
+   (mit `🛒`, wenn dafür eingekauft wurde).
+2. `openMoveDialog()` – die alte Frage shift/swap/replace, aber **nur bei
+   belegtem Zieltag**. Ein freier Tag wird direkt beschrieben, da gibt es nichts
+   zu fragen. `↩ Anderen Tag wählen` geht zurück zu Schritt 1.
+
+`zeigeSchritt()` schaltet die beiden `<div>`s über `hidden` um – dasselbe Modal,
+kein zweites Bedienkonzept.
+
+**Die Folgewoche wird nachgeladen**, weil `lastPlan` nur die angezeigte kennt.
+Dafür braucht es keine ISO-Wochen-Rechnerei im Browser: `resolveWeek()` auf dem
+Server nimmt für `week` auch ein **Datum** und ermittelt die Kalenderwoche
+selbst – der Tag nach Sonntag (`addDays(lastPlan.to, 1)`) genügt.
+
+Der Server konnte das alles schon: `POST /api/plan/:date/move` nimmt jedes
+Zieldatum und die drei Modi. Es fehlte nur die Frage danach.
+
 ## Würfeln: Abendessen vs. Beilage
 
 `lib/course.js` sortiert Dips, Beilagen, Kuchen aus. Grundlage sind die
