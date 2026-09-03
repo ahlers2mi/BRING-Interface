@@ -8,6 +8,7 @@ import {
   el,
   escHtml,
   flash,
+  holdFlash,
   mealieActive,
   on,
   openModal,
@@ -47,6 +48,9 @@ export async function loadPlan(week = currentWeek) {
     )}</div>`;
   }
 }
+
+// Welcher Tag+Liste wurde schon probegelaufen? Der zweite Klick raeumt dann ab.
+let uncartGeprueft = null;
 
 function renderPlan(plan) {
   lastPlan = plan;
@@ -138,6 +142,16 @@ function buildDayCard(day) {
       ${
         recipe
           ? `<button class="btn btn-secondary btn-sm" data-act="cart" title="Zutaten in Bring">🛒</button>
+             ${
+               // Nur wenn fuer DIESEN Tag eingekauft wurde – dann gibt es auch
+               // etwas zurueckzunehmen. Nach einem Neuwurf ist der Merker weg
+               // (anderes Rezept), und die alten Zutaten holt man ueber die
+               // Karte des alten Rezepts von der Liste.
+               day.shopped
+                 ? `<button class="btn btn-secondary btn-sm" data-act="uncart"
+                      title="Die Zutaten dieses Rezepts wieder von der Liste nehmen – zeigt erst, was verschwinden würde">🧺</button>`
+                 : ''
+             }
              <button class="btn btn-secondary btn-sm" data-act="move" title="Auf morgen verschieben">→</button>
              <button class="btn btn-danger btn-sm" data-act="clear" title="Tag leeren">✕</button>`
           : ''
@@ -212,6 +226,81 @@ function buildDayCard(day) {
       renderPlan(res.plan);
     } catch (err) {
       flash('planResult', `Fehler: ${escHtml(err.message)}`, 'error');
+      setLoading(btn, false);
+    }
+  });
+
+  // Gegenweg zum Wagen: die Zutaten dieses Tages wieder von der Liste nehmen.
+  // Erster Klick zeigt, was verschwinden wuerde, zweiter macht es – wie in der
+  // Rezeptkarte und beim Aufraeumen.
+  node.querySelector('[data-act="uncart"]')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const listUuid = el('planListSelect').value;
+    if (!listUuid) return flash('planResult', 'Bitte oben eine Bring-Liste wählen.', 'error');
+
+    const jetztWirklich = uncartGeprueft === `${day.date}|${listUuid}`;
+    setLoading(btn, true);
+    try {
+      const res = await apiFetch(`/api/recipes/${recipe.id}/unimport`, {
+        method: 'POST',
+        body: JSON.stringify({ listUuid, date: day.date, dryRun: !jetztWirklich }),
+      });
+
+      const rest = [];
+      if (res.kept?.length) {
+        rest.push(
+          `${escHtml(res.kept.map((k) => k.name).join(', '))} bleibt stehen (Vorrat).`
+        );
+      }
+      if (res.missing?.length) {
+        rest.push(
+          res.missing.length === 1
+            ? '1 Zutat stand nicht (mehr) auf der Liste.'
+            : `${res.missing.length} Zutaten standen nicht (mehr) auf der Liste.`
+        );
+      }
+      const anhang = rest.length ? `<br /><span class="hint">${rest.join(' ')}</span>` : '';
+
+      if (res.dryRun) {
+        if (!res.remove.length) {
+          uncartGeprueft = null;
+          return flash('planResult', `Von „${escHtml(recipe.name)}" liegt nichts auf der Liste.${anhang}`, 'info');
+        }
+        uncartGeprueft = `${day.date}|${listUuid}`;
+        flash(
+          'planResult',
+          `<b>${res.remove.length} Artikel würden von der Liste verschwinden</b> ` +
+            `(${escHtml(recipe.name)}):<br />` +
+            res.remove
+              .map(
+                (r) =>
+                  `<span class="ingredient-tag">${escHtml(
+                    r.amount ? `${r.amount} ${r.name}` : r.name
+                  )}</span>`
+              )
+              .join('') +
+            `<br />Noch einmal 🧺 drücken, dann werden sie entfernt.${anhang}`,
+          'info'
+        );
+        // Sonst raeumt flash die Entscheidungsgrundlage nach 6 Sekunden weg.
+        holdFlash('planResult');
+        return;
+      }
+
+      uncartGeprueft = null;
+      flash(
+        'planResult',
+        `✓ ${res.removed.length} Artikel von der Liste genommen.${anhang}`,
+        res.failed?.length ? 'error' : 'success'
+      );
+      // Der „eingekauft"-Merker ist mit weg – der Tag muss neu gezeichnet werden.
+      await loadPlan();
+    } catch (err) {
+      flash('planResult', `Fehler: ${escHtml(err.message)}`, 'error');
+    } finally {
+      // `finally`, nicht nur im Fehlerzweig: die anderen Knoepfe hier kommen
+      // ohne aus, weil ihr Erfolgsfall die Karte neu zeichnet – der PROBELAUF
+      // tut das nicht, und der Knopf blieb als Spinner stehen.
       setLoading(btn, false);
     }
   });
