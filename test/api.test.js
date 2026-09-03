@@ -1648,6 +1648,16 @@ test('Verschieben: shift rueckt alles auf, replace laesst den Zieltag fallen', a
     geschoben.json.verschoben.length >= 2,
     `mindestens die beiden Folgetage ruecken auf, waren: ${geschoben.json.verschoben.length}`
   );
+  // `verschoben` steht von HINTEN nach vorn: der Server setzt die Kette so, um
+  // sich nicht selbst zu ueberschreiben. Wer den fernsten Tag will (die
+  // Oberflaeche nennt ihn in der Meldung), muss das Maximum nehmen und nicht
+  // den letzten Eintrag – genau das war einmal falsch.
+  const ziele = geschoben.json.verschoben.map((v) => v.to);
+  assert.deepEqual(
+    ziele,
+    [...ziele].sort().reverse(),
+    `absteigend erwartet, war: ${ziele.join(', ')}`
+  );
   let plan = (await api('/api/plan')).json;
   const am = (datum) => plan.days.find((d) => d.date === datum)?.recipe?.name ?? null;
   assert.equal(am(a), null, 'Quelle ist leer');

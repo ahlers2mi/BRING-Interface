@@ -25,6 +25,7 @@ let currentWeek = 'current'; // wird nach dem ersten Laden zur echten KW
 let pickerDate = null; // Tag, für den das Auswahl-Modal offen ist
 let lastPlan = null; // zuletzt gezeichnete Woche – für den Blick auf den Zieltag
 let moveContext = null; // { from, to } während die Rückfrage offen ist
+let moveQuelle = null; // Tag, dessen Gericht verschoben wird
 
 const STATUS_LABEL = {
   planned: '',
@@ -54,6 +55,10 @@ let uncartGeprueft = null;
 
 function renderPlan(plan) {
   lastPlan = plan;
+  // Die gezeichnete Woche IST die aktuelle. Vorher setzte das nur `loadPlan`;
+  // seit man in die Folgewoche verschieben kann, zeigte das Raster dann die
+  // neue Woche, und das naechste Neuladen sprang zurueck zur alten.
+  currentWeek = plan.week;
   el('planWeekLabel').textContent =
     `KW ${plan.week.slice(-2)} (${deDate(plan.from)} – ${deDate(plan.to)})`;
   el('planWeekLabel').dataset.from = plan.from;
@@ -152,7 +157,8 @@ function buildDayCard(day) {
                       title="Die Zutaten dieses Rezepts wieder von der Liste nehmen – zeigt erst, was verschwinden würde">🧺</button>`
                  : ''
              }
-             <button class="btn btn-secondary btn-sm" data-act="move" title="Auf morgen verschieben">→</button>
+             <button class="btn btn-secondary btn-sm" data-act="move"
+                title="Auf einen anderen Tag verschieben">→</button>
              <button class="btn btn-danger btn-sm" data-act="clear" title="Tag leeren">✕</button>`
           : ''
       }
@@ -196,23 +202,17 @@ function buildDayCard(day) {
     }
   });
 
-  // Heute wird es doch nichts: einen Tag weiterschieben, statt neu zu würfeln.
-  // Ist der Zieltag belegt, fragen wir vorher – sonst verschwindet dort
-  // stillschweigend ein Gericht.
+  // Heute wird es doch nichts: das Gericht auf einen anderen Tag schieben,
+  // statt neu zu würfeln. Der Zieltag wird ausgewählt – vorher ging es stur
+  // auf morgen, weiter kam man nur, indem man mehrmals schob.
   node.querySelector('[data-act="move"]')?.addEventListener('click', async (e) => {
     const btn = e.currentTarget;
-    const morgen = new Date(`${day.date}T12:00:00Z`);
-    morgen.setUTCDate(morgen.getUTCDate() + 1);
-    const ziel = morgen.toISOString().slice(0, 10);
-    const zielTag = (lastPlan?.days || []).find((d) => d.date === ziel);
-
-    if (zielTag?.recipe) {
-      openMoveDialog(day, zielTag);
-      return;
-    }
     setLoading(btn, true);
-    await moveDay(day.date, ziel, 'replace');
-    setLoading(btn, false);
+    try {
+      await openMovePicker(day);
+    } finally {
+      setLoading(btn, false);
+    }
   });
 
   node.querySelector('[data-act="leftovers"]').addEventListener('click', async (e) => {
@@ -563,6 +563,10 @@ export function initPlan() {
   on('moveShiftBtn', 'click', () => moveFromDialog('shift'));
   on('moveSwapBtn', 'click', () => moveFromDialog('swap'));
   on('moveReplaceBtn', 'click', () => moveFromDialog('replace'));
+  on('moveBackBtn', 'click', () => {
+    el('moveResult').innerHTML = '';
+    zeigeSchritt('pick');
+  });
   on('moveCancelBtn', 'click', () => closeModal('moveModal'));
 }
 
@@ -575,8 +579,23 @@ async function moveDay(from, to, mode) {
       body: JSON.stringify({ to, mode }),
     });
     renderPlan(res.plan);
-    const teile = [`✓ auf ${escHtml(deDate(res.to))} verschoben`];
-    if (res.verschoben?.length) teile.push(`${res.verschoben.length} Tag(e) mit aufgerückt`);
+    const teile = [
+      res.mode === 'swap'
+        ? `✓ mit ${escHtml(deDate(res.to))} getauscht`
+        : `✓ auf ${escHtml(deDate(res.to))} verschoben`,
+    ];
+    if (res.verschoben?.length) {
+      // Wohin das letzte Gericht gerutscht ist, gehört dazu: bei einer langen
+      // Kette landet es in der Folgewoche und sieht sonst verloren aus.
+      //
+      // Das SPÄTESTE Datum, nicht der letzte Eintrag: der Server setzt die
+      // Kette von hinten nach vorn, `verschoben[0]` ist also der ferne Tag.
+      const letzter = res.verschoben.map((v) => v.to).sort().at(-1);
+      teile.push(
+        `${res.verschoben.length} Tag(e) mit aufgerückt` +
+          (letzter ? `, bis ${escHtml(deDate(letzter))}` : '')
+      );
+    }
     if (res.verdraengt?.name) teile.push(`„${escHtml(res.verdraengt.name)}" ist entfallen`);
     flash('planResult', `${teile.join(' · ')}.`);
     return true;
@@ -586,6 +605,77 @@ async function moveDay(from, to, mode) {
   }
 }
 
+// Schritt 1: auf welchen Tag? Zwei Wochen ab der angezeigten – weiter voraus
+// zu schieben kommt in der Praxis nicht vor.
+//
+// Die Folgewoche wird nachgeladen: `lastPlan` kennt nur die angezeigte. Der
+// Server nimmt für `week` auch ein DATUM und rechnet die Kalenderwoche selbst
+// aus – der Tag nach Sonntag genügt also.
+async function openMovePicker(quelle) {
+  moveQuelle = quelle;
+  moveContext = null;
+  el('moveSourceName').textContent = quelle.recipe?.name || '';
+  el('moveResult').innerHTML = '';
+  zeigeSchritt('pick');
+  el('movePickList').innerHTML = '<span class="spinner"></span>';
+  openModal('moveModal');
+
+  try {
+    const tage = [...(lastPlan?.days || [])];
+    const danach = lastPlan?.to ? addDays(lastPlan.to, 1) : null;
+    if (danach) {
+      const woche = await apiFetch(`/api/plan?week=${encodeURIComponent(danach)}`);
+      tage.push(...(woche.days || []));
+    }
+    renderMovePicker(tage);
+  } catch (err) {
+    el('movePickList').innerHTML = `<div class="alert alert-error">${escHtml(err.message)}</div>`;
+  }
+}
+
+function renderMovePicker(tage) {
+  const heute = new Date().toISOString().slice(0, 10);
+  const auswahl = tage.filter((d) => d.date !== moveQuelle.date && d.date >= heute);
+
+  el('movePickList').innerHTML = auswahl
+    .map((d) => {
+      const gekocht = d.status === 'cooked';
+      const belegt = d.recipe ? escHtml(d.recipe.name) : '– frei –';
+      return `<button class="picker-item" data-date="${d.date}"${
+        gekocht ? ' disabled title="schon gekocht"' : ''
+      }>
+        <span>${escHtml(d.label)}, ${escHtml(deDate(d.date))}${
+          d.date === heute ? ' (heute)' : ''
+        }</span>
+        <span class="hint">${gekocht ? '✓ gekocht' : belegt}${
+          d.shopped ? ' · 🛒' : ''
+        }</span>
+      </button>`;
+    })
+    .join('');
+
+  el('movePickList')
+    .querySelectorAll('.picker-item:not([disabled])')
+    .forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const ziel = auswahl.find((d) => d.date === btn.dataset.date);
+        // Freier Tag: nichts zu fragen, direkt schieben. Belegter Tag: erst die
+        // Rückfrage, sonst verschwindet dort stillschweigend ein Gericht.
+        if (!ziel?.recipe) {
+          setLoading(btn, true);
+          if (await moveDay(moveQuelle.date, btn.dataset.date, 'replace')) {
+            closeModal('moveModal');
+          } else {
+            setLoading(btn, false);
+          }
+          return;
+        }
+        openMoveDialog(moveQuelle, ziel);
+      });
+    });
+}
+
+// Schritt 2 – nur bei belegtem Zieltag.
 function openMoveDialog(quelle, ziel) {
   moveContext = { from: quelle.date, to: ziel.date };
   el('moveTargetDay').textContent = `${ziel.label}, ${deDate(ziel.date)}`;
@@ -595,7 +685,20 @@ function openMoveDialog(quelle, ziel) {
     (ziel.shopped ? ' – und dafür wurde bereits eingekauft' : '') +
     '. Was soll damit passieren?';
   el('moveResult').innerHTML = '';
+  zeigeSchritt('conflict');
   openModal('moveModal');
+}
+
+function zeigeSchritt(welcher) {
+  el('movePickStep').hidden = welcher !== 'pick';
+  el('moveConflictStep').hidden = welcher !== 'conflict';
+}
+
+// Datum + n Tage, ohne Zeitzonen-Ärger (Mittag als Anker).
+function addDays(iso, n) {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
 }
 
 async function moveFromDialog(mode) {
