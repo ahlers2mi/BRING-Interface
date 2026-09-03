@@ -321,6 +321,44 @@ Zwei Berührungspunkte:
   ruhiges Grün: wären alle drei `btn-primary`, stünden in einer gesunden
   Vorratsliste 30 orange Alarmknöpfe.
 
+## Zutaten wieder von der Liste nehmen
+
+`POST /api/recipes/:id/unimport` ist der Gegenweg zu `/import` – für den Fall,
+dass ein Tag umgeplant wurde oder doch auswärts gegessen wird. Die Rechnerei
+steckt in `recipeItemsOnList()` (`normalize.js`), die Bring-Aufrufe bleiben in
+der Route, wie beim Aufräumen.
+
+Vier Entscheidungen, alle aus demselben Grund – **hier wird gelöscht, und die
+Liste gehört auch dem Rest der Familie**:
+
+- **Verglichen wird streng, mit `normalizeName`** (Stämme, „Zwiebel" trifft also
+  „Zwiebeln") und ausdrücklich **nicht** mit `ingredientMatches`. Dessen
+  Teilwort-Regel zieht „Tomatenmark" auf „Tomaten" und „Buttermilch" auf „Milch"
+  – beim Zusammenlegen von Mengen ist so ein Fehlgriff eine krumme Zahl, beim
+  Löschen fehlt hinterher ein Lebensmittel im Wagen, und zwar eines, das jemand
+  anders eingetragen hat.
+- **Standard ist der Probelauf** (`dryRun`, Default `true`). Die Oberfläche macht
+  daraus zwei Klicks auf denselben Knopf: erst die Liste dessen, was
+  verschwinden würde, dann das Entfernen. `unimportGeprueft` merkt sich dafür die
+  Listen-UUID – wechselt man die Liste, ist der Probelauf hinfällig.
+- **Nur `purchase`.** Was unter „zuletzt gekauft" (`recently`) steht, ist schon
+  abgehakt; da etwas zu löschen bringt niemandem etwas.
+- **Vorräte, die wir selbst auf die Liste geschoben haben** (`listed_at`), bleiben
+  stehen und werden als `kept` gemeldet: die liegen dort, weil sie leer sind,
+  nicht wegen dieses Rezepts.
+
+`missing` (Zutaten, die nicht auf der Liste stehen) ist **keine Fehlermeldung** –
+meist ist es schon abgehakt oder war nie drauf. Es steht nur dran, damit die Zahl
+„2 von 5" erklärt ist.
+
+Mit `date` wird der `shopped`-Merker des Plan-Tags wieder **entfernt** –
+Spiegelbild zum Import, der ihn setzt. Sonst lässt der Würfel einen Tag in Ruhe,
+für den nichts mehr eingekauft ist.
+
+**Falle:** die Liste im Probelauf ist die Entscheidungsgrundlage für den zweiten
+Klick – ohne `holdFlash()` räumt `flash()` sie nach 6 Sekunden weg (siehe
+„Nach dem Import gleich einplanen").
+
 ## Wocheneinkauf: Vorrat abziehen, Mengen addieren
 
 `weekShoppingItems()` in `lib/mealplan.js`. Zwei Dinge, die man sonst am Regal
