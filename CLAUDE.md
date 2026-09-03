@@ -132,10 +132,26 @@ zum Verschieben auf Samstag gibt es keinen sichtbaren Weg.
 
 Jetzt sind es zwei Schritte in **einem** Kasten (`moveModal`):
 
-1. `openMovePicker()` – Tagesauswahl über **zwei Wochen**: die angezeigte plus
-   die folgende. Der Quelltag fällt raus, Vergangenes auch, gekochte Tage sind
-   gesperrt (`disabled`), und an jedem Tag steht sein Gericht bzw. „– frei –"
-   (mit `🛒`, wenn dafür eingekauft wurde).
+1. `openMovePicker()` – Tagesauswahl von **drei Tagen zurück** bis zum Ende der
+   **Folgewoche**. Der Quelltag fällt raus, gekochte Tage sind gesperrt
+   (`disabled`), und an jedem Tag steht sein Gericht bzw. „– frei –" (mit `🛒`,
+   wenn dafür eingekauft wurde).
+
+   **Die drei Tage rückwärts sind zum Nachpflegen** (`MOVE_PAST_DAYS`), nicht
+   zum Planen: gekocht wurde etwas anderes als geplant, und der Plan soll
+   hinterher stimmen – sonst lernt das Geschmacksprofil aus Tagen, die es so
+   nie gab. Sie stehen mit „(vorbei)" und blasser (`.picker-item.is-past`) in
+   der Liste.
+
+   Ein **gekochter** Tag bleibt auch rückwärts gesperrt: an ihm hängt eine
+   Bewertung, die nicht stillschweigend auf ein anderes Gericht rutschen darf
+   („erst den Tag leeren"). In der Praxis trifft das selten – `cooked` wird
+   erst beim Bewerten gesetzt, ein Tag, an dem die Familie etwas anderes
+   gekocht hat, steht meist noch auf `planned`.
+
+   **Heute kommt vom Server** (`lastPlan.today` aus `buildWeekView`), nicht aus
+   dem Browser: `new Date().toISOString()` liegt in der deutschen Nacht nach
+   UTC einen Tag zurück, und dann fehlte oder erschien ein Tag zu viel.
 2. `openMoveDialog()` – die alte Frage shift/swap/replace, aber **nur bei
    belegtem Zieltag**. Ein freier Tag wird direkt beschrieben, da gibt es nichts
    zu fragen. `↩ Anderen Tag wählen` geht zurück zu Schritt 1.
@@ -143,10 +159,12 @@ Jetzt sind es zwei Schritte in **einem** Kasten (`moveModal`):
 `zeigeSchritt()` schaltet die beiden `<div>`s über `hidden` um – dasselbe Modal,
 kein zweites Bedienkonzept.
 
-**Die Folgewoche wird nachgeladen**, weil `lastPlan` nur die angezeigte kennt.
-Dafür braucht es keine ISO-Wochen-Rechnerei im Browser: `resolveWeek()` auf dem
-Server nimmt für `week` auch ein **Datum** und ermittelt die Kalenderwoche
-selbst – der Tag nach Sonntag (`addDays(lastPlan.to, 1)`) genügt.
+**Die Nachbarwochen werden nachgeladen**, weil `lastPlan` nur die angezeigte
+kennt – die Folgewoche immer, die Vorwoche nur, wenn das Fenster wirklich
+dorthin reicht (Wochenanfang). Dafür braucht es keine ISO-Wochen-Rechnerei im
+Browser: `resolveWeek()` auf dem Server nimmt für `week` auch ein **Datum** und
+ermittelt die Kalenderwoche selbst – der Tag nach Sonntag bzw. vor Montag
+genügt. Doppelte Tage werden vor dem Zeichnen entfernt.
 
 Der Server konnte das alles schon: `POST /api/plan/:date/move` nimmt jedes
 Zieldatum und die drei Modi (`shift`/`swap`/`replace`, getestet in
