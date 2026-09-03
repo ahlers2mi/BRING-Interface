@@ -757,6 +757,10 @@ ul.plain li { padding: 0.1rem 0; }
   flex-shrink: 0;
 }
 
+/* Vergangene Tage in der Verschiebe-Auswahl: waehlbar (Nachpflegen), aber
+   sichtbar zurueckgenommen. */
+.picker-item.is-past { opacity: 0.7; }
+
 /* "Gleich einplanen?" unter einer Erfolgsmeldung. Steht in derselben Box wie
    die Meldung, darum der Abstand nach oben. */
 .plan-offer {

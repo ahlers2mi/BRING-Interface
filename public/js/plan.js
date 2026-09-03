@@ -605,12 +605,17 @@ async function moveDay(from, to, mode) {
   }
 }
 
-// Schritt 1: auf welchen Tag? Zwei Wochen ab der angezeigten – weiter voraus
-// zu schieben kommt in der Praxis nicht vor.
+// Wie weit zurück die Auswahl reicht. Nicht als Planung gedacht, sondern zum
+// **Nachpflegen**: gekocht wurde etwas anderes als geplant, und der Plan soll
+// hinterher stimmen (sonst lernt das Geschmacksprofil aus falschen Tagen).
+const MOVE_PAST_DAYS = 3;
+
+// Schritt 1: auf welchen Tag? Von drei Tagen zurück bis zum Ende der
+// Folgewoche – weiter voraus zu schieben kommt in der Praxis nicht vor.
 //
-// Die Folgewoche wird nachgeladen: `lastPlan` kennt nur die angezeigte. Der
-// Server nimmt für `week` auch ein DATUM und rechnet die Kalenderwoche selbst
-// aus – der Tag nach Sonntag genügt also.
+// `lastPlan` kennt nur die angezeigte Woche, die Nachbarwochen werden also
+// nachgeladen. Der Server nimmt für `week` auch ein DATUM und rechnet die
+// Kalenderwoche selbst aus – der Tag nach Sonntag bzw. vor Montag genügt.
 async function openMovePicker(quelle) {
   moveQuelle = quelle;
   moveContext = null;
@@ -622,9 +627,14 @@ async function openMovePicker(quelle) {
 
   try {
     const tage = [...(lastPlan?.days || [])];
-    const danach = lastPlan?.to ? addDays(lastPlan.to, 1) : null;
-    if (danach) {
-      const woche = await apiFetch(`/api/plan?week=${encodeURIComponent(danach)}`);
+    const holen = [];
+    if (lastPlan?.to) holen.push(addDays(lastPlan.to, 1));
+    // Vorwoche nur, wenn das Fenster wirklich dorthin reicht (Anfang der Woche).
+    if (lastPlan?.from && moveVonGrenze() < lastPlan.from) {
+      holen.push(addDays(lastPlan.from, -1));
+    }
+    for (const datum of holen) {
+      const woche = await apiFetch(`/api/plan?week=${encodeURIComponent(datum)}`);
       tage.push(...(woche.days || []));
     }
     renderMovePicker(tage);
@@ -633,19 +643,35 @@ async function openMovePicker(quelle) {
   }
 }
 
+// Heute kommt vom Server (`buildWeekView`), nicht aus dem Browser: `new Date()`
+// nach UTC liegt in der deutschen Nacht einen Tag zurück.
+function moveHeute() {
+  return lastPlan?.today || new Date().toISOString().slice(0, 10);
+}
+
+function moveVonGrenze() {
+  return addDays(moveHeute(), -MOVE_PAST_DAYS);
+}
+
 function renderMovePicker(tage) {
-  const heute = new Date().toISOString().slice(0, 10);
-  const auswahl = tage.filter((d) => d.date !== moveQuelle.date && d.date >= heute);
+  const heute = moveHeute();
+  const von = moveVonGrenze();
+  const auswahl = tage
+    // Doppelte ausschließen: die nachgeladenen Wochen könnten überlappen.
+    .filter((d, i, alle) => alle.findIndex((x) => x.date === d.date) === i)
+    .filter((d) => d.date !== moveQuelle.date && d.date >= von)
+    .sort((a, b) => a.date.localeCompare(b.date));
 
   el('movePickList').innerHTML = auswahl
     .map((d) => {
       const gekocht = d.status === 'cooked';
       const belegt = d.recipe ? escHtml(d.recipe.name) : '– frei –';
-      return `<button class="picker-item" data-date="${d.date}"${
-        gekocht ? ' disabled title="schon gekocht"' : ''
+      const vorbei = d.date < heute;
+      return `<button class="picker-item${vorbei ? ' is-past' : ''}" data-date="${d.date}"${
+        gekocht ? ' disabled title="schon gekocht – erst den Tag leeren"' : ''
       }>
         <span>${escHtml(d.label)}, ${escHtml(deDate(d.date))}${
-          d.date === heute ? ' (heute)' : ''
+          d.date === heute ? ' (heute)' : vorbei ? ' (vorbei)' : ''
         }</span>
         <span class="hint">${gekocht ? '✓ gekocht' : belegt}${
           d.shopped ? ' · 🛒' : ''
