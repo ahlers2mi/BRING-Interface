@@ -359,6 +359,27 @@ für den nichts mehr eingekauft ist.
 Klick – ohne `holdFlash()` räumt `flash()` sie nach 6 Sekunden weg (siehe
 „Nach dem Import gleich einplanen").
 
+### Im Wochenplan: nur bei „🛒 eingekauft"
+
+Am Plan-Tag hängt der Knopf (`🧺`, `data-act="uncart"`) direkt hinter dem
+Wagen, aber **nur wenn `day.shopped` steht**. Das ist keine Kosmetik, sondern
+die ehrliche Grenze der Funktion:
+
+- Der Knopf kann immer nur die Zutaten des Rezepts nehmen, das **jetzt** an
+  diesem Tag liegt. Nach einem **Neuwurf** ist das ein anderes Rezept – und
+  `setPlanEntry` löscht dabei den `shopped`-Merker, der Knopf ist also weg.
+  Genau richtig: die Zutaten des **alten** Rezepts liegen noch auf der Liste,
+  und die holt man über die Karte dieses alten Rezepts zurück, nicht über den
+  Tag.
+- Wurde aus der Rezeptkarte ohne Datum geschoben, gibt es keinen Merker und
+  auch keinen Knopf am Tag – dort ist die Rezeptkarte der Weg.
+
+**Falle (dabei selbst hineingelaufen):** die anderen Handler in `plan.js` setzen
+`setLoading` nur im **Fehlerzweig** zurück, weil ihr Erfolgsfall die Karte neu
+zeichnet und den Knopf mitnimmt. Der **Probelauf** zeichnet aber nichts neu und
+kehrt früh zurück – ohne `finally` blieb der Knopf als Spinner stehen. Also:
+`finally { setLoading(btn, false) }`.
+
 ## Wocheneinkauf: Vorrat abziehen, Mengen addieren
 
 `weekShoppingItems()` in `lib/mealplan.js`. Zwei Dinge, die man sonst am Regal
