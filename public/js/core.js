@@ -111,8 +111,11 @@ export async function apiFetch(url, options = {}) {
 // ── Anzeige-Helfer ────────────────────────────────────────────────────────────
 
 // "2026-08-06" -> "06.08.2026"
+// Nimmt auch einen Zeitstempel (`2026-09-16 08:12:34`, so schreibt SQLite
+// `datetime('now')`) und lässt die Uhrzeit weg – für „zuletzt eingekauft" zählt
+// der Tag, nicht die Minute.
 export function deDate(iso) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ''));
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T]|$)/.exec(String(iso || ''));
   return m ? `${m[3]}.${m[2]}.${m[1]}` : String(iso || '');
 }
 

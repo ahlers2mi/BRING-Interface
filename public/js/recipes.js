@@ -222,6 +222,9 @@ function buildRecipeCard(recipe) {
       }`
     );
   }
+  if (recipe.last_shopped) {
+    meta.push(`🛒 eingekauft ${escHtml(deDate(recipe.last_shopped))}`);
+  }
   if (recipe.rejected_count) meta.push(`🗑 ${recipe.rejected_count}× rausgeflogen`);
   if (recipe.source_missing) {
     meta.push('⚠️ in Mealie nicht mehr vorhanden – wird nicht mehr gewürfelt');

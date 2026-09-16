@@ -488,6 +488,20 @@ Wechselt das Gericht des Tages, ist die Markierung automatisch hinfällig; beim
 Verschieben wandert sie mit dem Gericht mit. Von Hand setzen oder zurücknehmen
 geht über `POST /api/plan/<datum>/shopped` mit `{ "shopped": true|false }`.
 
+### „Zuletzt eingekauft" am Rezept
+
+Davon getrennt merkt sich **jedes Rezept**, wann seine Zutaten zuletzt auf eine
+Bring-Liste gegangen sind – über `🛒 Zutaten` an der Karte, über den `🛒` am
+Plan-Tag oder über den Wocheneinkauf. Die Rezeptkarte zeigt es in der Meta-Zeile
+neben „👨‍🍳 3× gekocht" als `🛒 eingekauft 12.09.2026` (Feld `last_shopped`).
+
+Der Unterschied zur Markierung am Plan-Tag: die beantwortet „ist für Donnerstag
+eingekauft?", das Datum am Rezept „wann war das für **dieses Gericht** zuletzt?"
+– auch für Rezepte, die nie im Plan standen. Wird mit „🧺 Wieder rausnehmen"
+wirklich etwas von der Liste genommen, fällt das Datum weg; findet sich nichts
+mehr auf der Liste (alles schon abgehakt), bleibt es stehen – dann war der
+Einkauf ja echt.
+
 ### Ein Rezept von Hand einplanen
 
 Zwei Richtungen, je nachdem was schon feststeht:

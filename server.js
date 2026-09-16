@@ -22,6 +22,8 @@ import {
   setRecipeBlocked,
   setRecipeCourse,
   setPlanShopped,
+  markRecipeShopped,
+  clearRecipeShopped,
   findRecipeByExternalId,
   findRecipeByName,
   addRating,
@@ -979,6 +981,10 @@ app.post('/api/recipes/:id/import', async (req, res) => {
       imported.push(ing.name);
     }
     setSetting('lastListUuid', listUuid);
+    // Am Rezept selbst merken, wann zuletzt dafür eingekauft wurde. Das ist
+    // unabhängig vom Plan: auch ein Rezept, das nie an einem Tag lag, hat
+    // damit ein Datum.
+    if (imported.length) markRecipeShopped(recipe.id);
     // Kam der Aufruf von einem Plan-Tag, gilt der Tag als eingekauft – der
     // Würfel lässt ihn dann beim Wochenwurf in Ruhe.
     const planDate = resolveDate(req.body?.date);
@@ -1040,6 +1046,12 @@ app.post('/api/recipes/:id/unimport', async (req, res) => {
       }
     }
     setSetting('lastListUuid', listUuid);
+
+    // Ist wirklich etwas von der Liste verschwunden, stimmt „zuletzt
+    // eingekauft" am Rezept nicht mehr. Wurde nichts gefunden (alles schon
+    // abgehakt oder nie drauf), bleibt das Datum stehen – dann war der Einkauf
+    // ja echt.
+    if (removed.length) clearRecipeShopped(recipe.id);
 
     // Spiegelbild zum Import: hat der Tag als eingekauft gegolten, gilt er es
     // jetzt nicht mehr – sonst lässt der Würfel ihn weiter in Ruhe.
@@ -1698,6 +1710,8 @@ app.post('/api/plan/shopping', async (req, res) => {
       if (!eintrag?.date) continue;
       setPlanShopped(eintrag.date, true);
       markiert.push(eintrag.date);
+      // … und an jedem beteiligten Rezept, dass dafür eingekauft wurde.
+      if (eintrag.id) markRecipeShopped(eintrag.id);
     }
     res.json({ imported, recipes, shopped: markiert, pantrySkipped });
   } catch (err) {

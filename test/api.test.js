@@ -360,6 +360,10 @@ test('Wocheneinkauf fasst die Zutaten der Woche zusammen', async () => {
   assert.ok(res.json.items.length > 0);
   const names = res.json.items.map((i) => i.name.toLowerCase());
   assert.equal(new Set(names).size, names.length, 'keine Dubletten');
+  // An jedem beteiligten Rezept steht die id – daran hängt „zuletzt
+  // eingekauft", das beim Absenden an Bring gesetzt wird.
+  assert.ok(res.json.recipes.length > 0);
+  for (const r of res.json.recipes) assert.ok(Number.isInteger(r.id), `id fehlt bei ${r.name}`);
 });
 
 test('Mengen derselben Zutat werden addiert, nicht aneinandergehaengt', async () => {

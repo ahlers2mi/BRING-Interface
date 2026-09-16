@@ -384,6 +384,31 @@ Zwei Berührungspunkte:
   ruhiges Grün: wären alle drei `btn-primary`, stünden in einer gesunden
   Vorratsliste 30 orange Alarmknöpfe.
 
+## „Zuletzt eingekauft" am Rezept (`recipes.last_shopped`)
+
+Die Information gab es vorher nicht: `meal_plan.shopped_at` hängt am **Tag**,
+nicht am Rezept, und beantwortet „ist für Donnerstag eingekauft?". Gefragt war
+„wann war das für **dieses Gericht** zuletzt?" – also eine Spalte an `recipes`
+(kommt über `NEW_RECIPE_COLUMNS` von selbst dazu, `decorate()` streut sie mit
+`...recipe` in die API, an der Route ist nichts zu tun).
+
+Gesetzt wird sie an den drei Stellen, an denen Zutaten wirklich nach Bring
+gehen: `POST /api/recipes/:id/import` (nur wenn etwas übertragen wurde),
+`POST /api/plan/shopping` (je beteiligtem Rezept – dafür führt `usedRecipes` in
+`weekShoppingItems` jetzt die `id` mit) und gelöscht in `/unimport`, **aber nur
+bei `removed.length > 0`**: findet der Lauf nichts mehr auf der Liste, war der
+Einkauf ja echt, und das Datum bleibt.
+
+- **`recipes` hat kein `updated_at`** – das gibt es nur am Plan-Eintrag. Ein
+  `UPDATE recipes SET … , updated_at = datetime('now')` läuft auf
+  `no such column`. Aufgefallen ist das erst im Test, nicht beim Importieren
+  des Moduls; ein `node -e "import(…)"` prüft nur, dass die Funktion existiert.
+- **Der Mealie-Abgleich überschreibt das Datum nicht.** `upsertRecipeFromSource`
+  aktualisiert in place, und `updateRecipe` fasst nur seine Spaltenliste an.
+- `deDate()` in `core.js` nimmt seit v1.30.0 auch einen **Zeitstempel**
+  (`2026-09-16 08:12:34`, so schreibt `datetime('now')`) und lässt die Uhrzeit
+  weg. Vorher fiel so ein Wert durch das Muster und stand roh in der Karte.
+
 ## Zutaten wieder von der Liste nehmen
 
 `POST /api/recipes/:id/unimport` ist der Gegenweg zu `/import` – für den Fall,
