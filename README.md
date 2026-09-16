@@ -171,6 +171,32 @@ MEALIE_URL=http://mealie:9000
 `MEALIE_URL=http://mealie:9000` bleibt richtig: der Dienstname gilt **innerhalb**
 des Stacks, jede Instanz spricht mit ihrem eigenen Mealie.
 
+Mit eigenem **Cookidoo** kommt dazu:
+
+```
+COMPOSE_PROFILES=mealie,cookidoo       # Liste! nur "cookidoo" verliert Mealie
+COOKIDOO_CONTAINER_NAME=cookidoo-kumpel
+COOKIDOO_URL=http://cookidoo-kumpel:8099
+COOKIDOO_TOKEN=…                       # frei gewählt, App und Brücke teilen ihn
+COOKIDOO_EMAIL=…                       # sein Cookidoo-Konto
+COOKIDOO_PASSWORD=…
+COOKIDOO_DATA_PATH=                    # LEER lassen
+```
+
+Drei Fallen dabei:
+
+- **`COMPOSE_PROFILES` ist kommagetrennt.** Fehlt `cookidoo`, startet die Brücke
+  einfach nicht – ohne jede Meldung.
+- **`COOKIDOO_DATA_PATH` nimmt nur „leer" oder einen absoluten Pfad.** Ein Name
+  wie `cookidoo-kumpel-data` lässt den **ganzen Stack** scheitern
+  (`refers to undefined volume … invalid compose project`). Leer ist richtig:
+  Compose legt je Stack ein eigenes `<stackname>_cookidoo-data` an. Auch der
+  Mount-Point aus Portainer (`/volume2/@docker/volumes/…/_data`) gehört nicht
+  dort hinein.
+- **`COOKIDOO_URL` auf den Container-, nicht den Dienstnamen.** Der Dienst heißt
+  in jedem Stack `cookidoo-bridge`; hängen beide im selben Netz, landet die
+  zweite App sonst im Cookidoo-Konto des ersten Haushalts.
+
 #### Variante: ein gemeinsames Mealie für beide Instanzen
 
 Ein Mealie reicht auch für zwei Haushalte – der zweite bekommt dort einfach ein

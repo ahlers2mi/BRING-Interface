@@ -723,6 +723,58 @@ sofort sichtbar.
   wer eine neue Karte im Import-Tab baut, muss dort nachsehen, sonst ist sie mit
   Mealie einfach nicht da.
 
+## Cookidoo-Brücke: eine zweite starten, und was dabei schiefgeht
+
+Die Brücke (`cookidoo-bridge/`) hängt am Profil `cookidoo` und hat keinen Port
+nach außen. Für einen **zweiten Haushalt** sind drei Werte nötig – und alle drei
+haben ein eigenes Fehlerbild:
+
+- **`COMPOSE_PROFILES` ist eine kommagetrennte Liste.** Wer dort schon `mealie`
+  stehen hat, braucht `mealie,cookidoo`. Fehlt das Profil, wird der Dienst
+  **stillschweigend übersprungen** – kein Fehler, kein Container.
+- **`COOKIDOO_DATA_PATH` kennt nur zwei gültige Formen: leer oder ein
+  absoluter Pfad.** Ein *Name* dazwischen (`cookidoo-jan-data`) reißt den
+  **ganzen Stack** mit: `service "cookidoo-bridge" refers to undefined volume
+  … : invalid compose project`. Leer ist fast immer richtig – Compose stellt
+  benannten Volumes den Projektnamen voran (`<stack>_cookidoo-data`), zwei
+  Stacks sind damit automatisch getrennt. Ebenso wenig gehört der Mount-Point
+  aus Portainer (`/volume2/@docker/volumes/…/_data`) in die Variable: das ist
+  Dockers interne Ablage, ein Bind-Mount dorthin hebelt die Volume-Verwaltung
+  aus.
+- **`COOKIDOO_URL` muss auf den CONTAINER-Namen zeigen**, nicht auf den
+  Dienstnamen, sobald beide Stacks im `mealie-share`-Netz hängen: `cookidoo-bridge`
+  heißt der Dienst in jedem Stack gleich. Sonst redet die zweite App mit der
+  ersten Brücke – das sieht aus wie „funktioniert" und holt die Rezepte aus dem
+  **fremden Konto**.
+
+**Warum eine Anmeldung scheitert, stand früher nirgends.** Der Fehler ging als
+502 an die App, das Container-Log zeigte nur `Melde bei Cookidoo an …`, bei
+jeder Anfrage erneut – aus drei solchen Zeilen ist nicht zu erkennen, ob das
+Passwort falsch ist oder das Netz klemmt. Seit v1.29.3 protokolliert `_login()`
+den **Ausgang**:
+
+```
+INFO  Melde bei Cookidoo an (j***@example.de) …
+INFO  Angemeldet als j***@example.de
+ERROR Anmeldung abgelehnt für j***@example.de: invalid credentials – E-Mail/…
+ERROR Anmeldung fehlgeschlagen für j***@example.de: TimeoutError: timed out
+```
+
+Die Adresse steht **maskiert** dort: sie identifiziert das Konto, taugt aber
+nicht als Zugangsdatum, wenn jemand sein Log in einen Chat kopiert. Der
+Erfolgsfall loggte vorher gar nichts – deshalb war „mehrfach `Melde an …`"
+überhaupt erst ein Rätsel; jetzt heißt es eindeutig: die vorige ist gescheitert.
+
+Schnelltest nach dem Einrichten, aus dem App-Container heraus (das Image hat
+weder `curl` noch `wget`):
+
+```bash
+docker exec <app-container> node -e "fetch('http://cookidoo-jan:8099/check?token=…').then(r=>r.text()).then(console.log)"
+```
+
+`/check` meldet Konto, Abo und Lokalisierung – der erste Test, ob die
+Zugangsdaten stimmen.
+
 ## Mealie
 
 - Läuft im selben Stack (Profil `mealie`), Oberfläche unter
