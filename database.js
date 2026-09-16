@@ -97,6 +97,11 @@ const NEW_RECIPE_COLUMNS = {
   // Abendessen oder nur Beilage/Dip/Dessert? Leer = automatisch nach den
   // Kategorien entscheiden (siehe lib/course.js), 'main'/'side' = von Hand.
   course: 'TEXT',
+  // Wann die Zutaten dieses Rezepts zuletzt auf eine Bring-Liste gingen.
+  // Gehört ans Rezept, nicht an den Plan-Tag: `meal_plan.shopped_at` beantwortet
+  // „ist für Donnerstag eingekauft?", hier steht „wann war das für DIESES
+  // Gericht zuletzt?" – auch wenn es nie im Plan stand.
+  last_shopped: 'TEXT',
 };
 for (const [col, type] of Object.entries(NEW_RECIPE_COLUMNS)) {
   if (!recipeColumns.includes(col)) {
@@ -767,6 +772,19 @@ export function setPlanEntry({ date, recipe_id, note, status = 'planned', origin
        updated_at = datetime('now')`
   ).run(date, recipe_id ?? null, note || null, status, origin);
   return getPlanEntry(date);
+}
+
+// `recipes` hat kein `updated_at` (das gibt es nur am Plan-Eintrag) – hier wird
+// also nur die eine Spalte angefasst.
+
+/** Zutaten dieses Rezepts sind auf eine Bring-Liste gegangen. */
+export function markRecipeShopped(id) {
+  db.prepare(`UPDATE recipes SET last_shopped = datetime('now') WHERE id = ?`).run(id);
+}
+
+/** Wieder von der Liste genommen – dann stimmt „zuletzt eingekauft" nicht mehr. */
+export function clearRecipeShopped(id) {
+  db.prepare(`UPDATE recipes SET last_shopped = NULL WHERE id = ?`).run(id);
 }
 
 /** Tag als eingekauft markieren (oder die Markierung nehmen). */
