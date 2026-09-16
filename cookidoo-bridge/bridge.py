@@ -45,6 +45,15 @@ COOKIE_PATH = Path(os.environ.get("COOKIE_PATH", "/data/cookies.json"))
 _lock = asyncio.Lock()
 
 
+def maskiere(email: str) -> str:
+    """j***@example.de – genug, um das Konto zu erkennen, ohne die ganze
+    Adresse ins Log zu schreiben (Logs landen schnell in einem Chat)."""
+    name, _, domain = email.partition("@")
+    if not domain:
+        return "?"
+    return f"{name[:1]}***@{domain}"
+
+
 class Client:
     """Hält Sitzung und Anmeldung. Eine Instanz für den ganzen Dienst."""
 
@@ -108,12 +117,36 @@ class Client:
 
     async def _login(self) -> None:
         assert self.api is not None
-        _LOG.info("Melde bei Cookidoo an …")
-        await self.api.login()
+        konto = maskiere(os.environ.get("COOKIDOO_EMAIL", ""))
+        _LOG.info("Melde bei Cookidoo an (%s) …", konto)
+        # Ohne diese beiden Zweige steht im Log NUR der Versuch: der Fehler
+        # ging als 502 an die App und war im Container nicht mehr zu sehen.
+        # Aus drei Zeilen "Melde bei Cookidoo an …" ist dann nicht zu erkennen,
+        # ob das Passwort falsch ist oder das Netz klemmt.
+        try:
+            await self.api.login()
+        except CookidooAuthException as err:
+            _LOG.error(
+                "Anmeldung abgelehnt für %s: %s – E-Mail/Passwort prüfen, "
+                "und ob COOKIDOO_COUNTRY/COOKIDOO_LANGUAGE zum Konto passen",
+                konto,
+                err,
+            )
+            raise
+        except Exception as err:
+            _LOG.error(
+                "Anmeldung fehlgeschlagen für %s: %s: %s",
+                konto,
+                type(err).__name__,
+                err,
+            )
+            raise
         self.logged_in = True
+        _LOG.info("Angemeldet als %s", konto)
         try:
             COOKIE_PATH.parent.mkdir(parents=True, exist_ok=True)
             self.api.save_cookies(COOKIE_PATH)
+            _LOG.info("Sitzung gespeichert in %s", COOKIE_PATH)
         except OSError as err:
             _LOG.warning("Sitzung nicht speicherbar: %s", err)
 
@@ -153,10 +186,12 @@ def route(handler):
         try:
             return web.json_response(await handler(request))
         except CookidooAuthException as err:
+            _LOG.error("%s: Anmeldung fehlgeschlagen: %s", request.path, err)
             return web.json_response(
                 {"error": f"Anmeldung bei Cookidoo fehlgeschlagen: {err}"}, status=502
             )
         except CookidooException as err:
+            _LOG.error("%s: %s: %s", request.path, type(err).__name__, err)
             return web.json_response(
                 {"error": f"{type(err).__name__}: {err}"}, status=502
             )
