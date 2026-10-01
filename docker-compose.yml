@@ -16,6 +16,11 @@ services:
       # Linke Zahl = Port auf der NAS (per HOST_PORT änderbar), rechte = im Container
       - "${HOST_PORT:-8095}:3000"
     environment:
+      # Einkaufsliste: bring (Standard) oder packliste (eigene App, siehe lib/shopping.js)
+      SHOPPING_BACKEND: ${SHOPPING_BACKEND:-bring}
+      PACKLISTE_URL: ${PACKLISTE_URL:-http://packliste:8080}
+      PACKLISTE_TOKEN: ${PACKLISTE_TOKEN:-}
+      PACKLISTE_USER: ${PACKLISTE_USER:-Wochenplan}
       BRING_MAIL: ${BRING_MAIL}
       BRING_PASSWORD: ${BRING_PASSWORD}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}

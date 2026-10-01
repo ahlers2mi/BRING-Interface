@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import Bring from 'bring-shopping';
+import { shoppingBackend, createPacklisteClient } from './lib/shopping.js';
 import { registerAuth, authEnabled, apiTokenEnabled } from './auth.js';
 import {
   getAllRecipes,
@@ -175,8 +176,16 @@ app.get('/plan', (_req, res) => {
 
 let bringClient = null;
 
+// Je nach SHOPPING_BACKEND ist das Bring oder die Packliste (lib/shopping.js).
+// Beide bieten dieselben Methoden; der Rest des Codes merkt keinen Unterschied.
 async function getBringClient() {
   if (bringClient) return bringClient;
+  if (shoppingBackend() === 'packliste') {
+    const client = createPacklisteClient();
+    await client.login();
+    bringClient = client;
+    return client;
+  }
   if (!process.env.BRING_MAIL || !process.env.BRING_PASSWORD) {
     throw new Error(
       'Bring-Zugangsdaten fehlen. Bitte BRING_MAIL und BRING_PASSWORD in der .env-Datei setzen.'
@@ -518,10 +527,11 @@ app.get('/api/status', async (_req, res) => {
     cookidoo: getCookidooState(),
   };
   try {
-    await getBringClient();
-    res.json({ ...base, loggedIn: true, mail: process.env.BRING_MAIL });
+    const client = await getBringClient();
+    const mail = shoppingBackend() === 'packliste' ? 'Packliste' : process.env.BRING_MAIL;
+    res.json({ ...base, shoppingBackend: shoppingBackend(), loggedIn: true, mail, listLabel: client.label || 'Bring' });
   } catch (err) {
-    res.json({ ...base, loggedIn: false, error: err.message });
+    res.json({ ...base, shoppingBackend: shoppingBackend(), loggedIn: false, error: err.message });
   }
 });
 
