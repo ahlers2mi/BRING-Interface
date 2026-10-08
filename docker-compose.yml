@@ -21,6 +21,10 @@ services:
       PACKLISTE_URL: ${PACKLISTE_URL:-http://packliste:8080}
       PACKLISTE_TOKEN: ${PACKLISTE_TOKEN:-}
       PACKLISTE_USER: ${PACKLISTE_USER:-Wochenplan}
+      # Alexa → Bring → Packliste: Bring-Liste als Eingang leeren (nur bei SHOPPING_BACKEND=packliste)
+      BRING_INBOX: ${BRING_INBOX:-1}
+      BRING_INBOX_LIST: ${BRING_INBOX_LIST:-}
+      BRING_INBOX_SECONDS: ${BRING_INBOX_SECONDS:-60}
       BRING_MAIL: ${BRING_MAIL}
       BRING_PASSWORD: ${BRING_PASSWORD}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}

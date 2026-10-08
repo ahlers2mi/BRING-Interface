@@ -845,6 +845,7 @@ Anbindung per HTTPMOD, kein eigenes Modul. Der fertige Block steht in
 - `getBringClient()` liefert je nach Einstellung den Bring-Client oder `createPacklisteClient()`. Beide haben dieselben Methoden (`loadLists`, `getItems`, `saveItem`, `removeItem`, `moveToRecentList`) und Rückgaben in Bring-Form. Der übrige Code bleibt unverändert.
 - Packliste (Repo `ahlers2mi/Packliste`, Container `packliste`) hängt im Netz `mealie-share` → `PACKLISTE_URL=http://packliste:8080`.
 - `PACKLISTE_TOKEN` = Inhalt von `/volume2/docker/PACKLISTE/data/SERVICE-TOKEN.txt`. `PACKLISTE_USER` erscheint in der App als „hinzugefügt von“.
+- **Bring als Eingang für Alexa** (`lib/bring-inbox.js`): Bei `SHOPPING_BACKEND=packliste` liest der Server alle 60 s die Bring-Liste, in die Alexa schreibt (`alexaDefaultList` aus den Bring-Einstellungen, sonst `BRING_INBOX_LIST`). Er übernimmt die Artikel in die Packliste (Benutzer „Alexa“) und entfernt sie danach aus Bring. Abschalten mit `BRING_INBOX=0`.
 - Die Listen-ID der Packliste ist `einkauf`. Nach dem Umschalten passt eine gemerkte Bring-`lastListUuid` nicht mehr; einmal die Liste neu wählen.
 
 ## Geheimnisse

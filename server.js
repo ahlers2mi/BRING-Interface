@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import Bring from 'bring-shopping';
 import { shoppingBackend, createPacklisteClient } from './lib/shopping.js';
+import { startBringInbox } from './lib/bring-inbox.js';
 import { registerAuth, authEnabled, apiTokenEnabled } from './auth.js';
 import {
   getAllRecipes,
@@ -2787,6 +2788,22 @@ if (startedDirectly) {
   app.listen(PORT, () => {
     console.log(`BRING-Interface läuft auf http://localhost:${PORT}`);
   });
+
+  // Alexa schreibt nur nach Bring: mit der Packliste als Einkaufsliste dient
+  // Bring als Eingang (lib/bring-inbox.js).
+  if (shoppingBackend() === 'packliste' && process.env.BRING_INBOX !== '0' && process.env.BRING_MAIL) {
+    startBringInbox({
+      makeBring: () => new Bring({ mail: process.env.BRING_MAIL, password: process.env.BRING_PASSWORD }),
+      target: createPacklisteClient({ user: process.env.BRING_INBOX_USER || 'Alexa' }),
+      getTargetList: async () => {
+        if (process.env.BRING_INBOX_TARGET) return process.env.BRING_INBOX_TARGET;
+        const last = getSetting('lastListUuid');
+        const client = await getBringClient();
+        const { lists } = await client.loadLists();
+        return (lists || []).some((l) => l.listUuid === last) ? last : lists?.[0]?.listUuid;
+      },
+    });
+  }
 
   // Mealie-Spiegel beim Start und danach im Intervall abgleichen.
   if (mealieEnabled()) {
