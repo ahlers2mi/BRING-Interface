@@ -740,6 +740,19 @@ ul.plain li { padding: 0.1rem 0; }
   background: var(--border) center / cover no-repeat;
 }
 
+/* Liste "Neu angelegt" nach einem Import-Lauf */
+.new-recipes { margin-top: 0.75rem; }
+.new-recipe {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0;
+  border-top: 1px solid var(--border);
+}
+.new-recipe-name { flex: 1; min-width: 0; font-size: 0.9rem; }
+.new-recipe-actions { display: flex; gap: 0.3rem; flex-shrink: 0; }
+.new-recipe .recipe-thumb.mini { width: 2.75rem; height: 2.75rem; }
+
 .recipe-thumb.empty {
   position: relative;
   background-image: none;

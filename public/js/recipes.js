@@ -585,20 +585,84 @@ function offerPlanning(resultEl, recipeId, { label = 'Gleich einplanen?' } = {})
   box.appendChild(zeile);
 }
 
-// Dasselbe fuer die Hintergrund-Laeufe (Massenimport, Koch-Seite,
-// Chefkoch->Mealie). Die zaehlen mit, was SIE angelegt haben – bei genau einem
-// Rezept ist die Frage sinnvoll, bei 40 nicht.
-//
-// `planOfferedFor` verhindert, dass das Angebot beim Neuladen der Seite noch
-// einmal auftaucht: die Laeufe bleiben nach dem Ende abrufbar.
-let planOfferedFor = null;
+// Nach den Hintergrund-Laeufen (Massenimport, Koch-Seite, Chefkoch->Mealie):
+// die Rezepte, die DIESER Lauf angelegt hat, als Liste unter dem Fortschritt –
+// jedes mit eigenem Einplanen-Knopf. Die Laeufe bleiben nach dem Ende abrufbar,
+// die Liste steht also auch nach dem Neuladen der Seite noch da.
+const NEW_LIST_AFTER = {
+  ckResult: 'ckStatus',
+  siteResult: 'siteStatus',
+  bulkImportResult: 'bulkImportStatus',
+};
+const NEW_LIST_MAX = 60;
 
-function offerPlanningForJob(job, resultEl) {
+async function offerPlanningForJob(job, resultEl) {
   const ids = job?.createdIds || [];
-  if (ids.length !== 1 || planOfferedFor === job.id) return;
-  planOfferedFor = job.id;
-  flash(resultEl, '✓ Ein Rezept angelegt.');
-  offerPlanning(resultEl, ids[0]);
+  const anchor = el(NEW_LIST_AFTER[resultEl] || resultEl);
+  if (!anchor) return;
+  const boxId = `${anchor.id}New`;
+  let box = el(boxId);
+  if (!ids.length) {
+    if (box) box.remove();
+    return;
+  }
+  if (box?.dataset.job === job.id) return;
+  if (!box) {
+    box = document.createElement('div');
+    box.id = boxId;
+    box.className = 'new-recipes';
+    anchor.after(box);
+  }
+  box.dataset.job = job.id;
+
+  // Meist kennt der Spiegel sie nach dem Abgleich schon; sonst einzeln holen.
+  const recipes = [];
+  for (const id of ids.slice(0, NEW_LIST_MAX)) {
+    let r = state.recipes.find((x) => x.id === Number(id));
+    if (!r) {
+      try {
+        r = await apiFetch(`/api/recipes/${id}`);
+      } catch {
+        r = null;
+      }
+    }
+    if (r) recipes.push(r);
+  }
+  if (!recipes.length) {
+    box.remove();
+    return;
+  }
+
+  box.innerHTML = `
+    <label>🆕 Neu angelegt (${ids.length}) – gleich einplanen?</label>
+    ${recipes
+      .map((r) => {
+        const link = r.source === 'mealie' ? mealieRecipeLink(r.source_slug) : '';
+        return `<div class="new-recipe" data-id="${r.id}">
+          ${recipeThumb(r, 'recipe-thumb mini')}
+          <div class="new-recipe-name">${escHtml(r.name)} ${ratingBadge(r)}</div>
+          <div class="new-recipe-actions">
+            <button class="btn btn-secondary btn-sm" type="button" data-act="plan">📅 Einplanen</button>
+            ${
+              link
+                ? `<a class="btn btn-secondary btn-sm" href="${escHtml(
+                    link
+                  )}" target="_blank" rel="noopener noreferrer" title="In Mealie öffnen">✏️</a>`
+                : ''
+            }
+          </div>
+        </div>`;
+      })
+      .join('')}
+    ${ids.length > recipes.length ? `<p class="hint">… und ${ids.length - recipes.length} weitere in der Rezeptliste.</p>` : ''}`;
+
+  box.querySelectorAll('[data-act="plan"]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = Number(btn.closest('.new-recipe').dataset.id);
+      const recipe = recipes.find((x) => x.id === id);
+      if (recipe) openDayPicker(recipe, { resultEl });
+    });
+  });
 }
 
 // ── Geschmacksprofil ──────────────────────────────────────────────────────────
