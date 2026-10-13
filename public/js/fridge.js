@@ -16,7 +16,7 @@ import {
   recipeThumb,
   setLoading,
 } from './core.js';
-import { loadPlan } from './plan.js';
+import { openDayPicker } from './recipes.js';
 
 function coverageBar(coverage) {
   const percent = Math.round(coverage * 100);
@@ -105,7 +105,7 @@ function buildResultCard(item) {
           ? '<button class="btn btn-primary btn-sm" data-act="missing">🛒 Fehlendes</button>'
           : ''
       }
-      <button class="btn btn-secondary btn-sm" data-act="today">📅 Heute kochen</button>
+      <button class="btn btn-secondary btn-sm" data-act="plan">📅 Einplanen</button>
       ${
         mealieLink
           ? `<a class="btn btn-secondary btn-sm" href="${escHtml(
@@ -143,21 +143,10 @@ function buildResultCard(item) {
     }
   });
 
-  node.querySelector('[data-act="today"]').addEventListener('click', async (e) => {
-    const btn = e.currentTarget;
-    setLoading(btn, true);
-    try {
-      await apiFetch('/api/plan/today', {
-        method: 'PUT',
-        body: JSON.stringify({ recipe_id: r.id, note: 'Reste-Küche' }),
-      });
-      flash('fridgeResult', `✓ "${escHtml(r.name)}" für heute eingeplant.`);
-      await loadPlan();
-    } catch (err) {
-      flash('fridgeResult', `Fehler: ${escHtml(err.message)}`, 'error');
-    } finally {
-      setLoading(btn, false);
-    }
+  // Tag frei wählbar (heute bis Ende nächster Woche) – derselbe Dialog wie in
+  // der Rezeptliste. Der Wochenplan lädt beim Tab-Wechsel ohnehin neu.
+  node.querySelector('[data-act="plan"]').addEventListener('click', () => {
+    openDayPicker(r, { resultEl: 'fridgeResult', note: 'Reste-Küche' });
   });
 
   return node;

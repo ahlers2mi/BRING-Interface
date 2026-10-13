@@ -27,6 +27,7 @@ import {
   tagChips,
   wireRatingButtons,
 } from './core.js';
+import { renderTagPicker, selectedTags, tagNames } from './chefkoch-tags.js';
 
 let importTargetRecipeId = null;
 // Merkt sich, fuer welche Liste der Probelauf schon gezeigt wurde – der zweite
@@ -470,10 +471,16 @@ let dayPickRecipe = null;
 // aus dem Import-Tab NICHT: dort ist die Karte gar nicht zu sehen, mit Mealie
 // ist sie sogar ausgeblendet – die Bestätigung wäre unsichtbar.
 let dayPickResultTarget = 'recipeFormResult';
+// Notiz am Plan-Eintrag – die Reste-Küche schreibt "Reste-Küche" hinein.
+let dayPickNote = 'von Hand gewählt';
 
-async function openDayPicker(recipe, { resultEl = 'recipeFormResult' } = {}) {
+export async function openDayPicker(
+  recipe,
+  { resultEl = 'recipeFormResult', note = 'von Hand gewählt' } = {}
+) {
   dayPickRecipe = recipe;
   dayPickResultTarget = resultEl;
+  dayPickNote = note;
   el('dayPickName').textContent = recipe.name;
   el('dayPickResult').innerHTML = '';
   el('dayPickList').innerHTML = '<span class="spinner"></span>';
@@ -518,7 +525,7 @@ function renderDayPicker(days) {
             method: 'PUT',
             body: JSON.stringify({
               recipe_id: dayPickRecipe.id,
-              note: 'von Hand gewählt',
+              note: dayPickNote,
             }),
           });
           closeModal('dayPickModal');
@@ -1087,6 +1094,8 @@ function renderAiHint() {
 export async function initRecipes() {
   renderShortcutUrl();
   renderAiHint();
+  renderTagPicker(el('ckTags'));
+  renderTagPicker(el('bulkTags'));
 
   on('addUrlBtn', 'click', async (e) => {
     const url = el('addUrl').value.trim();
@@ -1313,9 +1322,11 @@ export async function initRecipes() {
     const count = Number(el('bulkCount').value) || 200;
     const minRating = Number(el('bulkMinRating').value) || 0;
     const minVotes = Number(el('bulkMinVotes').value) || 0;
+    const tags = selectedTags(el('bulkTags'));
     if (
       !confirm(
         `${count} Rezepte von chefkoch.de importieren?\n` +
+          (tags.length ? `Kategorien: ${tagNames(tags)}\n` : '') +
           'Das dauert je nach Anzahl einige Minuten und läuft im Hintergrund weiter.'
       )
     ) {
@@ -1325,7 +1336,7 @@ export async function initRecipes() {
     try {
       await apiFetch('/api/recipes/import/chefkoch', {
         method: 'POST',
-        body: JSON.stringify({ query, count, minRating, minVotes }),
+        body: JSON.stringify({ query, count, minRating, minVotes, tags }),
       });
       flash(resultEl, '✓ Import gestartet – Fortschritt siehe unten.', 'info');
       startPolling();
@@ -1405,9 +1416,11 @@ export async function initRecipes() {
     const count = Number(el('ckCount').value) || 20;
     const minRating = Number(el('ckMinRating').value) || 0;
     const minVotes = Number(el('ckMinVotes').value) || 0;
+    const tags = selectedTags(el('ckTags'));
     if (
       !confirm(
         `${count} Rezepte von chefkoch.de über Mealie importieren?\n` +
+          (tags.length ? `Kategorien: ${tagNames(tags)}\n` : '') +
           'Das dauert je nach Anzahl einige Minuten und läuft im Hintergrund weiter.'
       )
     ) {
@@ -1417,7 +1430,7 @@ export async function initRecipes() {
     try {
       await apiFetch('/api/mealie/import-chefkoch', {
         method: 'POST',
-        body: JSON.stringify({ query, count, minRating, minVotes }),
+        body: JSON.stringify({ query, count, minRating, minVotes, tags }),
       });
       flash('ckResult', '✓ Import gestartet – Fortschritt siehe unten.', 'info');
       if (!ckPollTimer) {

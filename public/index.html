@@ -490,6 +490,10 @@
           <input type="text" id="ckQuery" placeholder="Suchbegriff (optional), z. B. Auflauf" />
           <input type="number" id="ckCount" value="20" min="1" max="500" title="Anzahl Rezepte" />
         </div>
+        <details class="tag-pick" style="margin-top:0.5rem;">
+          <summary>Kategorien (optional – alle gewählten müssen passen)</summary>
+          <div id="ckTags"></div>
+        </details>
         <div class="inline-fields" style="margin-top:0.5rem;">
           <label class="check">min. Bewertung
             <input type="number" id="ckMinRating" value="4" min="0" max="5" step="0.1"
@@ -576,6 +580,10 @@
           <input type="text" id="bulkQuery" placeholder="Suchbegriff (optional), z. B. Auflauf" />
           <input type="number" id="bulkCount" value="200" min="1" max="1000" title="Anzahl Rezepte" />
         </div>
+        <details class="tag-pick" style="margin-top:0.5rem;">
+          <summary>Kategorien (optional – alle gewählten müssen passen)</summary>
+          <div id="bulkTags"></div>
+        </details>
         <div class="inline-fields" style="margin-top:0.5rem;">
           <label class="check">min. Bewertung
             <input type="number" id="bulkMinRating" value="4" min="0" max="5" step="0.1"

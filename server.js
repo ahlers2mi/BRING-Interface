@@ -2108,7 +2108,7 @@ async function handleAddUrl(req, res) {
   }
 }
 
-// POST /api/recipes/import/chefkoch – body: { query?, count? }
+// POST /api/recipes/import/chefkoch – body: { query?, count?, minRating?, minVotes?, tags?: [chefkoch-tag-id] }
 // Startet den Massenimport im Hintergrund (Fortschritt via /status).
 app.post('/api/recipes/import/chefkoch', blockWhenMealie, (req, res) => {
   try {
@@ -2117,6 +2117,7 @@ app.post('/api/recipes/import/chefkoch', blockWhenMealie, (req, res) => {
       count: Number(req.body?.count) || 50,
       minRating: Number(req.body?.minRating) || 0,
       minVotes: Number(req.body?.minVotes) || 0,
+      tags: req.body?.tags,
       deps: { createRecipe, findRecipeByExternalId, findRecipeByName },
     });
     res.status(202).json(job);
@@ -2447,7 +2448,7 @@ app.delete('/api/mealie/recipe/:id', async (req, res) => {
   }
 });
 
-// POST /api/mealie/import-chefkoch – body: { query?, count? }
+// POST /api/mealie/import-chefkoch – body: { query?, count?, minRating?, minVotes?, tags?: [chefkoch-tag-id] }
 // Chefkoch-Suche liefert die URLs, Mealie importiert sie mit seinem eigenen
 // Scraper, danach wird der Spiegel abgeglichen.
 app.post('/api/mealie/import-chefkoch', (req, res) => {
@@ -2457,6 +2458,7 @@ app.post('/api/mealie/import-chefkoch', (req, res) => {
       count: Number(req.body?.count) || 20,
       minRating: Number(req.body?.minRating) || 0,
       minVotes: Number(req.body?.minVotes) || 0,
+      tags: req.body?.tags,
       deps: mealieDeps,
     });
     res.status(202).json(job);

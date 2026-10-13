@@ -452,6 +452,17 @@ hr {
 
 .chips { margin-top: 0.3rem; }
 
+/* Kategorie-Auswahl beim Chefkoch-Import */
+.tag-pick summary { cursor: pointer; font-size: 0.85rem; color: var(--text-muted); }
+.tag-pick-row { margin-top: 0.3rem; }
+.tag-pick-row .hint { display: inline-block; min-width: 6.5rem; }
+.chip-toggle { cursor: pointer; font: inherit; font-size: 0.8rem; }
+.chip-toggle[aria-pressed='true'] {
+  background: var(--bring-orange);
+  border-color: var(--bring-orange-dark);
+  color: #fff;
+}
+
 .check {
   display: inline-flex;
   align-items: center;
