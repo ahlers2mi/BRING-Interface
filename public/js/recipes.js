@@ -122,11 +122,20 @@ function formPayload() {
 // genauso.
 const PROVIDER_MODES = new Set(['chefkoch', 'cookidoo', 'video', 'instagram', 'other']);
 
+// Wann ein Rezept in die App kam (created_at, UTC "YYYY-MM-DD HH:MM:SS").
+// Bei Mealie ist das der erste Abgleich – also kurz nach dem Import.
+function addedAt(r) {
+  const t = Date.parse(String(r.created_at || '').replace(' ', 'T') + 'Z');
+  return Number.isNaN(t) ? 0 : t;
+}
+const NEW_DAYS = { new7: 7, new30: 30 };
+
 function filteredRecipes() {
   const query = (el('recipeSearch')?.value || '').trim().toLowerCase();
   const mode = el('recipeFilter')?.value || 'all';
+  const newSince = NEW_DAYS[mode] ? Date.now() - NEW_DAYS[mode] * 86400000 : 0;
 
-  return state.recipes.filter((r) => {
+  const list = state.recipes.filter((r) => {
     // Anbieter-Filter zeigt alles dieser Herkunft – auch Gesperrtes und
     // Unvollständiges, sonst sucht man sich zu Tode.
     if (PROVIDER_MODES.has(mode)) {
@@ -136,6 +145,7 @@ function filteredRecipes() {
         return false;
       }
       if (mode === 'unrated' && r.rating_count > 0) return false;
+      if (newSince && addedAt(r) < newSince) return false;
       if (mode === 'blocked' && !r.blocked) return false;
       if (mode === 'missing' && !r.source_missing) return false;
       if (mode === 'incomplete' && !r.incomplete) return false;
@@ -155,6 +165,9 @@ function filteredRecipes() {
       .toLowerCase();
     return haystack.includes(query);
   });
+  // Beim Neu-Filter das Neueste zuerst, sonst bleibt es alphabetisch.
+  if (newSince) list.sort((a, b) => addedAt(b) - addedAt(a));
+  return list;
 }
 
 export function renderRecipeList() {
